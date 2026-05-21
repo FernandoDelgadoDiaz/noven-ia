@@ -11,7 +11,13 @@
       "Bash(node_modules/.bin/tailwindcss init *)",
       "Bash(npx shadcn@latest *)",
       "Bash(npm run *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(gh repo *)",
+      "Bash(scoop install *)",
+      "Bash(/c/Users/ferna/scoop/shims/gh.exe *)",
+      "Bash(Select-Object Name)",
+      "Bash(findstr lucide *)",
+      "Bash(dir *)"
     ]
   }
 }

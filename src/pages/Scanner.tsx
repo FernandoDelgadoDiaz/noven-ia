@@ -1,3 +1,296 @@
+import { useState, useRef } from 'react'
+import { ScanLine, Search, CheckCircle, Package } from 'lucide-react'
+import { useScanner } from '@/hooks/useScanner'
+import { useAuth } from '@/hooks/useAuth'
+import ScannerModal from '@/components/scanner/ScannerModal'
+import ProductoConfirm from '@/components/scanner/ProductoConfirm'
+import VencimientoForm from '@/components/scanner/VencimientoForm'
+import type { Producto } from '@/types/index'
+
+// ID de sucursal hardcodeado hasta implementar selector de sucursal
+const SUCURSAL_ID = '00000000-0000-0000-0000-000000000001'
+
+type Paso = 'inicio' | 'confirmando' | 'formulario' | 'exito'
+
 export default function Scanner() {
-  return <div className="p-4">Scanner</div>
+  const { scanBarcode, scanning, error: scanError, reset } = useScanner()
+  const { user } = useAuth()
+
+  const [paso, setPaso] = useState<Paso>('inicio')
+  const [modalAbierto, setModalAbierto] = useState(false)
+  const [codigoManual, setCodigoManual] = useState('')
+  const [errorBusqueda, setErrorBusqueda] = useState<string | null>(null)
+  const [productoEncontrado, setProductoEncontrado] = useState<Producto | null>(null)
+  const [, setGuardadoExitoso] = useState(false)
+
+  const inputManualRef = useRef<HTMLInputElement>(null)
+
+  async function buscarProducto(codigo: string): Promise<void> {
+    setErrorBusqueda(null)
+    const resultado = await scanBarcode(codigo)
+    if (resultado) {
+      setProductoEncontrado(resultado)
+      setPaso('confirmando')
+    } else if (!scanError) {
+      setErrorBusqueda('Producto no encontrado. ¿Querés agregarlo al maestro?')
+    }
+  }
+
+  function handleScanFromCamera(codigo: string): void {
+    setModalAbierto(false)
+    void buscarProducto(codigo)
+  }
+
+  function handleBuscarManual(): void {
+    const codigo = codigoManual.trim()
+    if (!codigo) {
+      setErrorBusqueda('Ingresá un código para buscar.')
+      return
+    }
+    void buscarProducto(codigo)
+  }
+
+  function handleConfirmarProducto(): void {
+    setPaso('formulario')
+  }
+
+  function handleCancelarConfirmacion(): void {
+    setProductoEncontrado(null)
+    reset()
+    setPaso('inicio')
+    setCodigoManual('')
+    setErrorBusqueda(null)
+  }
+
+  function handleGuardadoExitoso(): void {
+    setGuardadoExitoso(true)
+    setPaso('exito')
+
+    // Volver al inicio automáticamente después de 2 segundos
+    setTimeout(() => {
+      setProductoEncontrado(null)
+      setCodigoManual('')
+      setErrorBusqueda(null)
+      setGuardadoExitoso(false)
+      reset()
+      setPaso('inicio')
+    }, 2000)
+  }
+
+  // Pantalla de éxito
+  if (paso === 'exito') {
+    return (
+      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center px-4 gap-6">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="p-5 bg-green-500/20 rounded-full animate-pulse">
+            <CheckCircle className="h-16 w-16 text-green-400" />
+          </div>
+          <h2 className="text-white text-2xl font-bold">Vencimiento guardado</h2>
+          <p className="text-gray-400 text-base">
+            {productoEncontrado?.descripcion}
+          </p>
+          <p className="text-gray-500 text-sm">Volviendo al scanner...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Pantalla de formulario (Paso 3)
+  if (paso === 'formulario' && productoEncontrado) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex flex-col">
+        {/* Header */}
+        <div className="px-4 pt-6 pb-2">
+          <div className="flex items-center gap-2 mb-1">
+            <StepIndicator current={3} total={3} />
+          </div>
+          <h1 className="text-white text-xl font-bold">Cargar vencimiento</h1>
+          <p className="text-gray-400 text-sm mt-0.5">Completá los datos del vencimiento</p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
+          <VencimientoForm
+            producto={productoEncontrado}
+            sucursalId={SUCURSAL_ID}
+            usuarioId={user?.id ?? ''}
+            onSuccess={handleGuardadoExitoso}
+          />
+
+          <button
+            type="button"
+            onClick={handleCancelarConfirmacion}
+            className="w-full mt-3 min-h-12 text-gray-400 hover:text-white text-sm font-medium transition-colors"
+          >
+            Cancelar y empezar de nuevo
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Pantalla de confirmación de producto (Paso 2)
+  if (paso === 'confirmando' && productoEncontrado) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex flex-col">
+        {/* Header */}
+        <div className="px-4 pt-6 pb-2">
+          <div className="flex items-center gap-2 mb-1">
+            <StepIndicator current={2} total={3} />
+          </div>
+          <h1 className="text-white text-xl font-bold">Confirmar producto</h1>
+          <p className="text-gray-400 text-sm mt-0.5">¿Es este el producto que querés registrar?</p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
+          <ProductoConfirm
+            producto={productoEncontrado}
+            onConfirm={handleConfirmarProducto}
+            onCancel={handleCancelarConfirmacion}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  // Pantalla principal — Paso 1: Escanear
+  const errorVisible = scanError ?? errorBusqueda
+
+  return (
+    <>
+      {/* Modal de cámara */}
+      {modalAbierto && (
+        <ScannerModal
+          onScan={handleScanFromCamera}
+          onClose={() => setModalAbierto(false)}
+        />
+      )}
+
+      <div className="min-h-screen bg-gray-900 flex flex-col">
+        {/* Header */}
+        <div className="px-4 pt-6 pb-2">
+          <div className="flex items-center gap-2 mb-1">
+            <StepIndicator current={1} total={3} />
+          </div>
+          <h1 className="text-white text-xl font-bold">Registrar vencimiento</h1>
+          <p className="text-gray-400 text-sm mt-0.5">Escaneá el código de barras del producto</p>
+        </div>
+
+        <div className="flex-1 flex flex-col px-4 pb-24 pt-6 gap-6">
+          {/* Botón principal de escaneo */}
+          <button
+            type="button"
+            onClick={() => {
+              setErrorBusqueda(null)
+              setModalAbierto(true)
+            }}
+            disabled={scanning}
+            className="w-full min-h-[160px] flex flex-col items-center justify-center gap-4 bg-gray-800 hover:bg-gray-700 active:bg-gray-900 border-2 border-dashed border-gray-600 hover:border-green-500 rounded-2xl transition-all text-center px-4 disabled:opacity-50 disabled:cursor-not-allowed group"
+          >
+            <div className="p-4 bg-green-500/10 group-hover:bg-green-500/20 rounded-2xl transition-colors">
+              <ScanLine className="h-10 w-10 text-green-400" />
+            </div>
+            <div>
+              <p className="text-white font-bold text-lg">Escanear producto</p>
+              <p className="text-gray-400 text-sm mt-0.5">Abre la cámara para leer el código de barras</p>
+            </div>
+          </button>
+
+          {/* Divisor */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-gray-700" />
+            <span className="text-gray-500 text-sm">o ingresá el código</span>
+            <div className="flex-1 h-px bg-gray-700" />
+          </div>
+
+          {/* Búsqueda manual */}
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-2">
+              <input
+                ref={inputManualRef}
+                type="text"
+                inputMode="numeric"
+                value={codigoManual}
+                onChange={(e) => {
+                  setCodigoManual(e.target.value)
+                  setErrorBusqueda(null)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleBuscarManual()
+                }}
+                placeholder="Código de barras o cod. artículo"
+                className="flex-1 h-12 px-4 bg-gray-800 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors text-sm"
+              />
+              <button
+                type="button"
+                onClick={handleBuscarManual}
+                disabled={scanning}
+                className="h-12 px-4 bg-green-500 hover:bg-green-400 active:bg-green-600 disabled:opacity-50 rounded-xl text-white transition-colors flex items-center gap-2 font-medium text-sm whitespace-nowrap"
+              >
+                {scanning ? (
+                  <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+                Buscar
+              </button>
+            </div>
+
+            {/* Error de búsqueda */}
+            {errorVisible && (
+              <div className="flex flex-col gap-3 bg-gray-800 rounded-xl p-4">
+                <div className="flex items-start gap-2">
+                  <Package className="h-5 w-5 text-gray-400 mt-0.5 shrink-0" />
+                  <p className="text-gray-300 text-sm">{errorVisible}</p>
+                </div>
+                {errorBusqueda?.includes('maestro') && (
+                  <a
+                    href="/maestro"
+                    className="w-full py-2.5 text-center bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    Ir al Maestro de productos
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Tip de uso */}
+          {!errorVisible && (
+            <div className="bg-gray-800/50 rounded-xl px-4 py-3 flex gap-3 items-start">
+              <ScanLine className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+              <p className="text-gray-400 text-xs leading-relaxed">
+                Usá la cámara para escanear el código de barras de la etiqueta del producto. Si el código no se lee bien, ingresalo manualmente.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// Componente auxiliar: indicador de paso
+interface StepIndicatorProps {
+  current: number
+  total: number
+}
+
+function StepIndicator({ current, total }: StepIndicatorProps) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {Array.from({ length: total }, (_, i) => (
+        <div
+          key={i}
+          className={`h-1.5 rounded-full transition-all ${
+            i + 1 <= current
+              ? 'bg-green-500 w-6'
+              : 'bg-gray-700 w-3'
+          }`}
+        />
+      ))}
+      <span className="text-gray-500 text-xs ml-1">
+        {current}/{total}
+      </span>
+    </div>
+  )
 }
