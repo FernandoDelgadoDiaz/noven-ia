@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir C:\\\\Users\\\\ferna\\\\noven-ia *)",
+      "Bash(powershell.exe *)",
+      "Bash(npm create *)",
+      "Bash(Get-ChildItem *)",
+      "Bash(npm install *)",
+      "Bash(npx tailwindcss *)",
+      "Bash(./node_modules/.bin/tailwindcss init *)",
+      "Bash(node_modules/.bin/tailwindcss init *)",
+      "Bash(npx shadcn@latest *)",
+      "Bash(npm run *)",
+      "Bash(git *)"
+    ]
+  }
+}
