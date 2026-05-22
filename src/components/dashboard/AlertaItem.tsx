@@ -2,6 +2,7 @@ import type { RiesgoNivel, VencimientoConRiesgo } from '@/types/index'
 
 interface AlertaItemProps {
   vencimiento: VencimientoConRiesgo
+  onClick?: () => void
 }
 
 interface NivelConfig {
@@ -43,7 +44,7 @@ function formatCobertura(dias: number): string {
   return `${Math.round(dias)} dias stock`
 }
 
-export default function AlertaItem({ vencimiento }: AlertaItemProps) {
+export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
   const cfg = nivelConfig[vencimiento.nivel_riesgo]
 
   const diasLabel =
@@ -54,7 +55,13 @@ export default function AlertaItem({ vencimiento }: AlertaItemProps) {
         : `Vence en ${vencimiento.dias_restantes} dias`
 
   return (
-    <div className="flex items-start gap-3 rounded-xl bg-zinc-900 border border-zinc-800 p-4">
+    <div
+      className={`flex items-start gap-3 rounded-xl bg-zinc-900 border border-zinc-800 p-4 transition-colors ${onClick ? 'cursor-pointer hover:bg-gray-800 active:bg-gray-700' : ''}`}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick() } : undefined}
+    >
       {/* Semaforo */}
       <div className="flex-shrink-0 mt-0.5">
         {cfg.pulsante ? (

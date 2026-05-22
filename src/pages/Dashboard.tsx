@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Package } from 'lucide-react'
 import { useVencimientos } from '@/hooks/useVencimientos'
 import RiesgoCard from '@/components/dashboard/RiesgoCard'
 import AlertaItem from '@/components/dashboard/AlertaItem'
+import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
 import type { VencimientoConRiesgo } from '@/types/index'
 
 const SUCURSAL_ID = '00000000-0000-0000-0000-000000000001'
@@ -13,22 +16,14 @@ const ORDEN_RIESGO: Record<string, number> = {
   seguro: 3,
 }
 
-function calcularPerdidaPotencial(items: VencimientoConRiesgo[]): string {
-  const total = items.reduce((acc, v) => {
-    const precio = v.producto.precio_costo ?? 0
-    return acc + v.cantidad * precio
-  }, 0)
-
-  if (total === 0) return '$0'
-  if (total >= 1000) {
-    return `$${(total / 1000).toFixed(1)}k`
-  }
-  return `$${total.toFixed(0)}`
+function calcularUnidadesEnRiesgo(items: VencimientoConRiesgo[]): number {
+  return items.reduce((acc, v) => acc + v.cantidad, 0)
 }
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { data, loading, error } = useVencimientos(SUCURSAL_ID)
+  const { data, loading, error, refetch } = useVencimientos(SUCURSAL_ID)
+  const [vencimientoEditando, setVencimientoEditando] = useState<VencimientoConRiesgo | null>(null)
 
   // Ordenar por nivel de riesgo
   const alertasOrdenadas = [...data].sort(
@@ -39,7 +34,7 @@ export default function Dashboard() {
     (v) => v.nivel_riesgo === 'critico' || v.nivel_riesgo === 'alto',
   ).length
 
-  const perdida = calcularPerdidaPotencial(
+  const unidadesEnRiesgo = calcularUnidadesEnRiesgo(
     data.filter((v) => v.nivel_riesgo === 'critico' || v.nivel_riesgo === 'alto'),
   )
 
@@ -49,6 +44,29 @@ export default function Dashboard() {
 
   return (
     <div className="dark min-h-screen bg-[#0a0a0a]">
+      {/* Modal de edicion */}
+      {vencimientoEditando !== null && (
+        <EditarVencimientoModal
+          vencimiento={{
+            id: vencimientoEditando.id,
+            producto_id: vencimientoEditando.producto_id,
+            fecha_vencimiento: vencimientoEditando.fecha_vencimiento,
+            cantidad: vencimientoEditando.cantidad,
+            nivel_riesgo: vencimientoEditando.nivel_riesgo,
+            productos: {
+              descripcion: vencimientoEditando.producto.descripcion,
+              stock_actual: vencimientoEditando.producto.stock_actual,
+              venta_media_diaria: vencimientoEditando.producto.venta_media_diaria,
+            },
+          }}
+          onClose={() => setVencimientoEditando(null)}
+          onGuardado={() => {
+            setVencimientoEditando(null)
+            void refetch()
+          }}
+        />
+      )}
+
       {/* Header */}
       <header className="sticky top-0 z-10 bg-[#0a0a0a]/95 backdrop-blur border-b border-zinc-800 px-4 py-3">
         <div className="flex items-center justify-between">
@@ -102,10 +120,10 @@ export default function Dashboard() {
                   color="red"
                 />
                 <RiesgoCard
-                  titulo="Perdida potencial"
-                  valor={perdida}
-                  icono="💸"
-                  color="yellow"
+                  titulo="Unidades en riesgo"
+                  valor={unidadesEnRiesgo}
+                  IconoComponente={Package}
+                  color="red"
                 />
                 <RiesgoCard
                   titulo="Proximos 30 dias"
@@ -153,7 +171,11 @@ export default function Dashboard() {
               ) : (
                 <div className="space-y-2">
                   {alertasOrdenadas.map((v) => (
-                    <AlertaItem key={v.id} vencimiento={v} />
+                    <AlertaItem
+                      key={v.id}
+                      vencimiento={v}
+                      onClick={() => setVencimientoEditando(v)}
+                    />
                   ))}
                 </div>
               )}

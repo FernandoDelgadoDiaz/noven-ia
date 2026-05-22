@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Html5Qrcode } from 'html5-qrcode'
+import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode'
 import { X, CameraOff } from 'lucide-react'
 
 interface ScannerModalProps {
@@ -21,6 +21,12 @@ export default function ScannerModal({ onScan, onClose }: ScannerModalProps) {
     let scanner: Html5Qrcode | null = null
 
     async function iniciarCamara(): Promise<void> {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setStatus('error')
+        setErrorMsg('Cámara no disponible en este navegador. Usá el ingreso manual.')
+        return
+      }
+
       try {
         scanner = new Html5Qrcode(READER_ID)
         scannerRef.current = scanner
@@ -60,18 +66,17 @@ export default function ScannerModal({ onScan, onClose }: ScannerModalProps) {
     void iniciarCamara()
 
     return () => {
-      if (scanner) {
-        scanner
-          .stop()
-          .then(() => scanner?.clear())
-          .catch(() => {
-            try {
-              scanner?.clear()
-            } catch {
-              // silenciar error de cleanup
-            }
-          })
+      const s = scannerRef.current
+      if (!s) return
+      const state = s.getState()
+      if (state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED) {
+        s.stop()
+          .then(() => { try { s.clear() } catch { /* cleanup silencioso */ } })
+          .catch(() => { try { s.clear() } catch { /* cleanup silencioso */ } })
+      } else {
+        try { s.clear() } catch { /* cleanup silencioso */ }
       }
+      scannerRef.current = null
     }
   }, [onScan])
 

@@ -4,11 +4,13 @@ import Dashboard from '../pages/Dashboard'
 import Scanner from '../pages/Scanner'
 import Vencimientos from '../pages/Vencimientos'
 import Maestro from '../pages/Maestro'
+import Importar from '../pages/Importar'
 import AppLayout from '../components/layout/AppLayout'
 import PrivateRoute from '../components/auth/PrivateRoute'
+import ErrorBoundary from '../components/ErrorBoundary'
 
 export const router = createBrowserRouter([
-  { path: '/login', element: <Login /> },
+  { path: '/login', element: <ErrorBoundary><Login /></ErrorBoundary> },
   {
     path: '/',
     element: <PrivateRoute />,
@@ -17,10 +19,11 @@ export const router = createBrowserRouter([
         element: <AppLayout />,
         children: [
           { index: true, element: <Navigate to="/dashboard" replace /> },
-          { path: 'dashboard', element: <Dashboard /> },
-          { path: 'scanner', element: <Scanner /> },
-          { path: 'vencimientos', element: <Vencimientos /> },
-          { path: 'maestro', element: <Maestro /> },
+          { path: 'dashboard', element: <ErrorBoundary><Dashboard /></ErrorBoundary> },
+          { path: 'scanner', element: <ErrorBoundary><Scanner /></ErrorBoundary> },
+          { path: 'vencimientos', element: <ErrorBoundary><Vencimientos /></ErrorBoundary> },
+          { path: 'maestro', element: <ErrorBoundary><Maestro /></ErrorBoundary> },
+          { path: 'importar', element: <ErrorBoundary><Importar /></ErrorBoundary> },
         ],
       },
     ],

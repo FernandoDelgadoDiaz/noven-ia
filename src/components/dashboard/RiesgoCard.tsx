@@ -1,7 +1,8 @@
 interface RiesgoCardProps {
   titulo: string
   valor: number | string
-  icono: string
+  icono?: string
+  IconoComponente?: React.ComponentType<{ className?: string }>
   color: 'green' | 'yellow' | 'red' | 'blue'
 }
 
@@ -32,7 +33,7 @@ const colorMap: Record<RiesgoCardProps['color'], { border: string; bg: string; t
   },
 }
 
-export default function RiesgoCard({ titulo, valor, icono, color }: RiesgoCardProps) {
+export default function RiesgoCard({ titulo, valor, icono, IconoComponente, color }: RiesgoCardProps) {
   const c = colorMap[color]
 
   return (
@@ -43,9 +44,13 @@ export default function RiesgoCard({ titulo, valor, icono, color }: RiesgoCardPr
         <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide leading-tight">
           {titulo}
         </span>
-        <span className="text-xl leading-none" aria-hidden="true">
-          {icono}
-        </span>
+        {IconoComponente ? (
+          <IconoComponente className={`h-5 w-5 ${c.text}`} aria-hidden="true" />
+        ) : (
+          <span className="text-xl leading-none" aria-hidden="true">
+            {icono}
+          </span>
+        )}
       </div>
       <span className={`text-3xl font-bold ${c.text} leading-none`}>
         {valor}

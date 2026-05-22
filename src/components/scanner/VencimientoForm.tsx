@@ -15,6 +15,7 @@ interface FormData {
   cantidad: string
   fechaVencimiento: string
   lote: string
+  stockActual: string
 }
 
 interface RiesgoPreview {
@@ -27,10 +28,16 @@ function calcularPreview(
   cantidad: string,
   fechaVencimiento: string,
   producto: Producto,
+  stockActual: string,
 ): RiesgoPreview | null {
   if (!cantidad || !fechaVencimiento) return null
   const cantNum = parseInt(cantidad, 10)
   if (isNaN(cantNum) || cantNum <= 0) return null
+
+  const stockNum = parseInt(stockActual, 10)
+  const stockParaPreview = !isNaN(stockNum) && stockNum >= 0 ? stockNum : producto.stock_actual
+
+  const productoConStock: Producto = { ...producto, stock_actual: stockParaPreview }
 
   const vencimientoFake: Vencimiento = {
     id: '',
@@ -45,7 +52,7 @@ function calcularPreview(
     created_at: new Date().toISOString(),
   }
 
-  const resultado = calcularRiesgo(vencimientoFake, producto, new Date())
+  const resultado = calcularRiesgo(vencimientoFake, productoConStock, new Date())
 
   const coberturaTexto =
     resultado.cobertura_dias === Infinity
@@ -120,11 +127,12 @@ export default function VencimientoForm({
     cantidad: '',
     fechaVencimiento: '',
     lote: '',
+    stockActual: String(producto.stock_actual),
   })
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const preview = calcularPreview(form.cantidad, form.fechaVencimiento, producto)
+  const preview = calcularPreview(form.cantidad, form.fechaVencimiento, producto, form.stockActual)
   const nivelConfig = preview ? getNivelConfig(preview.nivel) : null
 
   function handleChange(field: keyof FormData, value: string): void {
@@ -139,6 +147,10 @@ export default function VencimientoForm({
     }
     if (!form.fechaVencimiento) {
       return 'Seleccioná la fecha de vencimiento.'
+    }
+    const stockNum = parseInt(form.stockActual, 10)
+    if (form.stockActual !== '' && (isNaN(stockNum) || stockNum < 0)) {
+      return 'El stock actual debe ser un número mayor o igual a 0.'
     }
     return null
   }
@@ -164,13 +176,29 @@ export default function VencimientoForm({
       activo: true,
     })
 
-    setGuardando(false)
-
     if (supabaseError) {
+      setGuardando(false)
       setError(`Error al guardar: ${supabaseError.message}`)
       return
     }
 
+    // Si el stock cambió respecto al valor original, actualizar en productos
+    const nuevoStock = parseInt(form.stockActual, 10)
+    const stockOriginal = producto.stock_actual
+    if (!isNaN(nuevoStock) && nuevoStock !== stockOriginal) {
+      const { error: stockError } = await supabase
+        .from('productos')
+        .update({ stock_actual: nuevoStock, updated_at: new Date().toISOString() })
+        .eq('id', producto.id)
+
+      if (stockError) {
+        setGuardando(false)
+        setError(`Vencimiento guardado, pero no se pudo actualizar el stock: ${stockError.message}`)
+        return
+      }
+    }
+
+    setGuardando(false)
     onSuccess()
   }
 
@@ -187,6 +215,27 @@ export default function VencimientoForm({
 
       {/* Formulario */}
       <div className="bg-gray-800 rounded-2xl p-4 flex flex-col gap-4">
+        {/* Stock actual */}
+        <div className="flex flex-col gap-1.5">
+          <label
+            htmlFor="stockActual"
+            className="text-sm font-medium text-gray-300"
+          >
+            Stock actual
+          </label>
+          <input
+            id="stockActual"
+            type="number"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            min="0"
+            value={form.stockActual}
+            onChange={(e) => handleChange('stockActual', e.target.value)}
+            placeholder="Ej: 48"
+            className="w-full h-14 px-4 bg-gray-700 border border-gray-600 rounded-xl text-white text-lg font-medium placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors"
+          />
+        </div>
+
         {/* Cantidad */}
         <div className="flex flex-col gap-1.5">
           <label
