@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, Trash2, Save, AlertTriangle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { BADGE_CONFIG, calcularDiasRestantes, calcularNivelRiesgo } from '@/lib/riesgo'
+import { RISK_VISUAL } from '@/lib/risk-config'
 import type { NivelRiesgo } from '@/lib/riesgo'
 
 interface VencimientoParaEditar {
@@ -26,7 +27,6 @@ interface Props {
   onClose: () => void
   onGuardado: () => void
 }
-
 
 export default function EditarVencimientoModal({ vencimiento, onClose, onGuardado }: Props) {
   const [stockActual, setStockActual] = useState(vencimiento.productos.stock_actual)
@@ -57,37 +57,18 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
   async function handleGuardar(): Promise<void> {
     setError(null)
     setGuardando(true)
-
     const { error: errVenc } = await supabase
       .from('vencimientos')
-      .update({
-        fecha_vencimiento: fechaVencimiento,
-        cantidad,
-      })
+      .update({ fecha_vencimiento: fechaVencimiento, cantidad })
       .eq('id', vencimiento.id)
-
-    if (errVenc) {
-      setError(`Error al guardar vencimiento: ${errVenc.message}`)
-      setGuardando(false)
-      return
-    }
-
+    if (errVenc) { setError(`Error al guardar: ${errVenc.message}`); setGuardando(false); return }
     if (stockActual !== vencimiento.productos.stock_actual) {
       const { error: errProd } = await supabase
         .from('productos')
-        .update({
-          stock_actual: stockActual,
-          updated_at: new Date().toISOString(),
-        })
+        .update({ stock_actual: stockActual, updated_at: new Date().toISOString() })
         .eq('id', vencimiento.producto_id)
-
-      if (errProd) {
-        setError(`Error al actualizar stock: ${errProd.message}`)
-        setGuardando(false)
-        return
-      }
+      if (errProd) { setError(`Error al actualizar stock: ${errProd.message}`); setGuardando(false); return }
     }
-
     setGuardando(false)
     onGuardado()
     onClose()
@@ -96,173 +77,115 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
   async function handleEliminar(): Promise<void> {
     setError(null)
     setEliminando(true)
-
     const { error: errDel } = await supabase
       .from('vencimientos')
       .update({ activo: false })
       .eq('id', vencimiento.id)
-
-    if (errDel) {
-      setError(`Error al eliminar: ${errDel.message}`)
-      setEliminando(false)
-      return
-    }
-
+    if (errDel) { setError(`Error al eliminar: ${errDel.message}`); setEliminando(false); return }
     setEliminando(false)
     onGuardado()
     onClose()
   }
 
   const badge = BADGE_CONFIG[nivelCalculado]
+  const riskViz = RISK_VISUAL[nivelCalculado]
+
+  const partes = [vencimiento.productos.descripcion]
+  if (vencimiento.productos.gramaje) partes.push(vencimiento.productos.gramaje)
+  const tituloBase = partes.join(' ')
+  const titulo = vencimiento.productos.marca ? `${tituloBase} — ${vencimiento.productos.marca}` : tituloBase
+
+  const diasStock = vencimiento.productos.venta_media_diaria > 0
+    ? `${Math.floor(cantidad / vencimiento.productos.venta_media_diaria)} días`
+    : 'Sin rotación'
+
+  const inputCls = 'w-full h-11 px-3 bg-surface-base border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150'
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Editar vencimiento"
     >
       {/* Overlay */}
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
         onClick={onClose}
       />
 
-      {/* Modal */}
-      <div className="relative z-10 w-full max-w-md bg-gray-900 border border-gray-800 rounded-2xl shadow-xl overflow-hidden">
+      {/* Modal — sheet en mobile, centrado en desktop */}
+      <div className="relative z-10 w-full sm:max-w-md bg-white sm:rounded-modal rounded-t-modal shadow-modal overflow-hidden animate-slide-up">
+
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-800">
+        <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-border">
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-gray-500 mb-1">Editando registro</p>
-            {/* Linea 1: descripcion + gramaje — marca */}
-            {(() => {
-              const partes: string[] = [vencimiento.productos.descripcion]
-              if (vencimiento.productos.gramaje) partes.push(vencimiento.productos.gramaje)
-              const base = partes.join(' ')
-              const titulo = vencimiento.productos.marca ? `${base} — ${vencimiento.productos.marca}` : base
-              return (
-                <h2
-                  className="text-white font-bold text-sm leading-tight break-words"
-                >
-                  {titulo}
-                </h2>
-              )
-            })()}
-            {/* Linea 2: Cod. Art y EAN lado a lado */}
-            <div className="mt-1 flex justify-between gap-2 text-xs text-gray-400">
-              <span>
-                Cod. Art: <span className="font-mono text-gray-300">{vencimiento.productos.cod_art ?? '—'}</span>
-              </span>
-              <span>
-                EAN: <span className="text-gray-300">{vencimiento.productos.codigo_barras ?? 'Sin mapear'}</span>
-              </span>
+            <p className="text-xs text-muted-foreground font-medium mb-1">Editando registro</p>
+            <h2 className="text-foreground font-bold text-sm leading-snug">{titulo}</h2>
+            <div className="flex items-center justify-between mt-1.5 text-xs text-muted-foreground">
+              <span>Cod: <span className="font-mono text-foreground/70">{vencimiento.productos.cod_art ?? '—'}</span></span>
+              <span>EAN: <span className="text-foreground/70">{vencimiento.productos.codigo_barras ?? 'Sin mapear'}</span></span>
             </div>
-            {/* Linea 3: venta media y dias de stock lado a lado */}
-            <div className="mt-0.5 flex justify-between gap-2 text-xs text-gray-400">
-              <span>
-                Venta media: <span className="text-gray-300">{vencimiento.productos.venta_media_diaria} unid/día</span>
-              </span>
-              <span>
-                Días de stock (lote):{' '}
-                <span className="text-gray-300">
-                  {vencimiento.productos.venta_media_diaria <= 0
-                    ? 'Sin rotación'
-                    : `${Math.floor(cantidad / vencimiento.productos.venta_media_diaria)} días`}
-                </span>
-              </span>
+            <div className="flex items-center justify-between mt-0.5 text-xs text-muted-foreground">
+              <span>Venta media: <span className="text-foreground/70">{vencimiento.productos.venta_media_diaria} unid/día</span></span>
+              <span>Stock lote: <span className="text-foreground/70">{diasStock}</span></span>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
-            aria-label="Cerrar modal"
+            className="shrink-0 p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+            aria-label="Cerrar"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Campos */}
-        <div className="px-5 py-4 space-y-4">
-          {/* Preview de riesgo */}
-          <div className="flex items-center justify-between bg-gray-800/60 rounded-xl px-4 py-3">
-            <span className="text-xs text-gray-400 font-medium">Riesgo calculado</span>
-            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${badge.cls}`}>
+        {/* Riesgo preview */}
+        <div className="px-5 pt-4">
+          <div className={`flex items-center justify-between rounded-xl px-4 py-3 ${riskViz.rowBg} border ${riskViz.badge.split(' ').find(c => c.startsWith('border')) ?? 'border-border'}`}>
+            <span className="text-xs text-muted-foreground font-medium">Riesgo calculado</span>
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${riskViz.badge}`}>
               {badge.label}
             </span>
           </div>
+        </div>
 
-          {/* Stock actual */}
+        {/* Campos */}
+        <div className="px-5 py-4 space-y-3">
           <div className="space-y-1.5">
-            <label htmlFor="stock-actual" className="block text-xs font-medium text-gray-400">
-              Stock actual
-            </label>
-            <input
-              id="stock-actual"
-              type="number"
-              min={0}
-              value={stockActual}
-              onChange={(e) => setStockActual(Number(e.target.value))}
-              className="w-full h-11 px-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors text-sm"
-            />
+            <label htmlFor="modal-stock" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Stock actual</label>
+            <input id="modal-stock" type="number" min={0} value={stockActual} onChange={(e) => setStockActual(Number(e.target.value))} className={inputCls} />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="modal-fecha" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Fecha de vencimiento</label>
+            <input id="modal-fecha" type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} className={inputCls} />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="modal-cantidad" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Cantidad</label>
+            <input id="modal-cantidad" type="number" min={0} value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} className={inputCls} />
           </div>
 
-          {/* Fecha de vencimiento */}
-          <div className="space-y-1.5">
-            <label htmlFor="fecha-vencimiento" className="block text-xs font-medium text-gray-400">
-              Fecha de vencimiento
-            </label>
-            <input
-              id="fecha-vencimiento"
-              type="date"
-              value={fechaVencimiento}
-              onChange={(e) => setFechaVencimiento(e.target.value)}
-              className="w-full h-11 px-3 bg-gray-800 border border-gray-700 rounded-xl text-white focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors text-sm"
-            />
-          </div>
-
-          {/* Cantidad */}
-          <div className="space-y-1.5">
-            <label htmlFor="cantidad" className="block text-xs font-medium text-gray-400">
-              Cantidad
-            </label>
-            <input
-              id="cantidad"
-              type="number"
-              min={0}
-              value={cantidad}
-              onChange={(e) => setCantidad(Number(e.target.value))}
-              className="w-full h-11 px-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors text-sm"
-            />
-          </div>
-
-          {/* Error */}
           {error && (
-            <div className="flex items-start gap-2 bg-red-900/30 border border-red-700/50 rounded-xl px-3 py-2.5">
-              <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
-              <p className="text-red-300 text-xs">{error}</p>
+            <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 animate-fade-in">
+              <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+              <p className="text-red-600 text-xs">{error}</p>
             </div>
           )}
         </div>
 
-        {/* Acciones */}
+        {/* Actions */}
         <div className="px-5 pb-5 space-y-2">
           <button
             type="button"
             onClick={() => void handleGuardar()}
             disabled={guardando || eliminando}
-            className="w-full h-11 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-400 active:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-xl transition-colors"
+            className="w-full h-11 flex items-center justify-center gap-2 bg-brand hover:bg-brand-hover text-white font-semibold text-sm rounded-lg shadow-brand transition-all duration-150 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {guardando ? (
-              <>
-                <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Guardando...
-              </>
+              <><span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Guardando...</>
             ) : (
-              <>
-                <Save className="h-4 w-4" />
-                Guardar cambios
-              </>
+              <><Save className="h-4 w-4" />Guardar cambios</>
             )}
           </button>
 
@@ -271,22 +194,20 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
               type="button"
               onClick={() => setConfirmarEliminar(true)}
               disabled={guardando || eliminando}
-              className="w-full h-11 flex items-center justify-center gap-2 bg-transparent hover:bg-red-950/40 border border-red-800/60 text-red-400 hover:text-red-300 font-medium text-sm rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full h-11 flex items-center justify-center gap-2 bg-transparent hover:bg-red-50 border border-red-200 text-red-600 hover:text-red-700 font-medium text-sm rounded-lg transition-all duration-150 disabled:opacity-50"
             >
               <Trash2 className="h-4 w-4" />
               Eliminar registro
             </button>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs text-center text-gray-400">
-                Esta accion no se puede deshacer. Confirmas la eliminacion?
-              </p>
+              <p className="text-xs text-center text-muted-foreground">Esta acción no se puede deshacer.</p>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setConfirmarEliminar(false)}
                   disabled={eliminando}
-                  className="flex-1 h-11 bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium text-sm rounded-xl transition-colors disabled:opacity-50"
+                  className="flex-1 h-11 bg-muted hover:bg-muted/70 text-foreground font-medium text-sm rounded-lg transition-colors disabled:opacity-50"
                 >
                   Cancelar
                 </button>
@@ -294,15 +215,12 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
                   type="button"
                   onClick={() => void handleEliminar()}
                   disabled={eliminando}
-                  className="flex-1 h-11 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 active:bg-red-700 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors"
+                  className="flex-1 h-11 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold text-sm rounded-lg transition-colors active:scale-[0.98] disabled:opacity-50"
                 >
                   {eliminando ? (
-                    <>
-                      <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Eliminando...
-                    </>
+                    <><span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Eliminando...</>
                   ) : (
-                    'Si, eliminar'
+                    'Sí, eliminar'
                   )}
                 </button>
               </div>

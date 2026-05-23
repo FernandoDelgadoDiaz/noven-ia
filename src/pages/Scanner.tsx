@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { ScanLine, Search, CheckCircle, Package, Barcode } from 'lucide-react'
+import { ScanLine, Search, CheckCircle, Package, Barcode, ChevronLeft } from 'lucide-react'
 import { useScanner } from '@/hooks/useScanner'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
@@ -8,14 +8,13 @@ import ProductoConfirm from '@/components/scanner/ProductoConfirm'
 import VencimientoForm from '@/components/scanner/VencimientoForm'
 import type { Producto } from '@/types/index'
 
-// ID de sucursal hardcodeado hasta implementar selector de sucursal
 const SUCURSAL_ID = '00000000-0000-0000-0000-000000000001'
 
 type Paso = 'inicio' | 'confirmando' | 'capturar_ean' | 'formulario' | 'exito' | 'nuevo_producto'
-
 type CategoriaProducto = 'CHOCOLATES' | 'CARAMELOS' | 'SNACKS' | 'CHICLES' | 'CEREALES' | 'OTRO'
-
 const CATEGORIAS: CategoriaProducto[] = ['CHOCOLATES', 'CARAMELOS', 'SNACKS', 'CHICLES', 'CEREALES', 'OTRO']
+
+const inputCls = 'w-full h-12 px-4 bg-surface-base border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150 text-sm'
 
 export default function Scanner() {
   const { scanBarcode, scanning, error: scanError, reset } = useScanner()
@@ -30,11 +29,9 @@ export default function Scanner() {
   const [encontradoPorCodArt, setEncontradoPorCodArt] = useState(false)
   const [, setGuardadoExitoso] = useState(false)
 
-  // Estados del paso 2.5 (captura de EAN)
   const [guardandoEan, setGuardandoEan] = useState(false)
   const [errorEan, setErrorEan] = useState<string | null>(null)
 
-  // Estados del paso nuevo_producto
   const [nuevoProductoCodArt, setNuevoProductoCodArt] = useState('')
   const [nuevoProductoDesc, setNuevoProductoDesc] = useState('')
   const [nuevoProductoMarca, setNuevoProductoMarca] = useState('')
@@ -51,14 +48,10 @@ export default function Scanner() {
     const resultado = await scanBarcode(codigo)
     if (resultado) {
       setProductoEncontrado(resultado)
-      // Detectar si se encontró por cod_art (fallback) vs codigo_barras
-      // Si el código escaneado/ingresado coincide con codigo_barras del producto → encontrado por barcode
-      // Si no → encontrado por cod_art
       const fueBarcode = esBarcode || resultado.codigo_barras === codigo.trim()
       setEncontradoPorCodArt(!fueBarcode)
       setPaso('confirmando')
     } else if (!scanError) {
-      // Producto no encontrado: pre-cargar el cod_art y mostrar mensaje con opción de alta
       setNuevoProductoCodArt(codigo.trim())
       setErrorBusqueda('no_encontrado')
     }
@@ -71,18 +64,11 @@ export default function Scanner() {
 
   function handleBuscarManual(): void {
     const codigo = codigoManual.trim()
-    if (!codigo) {
-      setErrorBusqueda('Ingresá un código para buscar.')
-      return
-    }
-    // El ingreso manual siempre trata de buscar por barcode primero, luego cod_art
-    // Detectamos si el resultado viene por cod_art en buscarProducto comparando el campo
+    if (!codigo) { setErrorBusqueda('Ingresá un código para buscar.'); return }
     void buscarProducto(codigo, false)
   }
 
   function handleConfirmarProducto(): void {
-    // Si el producto se encontró por cod_art y NO tiene código de barras registrado,
-    // ir al paso 2.5 para capturar EAN
     if (encontradoPorCodArt && !productoEncontrado?.codigo_barras) {
       setPaso('capturar_ean')
     } else {
@@ -110,8 +96,6 @@ export default function Scanner() {
   function handleGuardadoExitoso(): void {
     setGuardadoExitoso(true)
     setPaso('exito')
-
-    // Volver al inicio automáticamente después de 2 segundos
     setTimeout(() => {
       setProductoEncontrado(null)
       setCodigoManual('')
@@ -124,65 +108,29 @@ export default function Scanner() {
     }, 2000)
   }
 
-  // Paso 2.5: el usuario capturó un EAN con la cámara
   async function handleEanCapturado(ean: string): Promise<void> {
     setModalEanAbierto(false)
     if (!productoEncontrado) return
-
     setGuardandoEan(true)
     setErrorEan(null)
-
-    // Verificar que el EAN no esté registrado en otro producto
     const { data: duplicado, error: errCheck } = await supabase
-      .from('productos')
-      .select('id')
-      .eq('codigo_barras', ean.trim())
-      .neq('id', productoEncontrado.id)
-      .maybeSingle()
-
-    if (errCheck) {
-      setGuardandoEan(false)
-      setErrorEan(`Error al verificar el código: ${errCheck.message}`)
-      return
-    }
-
-    if (duplicado) {
-      setGuardandoEan(false)
-      setErrorEan('Este código ya está registrado en otro producto. Escaneá otro o saltea este paso.')
-      return
-    }
-
-    // Guardar el EAN en el producto
+      .from('productos').select('id').eq('codigo_barras', ean.trim()).neq('id', productoEncontrado.id).maybeSingle()
+    if (errCheck) { setGuardandoEan(false); setErrorEan(`Error al verificar: ${errCheck.message}`); return }
+    if (duplicado) { setGuardandoEan(false); setErrorEan('Este código ya está registrado en otro producto.'); return }
     const { error: errUpdate } = await supabase
-      .from('productos')
-      .update({ codigo_barras: ean.trim(), updated_at: new Date().toISOString() })
-      .eq('id', productoEncontrado.id)
-
+      .from('productos').update({ codigo_barras: ean.trim(), updated_at: new Date().toISOString() }).eq('id', productoEncontrado.id)
     setGuardandoEan(false)
-
-    if (errUpdate) {
-      setErrorEan(`Error al guardar el código: ${errUpdate.message}`)
-      return
-    }
-
-    // Actualizar el producto en memoria
+    if (errUpdate) { setErrorEan(`Error al guardar: ${errUpdate.message}`); return }
     setProductoEncontrado((prev) => prev ? { ...prev, codigo_barras: ean.trim() } : prev)
     setPaso('formulario')
   }
 
-  function handleOmitirEan(): void {
-    setErrorEan(null)
-    setPaso('formulario')
-  }
+  function handleOmitirEan(): void { setErrorEan(null); setPaso('formulario') }
 
   async function handleAgregarNuevoProducto(): Promise<void> {
-    if (!nuevoProductoDesc.trim()) {
-      setErrorNuevo('La descripcion es obligatoria.')
-      return
-    }
+    if (!nuevoProductoDesc.trim()) { setErrorNuevo('La descripción es obligatoria.'); return }
     setErrorNuevo(null)
     setGuardandoNuevo(true)
-
     const { data, error } = await supabase
       .from('productos')
       .insert({
@@ -194,67 +142,41 @@ export default function Scanner() {
         venta_media_diaria: nuevoProductoVenta,
         activo: true,
       })
-      .select()
-      .single()
-
+      .select().single()
     setGuardandoNuevo(false)
-
-    if (error) {
-      setErrorNuevo(`Error al agregar el producto: ${error.message}`)
-      return
-    }
-
-    if (data) {
-      setProductoEncontrado(data as Producto)
-      setErrorBusqueda(null)
-      setPaso('formulario')
-    }
+    if (error) { setErrorNuevo(`Error al agregar: ${error.message}`); return }
+    if (data) { setProductoEncontrado(data as Producto); setErrorBusqueda(null); setPaso('formulario') }
   }
 
-  // Pantalla de éxito
+  // ── Pantalla éxito ──────────────────────────────────────────────────────────
   if (paso === 'exito') {
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center px-4 gap-6">
+      <div className="min-h-screen bg-surface-base flex flex-col items-center justify-center px-4 gap-6 animate-scale-in">
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="p-5 bg-green-500/20 rounded-full animate-pulse">
-            <CheckCircle className="h-16 w-16 text-green-400" />
+          <div className="p-5 bg-emerald-50 rounded-full">
+            <CheckCircle className="h-16 w-16 text-emerald-500" />
           </div>
-          <h2 className="text-white text-2xl font-bold">Vencimiento guardado</h2>
-          <p className="text-gray-400 text-base">
-            {productoEncontrado?.descripcion}
-          </p>
-          <p className="text-gray-500 text-sm">Volviendo al scanner...</p>
+          <h2 className="text-foreground text-2xl font-bold">¡Guardado!</h2>
+          <p className="text-muted-foreground text-base">{productoEncontrado?.descripcion}</p>
+          <p className="text-muted-foreground/60 text-sm">Volviendo al scanner...</p>
         </div>
       </div>
     )
   }
 
-  // Pantalla de formulario (Paso 3)
+  // ── Formulario (paso 3) ─────────────────────────────────────────────────────
   if (paso === 'formulario' && productoEncontrado) {
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col">
-        {/* Header */}
-        <div className="px-4 pt-6 pb-2">
-          <div className="flex items-center gap-2 mb-1">
-            <StepIndicator current={3} total={3} />
-          </div>
-          <h1 className="text-white text-xl font-bold">Cargar vencimiento</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Completá los datos del vencimiento</p>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
+      <div className="min-h-screen bg-surface-base flex flex-col">
+        <SubHeader paso={3} titulo="Cargar vencimiento" subtitulo="Completá los datos del vencimiento" onBack={handleCancelarConfirmacion} />
+        <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4">
           <VencimientoForm
             producto={productoEncontrado}
             sucursalId={SUCURSAL_ID}
             usuarioId={user?.id ?? ''}
             onSuccess={handleGuardadoExitoso}
           />
-
-          <button
-            type="button"
-            onClick={handleCancelarConfirmacion}
-            className="w-full mt-3 min-h-12 text-gray-400 hover:text-white text-sm font-medium transition-colors"
-          >
+          <button type="button" onClick={handleCancelarConfirmacion} className="w-full mt-3 py-3 text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
             Cancelar y empezar de nuevo
           </button>
         </div>
@@ -262,96 +184,51 @@ export default function Scanner() {
     )
   }
 
-  // Paso 2.5: Capturar EAN
+  // ── Capturar EAN (paso 2.5) ─────────────────────────────────────────────────
   if (paso === 'capturar_ean' && productoEncontrado) {
     return (
       <>
-        {modalEanAbierto && (
-          <ScannerModal
-            onScan={handleEanCapturado}
-            onClose={() => setModalEanAbierto(false)}
-          />
-        )}
-        <div className="min-h-screen bg-gray-900 flex flex-col">
-          {/* Header */}
-          <div className="px-4 pt-6 pb-2">
-            <div className="flex items-center gap-2 mb-1">
-              <StepIndicator current={2} total={3} />
+        {modalEanAbierto && <ScannerModal onScan={handleEanCapturado} onClose={() => setModalEanAbierto(false)} />}
+        <div className="min-h-screen bg-surface-base flex flex-col">
+          <SubHeader paso={2} titulo="Vincular código de barras" subtitulo="Paso opcional para registrar el EAN" onBack={handleCancelarConfirmacion} />
+          <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4 flex flex-col gap-4">
+            <div className="bg-white rounded-card shadow-card px-4 py-3.5">
+              <p className="text-xs text-muted-foreground mb-0.5">Producto seleccionado</p>
+              <p className="text-foreground font-bold text-base leading-tight">{productoEncontrado.descripcion}</p>
+              {productoEncontrado.marca && <p className="text-muted-foreground text-sm mt-0.5">{productoEncontrado.marca}</p>}
             </div>
-            <h1 className="text-white text-xl font-bold">Vincular código de barras</h1>
-            <p className="text-gray-400 text-sm mt-0.5">Paso opcional para registrar el EAN del producto</p>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4 flex flex-col gap-4">
-            {/* Info del producto */}
-            <div className="bg-gray-800 rounded-2xl px-4 py-3">
-              <p className="text-xs text-gray-400 mb-0.5">Producto seleccionado</p>
-              <p className="text-white font-bold text-base leading-tight">{productoEncontrado.descripcion}</p>
-              {productoEncontrado.marca && (
-                <p className="text-gray-400 text-sm">{productoEncontrado.marca}</p>
-              )}
-            </div>
-
-            {/* Mensaje informativo */}
-            <div className="bg-blue-900/30 border border-blue-700/50 rounded-2xl p-4 flex gap-3 items-start">
-              <Barcode className="h-5 w-5 text-blue-400 shrink-0 mt-0.5" />
+            <div className="bg-brand-light border border-brand-muted rounded-card p-4 flex gap-3 items-start">
+              <Barcode className="h-5 w-5 text-brand shrink-0 mt-0.5" />
               <div>
-                <p className="text-blue-200 font-medium text-sm">
-                  ¿Tenés el código de barras del producto a mano?
-                </p>
-                <p className="text-blue-300/70 text-xs mt-1">
-                  Escanealo para vincularlo al sistema. Así la próxima vez lo vas a encontrar más rápido.
-                </p>
+                <p className="text-brand font-semibold text-sm">¿Tenés el código de barras a mano?</p>
+                <p className="text-brand/70 text-xs mt-1">Escanealo para vincularlo. La próxima vez lo vas a encontrar más rápido.</p>
               </div>
             </div>
-
-            {/* Error EAN */}
             {errorEan && (
-              <div className="bg-red-900/40 border border-red-700 rounded-xl px-4 py-3 flex items-start gap-2">
-                <Package className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
-                <p className="text-red-300 text-sm">{errorEan}</p>
+              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-start gap-2 animate-fade-in">
+                <Package className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-red-600 text-sm">{errorEan}</p>
               </div>
             )}
-
-            {/* Botón escanear EAN */}
             <button
               type="button"
-              onClick={() => {
-                setErrorEan(null)
-                setModalEanAbierto(true)
-              }}
+              onClick={() => { setErrorEan(null); setModalEanAbierto(true) }}
               disabled={guardandoEan}
-              className="w-full min-h-14 flex items-center justify-center gap-3 bg-green-500 hover:bg-green-400 active:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-base rounded-2xl transition-colors"
+              className="w-full min-h-[56px] flex items-center justify-center gap-3 bg-brand hover:bg-brand-hover disabled:opacity-50 text-white font-bold text-base rounded-card shadow-brand transition-all duration-150 active:scale-[0.98]"
             >
               {guardandoEan ? (
-                <>
-                  <span className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Guardando...
-                </>
+                <><span className="h-5 w-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Guardando...</>
               ) : (
-                <>
-                  <ScanLine className="h-5 w-5" />
-                  Escanear EAN
-                </>
+                <><ScanLine className="h-5 w-5" />Escanear EAN</>
               )}
             </button>
-
-            {/* Botón omitir */}
             <button
               type="button"
               onClick={handleOmitirEan}
               disabled={guardandoEan}
-              className="w-full min-h-14 bg-gray-800 hover:bg-gray-700 active:bg-gray-900 disabled:opacity-50 text-gray-300 font-medium text-base rounded-2xl transition-colors"
+              className="w-full min-h-[56px] bg-muted hover:bg-muted/70 disabled:opacity-50 text-foreground font-medium text-base rounded-card transition-colors"
             >
               Omitir por ahora
-            </button>
-
-            <button
-              type="button"
-              onClick={handleCancelarConfirmacion}
-              className="w-full min-h-12 text-gray-400 hover:text-white text-sm font-medium transition-colors"
-            >
-              Cancelar y empezar de nuevo
             </button>
           </div>
         </div>
@@ -359,20 +236,12 @@ export default function Scanner() {
     )
   }
 
-  // Pantalla de confirmación de producto (Paso 2)
+  // ── Confirmar producto (paso 2) ─────────────────────────────────────────────
   if (paso === 'confirmando' && productoEncontrado) {
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col">
-        {/* Header */}
-        <div className="px-4 pt-6 pb-2">
-          <div className="flex items-center gap-2 mb-1">
-            <StepIndicator current={2} total={3} />
-          </div>
-          <h1 className="text-white text-xl font-bold">Confirmar producto</h1>
-          <p className="text-gray-400 text-sm mt-0.5">¿Es este el producto que querés registrar?</p>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
+      <div className="min-h-screen bg-surface-base flex flex-col">
+        <SubHeader paso={2} titulo="Confirmar producto" subtitulo="¿Es este el producto que querés registrar?" onBack={handleCancelarConfirmacion} />
+        <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4">
           <ProductoConfirm
             producto={productoEncontrado}
             onConfirm={handleConfirmarProducto}
@@ -383,126 +252,56 @@ export default function Scanner() {
     )
   }
 
-  // Paso nuevo_producto: formulario de alta
+  // ── Nuevo producto ──────────────────────────────────────────────────────────
   if (paso === 'nuevo_producto') {
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col">
-        {/* Header */}
-        <div className="px-4 pt-6 pb-2">
-          <div className="flex items-center gap-2 mb-1">
-            <StepIndicator current={1} total={3} />
-          </div>
-          <h1 className="text-white text-xl font-bold">Agregar producto</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Completá los datos del nuevo producto</p>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4 flex flex-col gap-4">
-          {/* Error */}
+      <div className="min-h-screen bg-surface-base flex flex-col">
+        <SubHeader paso={1} titulo="Agregar producto" subtitulo="Completá los datos del nuevo producto" onBack={handleCancelarConfirmacion} />
+        <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4 flex flex-col gap-4">
           {errorNuevo && (
-            <div className="bg-red-900/40 border border-red-700 rounded-xl px-4 py-3">
-              <p className="text-red-300 text-sm">{errorNuevo}</p>
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 animate-fade-in">
+              <p className="text-red-600 text-sm">{errorNuevo}</p>
             </div>
           )}
-
-          {/* Cod. Art */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-medium text-gray-400">Cod. Art.</label>
-            <input
-              type="text"
-              value={nuevoProductoCodArt}
-              onChange={(e) => setNuevoProductoCodArt(e.target.value)}
-              placeholder="Ej: 1234567"
-              className="w-full h-12 px-4 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors text-sm"
-            />
+          <div className="bg-white rounded-card shadow-card p-4 flex flex-col gap-4">
+            {[
+              { id: 'np-codart', label: 'Cod. Art.', value: nuevoProductoCodArt, onChange: setNuevoProductoCodArt, placeholder: 'Ej: 1234567', type: 'text' },
+              { id: 'np-desc', label: 'Descripción *', value: nuevoProductoDesc, onChange: setNuevoProductoDesc, placeholder: 'Ej: Chocolate con leche 100g', type: 'text' },
+              { id: 'np-marca', label: 'Marca (opcional)', value: nuevoProductoMarca, onChange: setNuevoProductoMarca, placeholder: 'Ej: Milka', type: 'text' },
+            ].map((f) => (
+              <div key={f.id} className="space-y-1.5">
+                <label htmlFor={f.id} className="block text-xs font-semibold text-foreground uppercase tracking-wide">{f.label}</label>
+                <input id={f.id} type={f.type} value={f.value} onChange={(e) => f.onChange(e.target.value)} placeholder={f.placeholder} className={inputCls} />
+              </div>
+            ))}
+            <div className="space-y-1.5">
+              <label htmlFor="np-cat" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Categoría</label>
+              <select id="np-cat" value={nuevoProductoCategoria} onChange={(e) => setNuevoProductoCategoria(e.target.value as CategoriaProducto)} className={inputCls}>
+                {CATEGORIAS.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label htmlFor="np-stock" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Stock actual</label>
+                <input id="np-stock" type="number" min={0} value={nuevoProductoStock} onChange={(e) => setNuevoProductoStock(Number(e.target.value))} className={inputCls} />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="np-venta" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Venta/día</label>
+                <input id="np-venta" type="number" min={0} step={0.1} value={nuevoProductoVenta} onChange={(e) => setNuevoProductoVenta(parseFloat(e.target.value) || 0)} className={inputCls} />
+              </div>
+            </div>
           </div>
-
-          {/* Descripcion */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-medium text-gray-400">
-              Descripcion <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
-              value={nuevoProductoDesc}
-              onChange={(e) => setNuevoProductoDesc(e.target.value)}
-              placeholder="Ej: Chocolate con leche 100g"
-              className="w-full h-12 px-4 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors text-sm"
-            />
-          </div>
-
-          {/* Marca */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-medium text-gray-400">Marca (opcional)</label>
-            <input
-              type="text"
-              value={nuevoProductoMarca}
-              onChange={(e) => setNuevoProductoMarca(e.target.value)}
-              placeholder="Ej: Milka"
-              className="w-full h-12 px-4 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors text-sm"
-            />
-          </div>
-
-          {/* Categoria */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-medium text-gray-400">Categoria</label>
-            <select
-              value={nuevoProductoCategoria}
-              onChange={(e) => setNuevoProductoCategoria(e.target.value as CategoriaProducto)}
-              className="w-full h-12 px-4 bg-gray-800 border border-gray-700 rounded-xl text-white focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors text-sm"
-            >
-              {CATEGORIAS.map((cat) => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Stock actual */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-medium text-gray-400">Stock actual</label>
-            <input
-              type="number"
-              min={0}
-              value={nuevoProductoStock}
-              onChange={(e) => setNuevoProductoStock(Number(e.target.value))}
-              className="w-full h-12 px-4 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors text-sm"
-            />
-          </div>
-
-          {/* Venta media diaria */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-medium text-gray-400">Venta media diaria</label>
-            <input
-              type="number"
-              min={0}
-              step={0.1}
-              value={nuevoProductoVenta}
-              onChange={(e) => setNuevoProductoVenta(parseFloat(e.target.value) || 0)}
-              className="w-full h-12 px-4 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors text-sm"
-            />
-          </div>
-
-          {/* Botones */}
           <button
             type="button"
             onClick={() => void handleAgregarNuevoProducto()}
             disabled={guardandoNuevo}
-            className="w-full min-h-14 flex items-center justify-center gap-3 bg-green-500 hover:bg-green-400 active:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-base rounded-2xl transition-colors mt-2"
+            className="w-full min-h-[56px] flex items-center justify-center gap-3 bg-brand hover:bg-brand-hover disabled:opacity-50 text-white font-bold text-base rounded-card shadow-brand transition-all duration-150 active:scale-[0.98]"
           >
             {guardandoNuevo ? (
-              <>
-                <span className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Agregando...
-              </>
-            ) : (
-              'Agregar y continuar'
-            )}
+              <><span className="h-5 w-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Agregando...</>
+            ) : 'Agregar y continuar'}
           </button>
-
-          <button
-            type="button"
-            onClick={handleCancelarConfirmacion}
-            className="w-full min-h-12 text-gray-400 hover:text-white text-sm font-medium transition-colors"
-          >
+          <button type="button" onClick={handleCancelarConfirmacion} className="w-full py-3 text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
             Cancelar
           </button>
         </div>
@@ -510,57 +309,66 @@ export default function Scanner() {
     )
   }
 
-  // Pantalla principal — Paso 1: Escanear
+  // ── Pantalla principal — Paso 1: Hero Scanner ───────────────────────────────
   const errorVisible = scanError ?? errorBusqueda
 
   return (
     <>
-      {/* Modal de cámara */}
-      {modalAbierto && (
-        <ScannerModal
-          onScan={handleScanFromCamera}
-          onClose={() => setModalAbierto(false)}
-        />
-      )}
+      {modalAbierto && <ScannerModal onScan={handleScanFromCamera} onClose={() => setModalAbierto(false)} />}
 
-      <div className="min-h-screen bg-gray-900 flex flex-col">
+      <div className="min-h-screen bg-surface-base flex flex-col">
         {/* Header */}
-        <div className="px-4 pt-6 pb-2">
-          <div className="flex items-center gap-2 mb-1">
-            <StepIndicator current={1} total={3} />
-          </div>
-          <h1 className="text-white text-xl font-bold">Registrar vencimiento</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Escaneá el código de barras del producto</p>
+        <div className="px-4 pt-6 pb-4">
+          <StepIndicator current={1} total={3} />
+          <h1 className="text-foreground text-2xl font-bold mt-3">Registrar vencimiento</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">Escaneá el código de barras del producto</p>
         </div>
 
-        <div className="flex-1 flex flex-col px-4 pb-24 pt-6 gap-6">
-          {/* Botón principal de escaneo */}
+        <div className="flex-1 flex flex-col px-4 pb-nav gap-5">
+
+          {/* ── HERO scan button ── */}
           <button
             type="button"
-            onClick={() => {
-              setErrorBusqueda(null)
-              setModalAbierto(true)
-            }}
+            onClick={() => { setErrorBusqueda(null); setModalAbierto(true) }}
             disabled={scanning}
-            className="w-full min-h-[160px] flex flex-col items-center justify-center gap-4 bg-gray-800 hover:bg-gray-700 active:bg-gray-900 border-2 border-dashed border-gray-600 hover:border-green-500 rounded-2xl transition-all text-center px-4 disabled:opacity-50 disabled:cursor-not-allowed group"
+            className={[
+              'relative overflow-hidden w-full',
+              'flex flex-col items-center justify-center gap-5',
+              'bg-brand hover:bg-brand-hover',
+              'rounded-card py-14',
+              'shadow-brand-lg hover:shadow-[0_10px_40px_rgba(13,148,136,0.50)]',
+              'transition-all duration-200',
+              'active:scale-[0.97]',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+              'focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/40',
+            ].join(' ')}
           >
-            <div className="p-4 bg-green-500/10 group-hover:bg-green-500/20 rounded-2xl transition-colors">
-              <ScanLine className="h-10 w-10 text-green-400" />
+            {/* Decorative rings */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="h-52 w-52 rounded-full border-2 border-white/10" />
+              <div className="absolute h-36 w-36 rounded-full border border-white/8" />
             </div>
-            <div>
-              <p className="text-white font-bold text-lg">Escanear producto</p>
-              <p className="text-gray-400 text-sm mt-0.5">Abre la cámara para leer el código de barras</p>
+
+            {/* Icon container */}
+            <div className="relative bg-white/20 p-5 rounded-[18px]">
+              <ScanLine className="h-12 w-12 text-white" />
+            </div>
+
+            {/* Text */}
+            <div className="relative text-center px-4">
+              <p className="text-white font-bold text-xl tracking-tight">Escanear producto</p>
+              <p className="text-white/70 text-sm mt-1">Tocá para abrir la cámara</p>
             </div>
           </button>
 
-          {/* Divisor */}
+          {/* Divider */}
           <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-gray-700" />
-            <span className="text-gray-500 text-sm">o ingresá el código</span>
-            <div className="flex-1 h-px bg-gray-700" />
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-muted-foreground text-xs font-medium">o ingresá el código</span>
+            <div className="flex-1 h-px bg-border" />
           </div>
 
-          {/* Búsqueda manual */}
+          {/* Manual input */}
           <div className="flex flex-col gap-3">
             <div className="flex gap-2">
               <input
@@ -568,24 +376,19 @@ export default function Scanner() {
                 type="text"
                 inputMode="numeric"
                 value={codigoManual}
-                onChange={(e) => {
-                  setCodigoManual(e.target.value)
-                  setErrorBusqueda(null)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleBuscarManual()
-                }}
+                onChange={(e) => { setCodigoManual(e.target.value); setErrorBusqueda(null) }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleBuscarManual() }}
                 placeholder="Código de barras o cod. artículo"
-                className="flex-1 h-12 px-4 bg-gray-800 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors text-sm"
+                className={`flex-1 ${inputCls}`}
               />
               <button
                 type="button"
                 onClick={handleBuscarManual}
                 disabled={scanning}
-                className="h-12 px-4 bg-green-500 hover:bg-green-400 active:bg-green-600 disabled:opacity-50 rounded-xl text-white transition-colors flex items-center gap-2 font-medium text-sm whitespace-nowrap"
+                className="h-12 px-4 bg-brand hover:bg-brand-hover disabled:opacity-50 rounded-lg text-white transition-colors flex items-center gap-2 font-semibold text-sm whitespace-nowrap"
               >
                 {scanning ? (
-                  <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                 ) : (
                   <Search className="h-4 w-4" />
                 )}
@@ -593,63 +396,74 @@ export default function Scanner() {
               </button>
             </div>
 
-            {/* Producto no encontrado */}
+            {/* No encontrado */}
             {errorBusqueda === 'no_encontrado' && (
-              <div className="flex flex-col gap-3 bg-gray-800 rounded-xl p-4">
+              <div className="bg-white rounded-card shadow-card p-4 flex flex-col gap-3 animate-fade-in">
                 <div className="flex items-start gap-2">
-                  <Package className="h-5 w-5 text-gray-400 mt-0.5 shrink-0" />
-                  <p className="text-gray-300 text-sm">
-                    Este producto no esta en el sistema. ¿Queres agregarlo al surtido?
-                  </p>
+                  <Package className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
+                  <p className="text-foreground text-sm">Producto no encontrado en el sistema. ¿Querés agregarlo al surtido?</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setPaso('nuevo_producto')}
-                  className="w-full py-2.5 text-center bg-green-500 hover:bg-green-400 active:bg-green-600 text-white text-sm font-semibold rounded-lg transition-colors"
+                  className="w-full py-2.5 text-center bg-brand hover:bg-brand-hover text-white text-sm font-semibold rounded-lg transition-colors"
                 >
                   Agregar producto
                 </button>
                 <button
                   type="button"
                   onClick={handleCancelarConfirmacion}
-                  className="w-full py-2.5 text-center bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-lg transition-colors"
+                  className="w-full py-2.5 text-center bg-muted hover:bg-muted/70 text-foreground text-sm font-medium rounded-lg transition-colors"
                 >
                   Cancelar
                 </button>
               </div>
             )}
 
-            {/* Otros errores de búsqueda */}
+            {/* Otro error */}
             {errorVisible && errorBusqueda !== 'no_encontrado' && (
-              <div className="flex flex-col gap-3 bg-gray-800 rounded-xl p-4">
-                <div className="flex items-start gap-2">
-                  <Package className="h-5 w-5 text-gray-400 mt-0.5 shrink-0" />
-                  <p className="text-gray-300 text-sm">{errorVisible}</p>
-                </div>
+              <div className="bg-white rounded-card shadow-card p-4 flex items-start gap-2 animate-fade-in">
+                <Package className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
+                <p className="text-foreground text-sm">{errorVisible}</p>
               </div>
             )}
           </div>
-
-          {/* Tip de uso */}
-          {!errorVisible && errorBusqueda !== 'no_encontrado' && (
-            <div className="bg-gray-800/50 rounded-xl px-4 py-3 flex gap-3 items-start">
-              <ScanLine className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-              <p className="text-gray-400 text-xs leading-relaxed">
-                Usá la cámara para escanear el código de barras de la etiqueta del producto. Si el código no se lee bien, ingresalo manualmente.
-              </p>
-            </div>
-          )}
         </div>
       </div>
     </>
   )
 }
 
-// Componente auxiliar: indicador de paso
-interface StepIndicatorProps {
-  current: number
-  total: number
+// ── Sub-componentes ───────────────────────────────────────────────────────────
+
+interface SubHeaderProps {
+  paso: number
+  titulo: string
+  subtitulo: string
+  onBack: () => void
 }
+
+function SubHeader({ paso, titulo, subtitulo, onBack }: SubHeaderProps) {
+  return (
+    <div className="px-4 pt-5 pb-3 bg-surface-base">
+      <div className="flex items-center gap-3 mb-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          aria-label="Volver"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+        <StepIndicator current={paso} total={3} />
+      </div>
+      <h1 className="text-foreground text-xl font-bold">{titulo}</h1>
+      <p className="text-muted-foreground text-sm mt-0.5">{subtitulo}</p>
+    </div>
+  )
+}
+
+interface StepIndicatorProps { current: number; total: number }
 
 function StepIndicator({ current, total }: StepIndicatorProps) {
   return (
@@ -657,16 +471,12 @@ function StepIndicator({ current, total }: StepIndicatorProps) {
       {Array.from({ length: total }, (_, i) => (
         <div
           key={i}
-          className={`h-1.5 rounded-full transition-all ${
-            i + 1 <= current
-              ? 'bg-green-500 w-6'
-              : 'bg-gray-700 w-3'
+          className={`h-1.5 rounded-full transition-all duration-300 ${
+            i + 1 <= current ? 'bg-brand w-6' : 'bg-border w-3'
           }`}
         />
       ))}
-      <span className="text-gray-500 text-xs ml-1">
-        {current}/{total}
-      </span>
+      <span className="text-muted-foreground text-xs ml-1 font-medium">{current}/{total}</span>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Package } from 'lucide-react'
+import { Package, ScanLine, RefreshCw } from 'lucide-react'
 import { useVencimientos } from '@/hooks/useVencimientos'
 import RiesgoCard from '@/components/dashboard/RiesgoCard'
 import AlertaItem from '@/components/dashboard/AlertaItem'
@@ -9,7 +9,6 @@ import type { VencimientoConRiesgo } from '@/types/index'
 
 const SUCURSAL_ID = '00000000-0000-0000-0000-000000000001'
 
-// decomiso primero, luego donacion, urgente, radar, seguro
 const ORDEN_RIESGO: Record<string, number> = {
   decomiso: 0,
   donacion: 1,
@@ -22,41 +21,38 @@ function calcularUnidadesEnRiesgo(items: VencimientoConRiesgo[]): number {
   return items.reduce((acc, v) => acc + v.cantidad, 0)
 }
 
+function formatFechaHoy(): string {
+  return new Intl.DateTimeFormat('es-AR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(new Date())
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const { data, loading, error, refetch } = useVencimientos(SUCURSAL_ID)
   const [vencimientoEditando, setVencimientoEditando] = useState<VencimientoConRiesgo | null>(null)
 
-  // Ordenar por nivel de riesgo (mayor urgencia primero)
   const alertasOrdenadas = [...data].sort(
     (a, b) => ORDEN_RIESGO[a.nivel_riesgo] - ORDEN_RIESGO[b.nivel_riesgo],
   )
 
-  // Productos en riesgo activo: decomiso + donacion + urgente
   const enRiesgo = data.filter(
-    (v) =>
-      v.nivel_riesgo === 'decomiso' ||
-      v.nivel_riesgo === 'donacion' ||
-      v.nivel_riesgo === 'urgente',
+    (v) => v.nivel_riesgo === 'decomiso' || v.nivel_riesgo === 'donacion' || v.nivel_riesgo === 'urgente',
   ).length
 
   const unidadesEnRiesgo = calcularUnidadesEnRiesgo(
-    data.filter(
-      (v) =>
-        v.nivel_riesgo === 'decomiso' ||
-        v.nivel_riesgo === 'donacion' ||
-        v.nivel_riesgo === 'urgente',
-    ),
+    data.filter((v) => v.nivel_riesgo === 'decomiso' || v.nivel_riesgo === 'donacion' || v.nivel_riesgo === 'urgente'),
   )
 
-  // En radar = riesgo latente
   const enRadar = data.filter((v) => v.nivel_riesgo === 'radar').length
-
   const decomisados = data.filter((v) => v.nivel_riesgo === 'decomiso').length
+  const hayCriticos = decomisados > 0 || data.some((v) => v.nivel_riesgo === 'donacion')
 
   return (
-    <div className="dark min-h-screen bg-[#0a0a0a]">
-      {/* Modal de edicion */}
+    <div className="min-h-screen bg-surface-base">
+      {/* Modal */}
       {vencimientoEditando !== null && (
         <EditarVencimientoModal
           vencimiento={{
@@ -76,116 +72,131 @@ export default function Dashboard() {
             },
           }}
           onClose={() => setVencimientoEditando(null)}
-          onGuardado={() => {
-            setVencimientoEditando(null)
-            void refetch()
-          }}
+          onGuardado={() => { setVencimientoEditando(null); void refetch() }}
         />
       )}
 
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-[#0a0a0a]/95 backdrop-blur border-b border-zinc-800 px-4 py-3">
-        <div className="flex items-center justify-between">
+      <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-border shadow-nav px-4 py-3.5">
+        <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-base font-bold text-white leading-tight">
-              NoVen <span className="text-[#22c55e]">IA</span>
+            <h1 className="text-base font-bold text-foreground leading-tight">
+              NoVen <span className="text-brand">IA</span>
             </h1>
-            <p className="text-xs text-zinc-500">Control de vencimientos</p>
+            <p className="text-xs text-muted-foreground capitalize">{formatFechaHoy()}</p>
           </div>
-          {loading && (
-            <span className="text-xs text-zinc-500 flex items-center gap-1.5">
-              <span className="h-3 w-3 animate-spin rounded-full border border-zinc-600 border-t-[#22c55e]" />
-              Actualizando
-            </span>
-          )}
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            disabled={loading}
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
+            aria-label="Actualizar datos"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
       </header>
 
-      <main className="px-4 py-4 space-y-6 max-w-2xl mx-auto">
+      <main className="px-4 py-5 space-y-5 max-w-2xl mx-auto">
+
         {/* Error state */}
         {error && (
-          <div
-            role="alert"
-            className="rounded-xl bg-red-950/60 border border-red-800/60 px-4 py-3 text-sm text-red-400"
-          >
-            No pudimos cargar los datos. Revisa tu conexion e intenta de nuevo.
+          <div role="alert" className="rounded-card bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600 animate-fade-in">
+            No pudimos cargar los datos. Revisá tu conexión e intentá de nuevo.
           </div>
         )}
 
-        {/* Skeleton de carga */}
+        {/* Skeleton */}
         {loading && data.length === 0 && (
           <div className="grid grid-cols-2 gap-3">
             {[0, 1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 h-24 animate-pulse"
-              />
+              <div key={i} className="rounded-card bg-white shadow-card h-[108px] animate-pulse" />
             ))}
           </div>
         )}
 
-        {/* Cards de resumen */}
         {!loading && (
           <>
+            {/* Banner crítico */}
+            {hayCriticos && (
+              <div className="bg-red-50 border border-red-200 rounded-card px-4 py-3.5 flex items-center gap-3 animate-fade-in">
+                <span className="relative flex h-3 w-3 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-60" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+                </span>
+                <p className="text-sm font-semibold text-red-700">
+                  {decomisados > 0
+                    ? `${decomisados} producto${decomisados > 1 ? 's' : ''} en decomiso — acción inmediata requerida`
+                    : 'Productos para donación detectados'}
+                </p>
+              </div>
+            )}
+
+            {/* Stat cards */}
             <section aria-label="Resumen de riesgos">
               <div className="grid grid-cols-2 gap-3">
                 <RiesgoCard
                   titulo="En riesgo"
                   valor={enRiesgo}
-                  icono="🔴"
-                  color="red"
+                  nivel={enRiesgo > 0 ? 'urgente' : 'seguro'}
+                  onClick={() => navigate('/vencimientos')}
                 />
                 <RiesgoCard
                   titulo="Unidades en riesgo"
                   valor={unidadesEnRiesgo}
+                  nivel={unidadesEnRiesgo > 0 ? 'urgente' : 'seguro'}
                   IconoComponente={Package}
-                  color="red"
+                  onClick={() => navigate('/vencimientos')}
                 />
                 <RiesgoCard
                   titulo="En radar"
                   valor={enRadar}
-                  icono="📡"
-                  color="blue"
+                  nivel={enRadar > 0 ? 'radar' : 'seguro'}
+                  onClick={() => navigate('/vencimientos')}
                 />
                 <RiesgoCard
                   titulo="Decomiso"
                   valor={decomisados}
-                  icono="⛔"
-                  color={decomisados > 0 ? 'red' : 'green'}
+                  nivel={decomisados > 0 ? 'decomiso' : 'seguro'}
+                  onClick={() => navigate('/vencimientos')}
                 />
               </div>
             </section>
 
             {/* Lista de alertas */}
             <section aria-label="Alertas de vencimiento">
-              <h2 className="text-sm font-semibold text-zinc-300 mb-3 uppercase tracking-wide">
-                Alertas priorizadas
-              </h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                  Alertas priorizadas
+                </h2>
+                {alertasOrdenadas.length > 0 && (
+                  <span className="text-xs text-muted-foreground font-medium">
+                    {alertasOrdenadas.length} registros
+                  </span>
+                )}
+              </div>
 
               {alertasOrdenadas.length === 0 ? (
-                /* Estado vacio */
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-6 py-10 flex flex-col items-center text-center gap-4">
-                  <span className="text-5xl" aria-hidden="true">
-                    📦
-                  </span>
+                <div className="rounded-card bg-white shadow-card px-6 py-12 flex flex-col items-center text-center gap-4">
+                  <div className="p-4 bg-emerald-50 rounded-full">
+                    <ScanLine className="h-10 w-10 text-emerald-400" />
+                  </div>
                   <div>
-                    <p className="text-white font-semibold text-base">
-                      No hay productos registrados aun
-                    </p>
-                    <p className="text-zinc-400 text-sm mt-1">
-                      Usa el Scanner para cargar el primer vencimiento.
+                    <p className="text-foreground font-semibold text-base">Sin productos registrados</p>
+                    <p className="text-muted-foreground text-sm mt-1">
+                      Usá el Scanner para cargar el primer vencimiento.
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => navigate('/scanner')}
-                    className="mt-1 px-5 py-2.5 rounded-lg bg-[#22c55e] hover:bg-[#16a34a] active:scale-95 text-black text-sm font-semibold transition-all"
+                    className="px-6 py-2.5 rounded-lg bg-brand hover:bg-brand-hover text-white text-sm font-semibold shadow-brand transition-all duration-150 active:scale-[0.97]"
                   >
                     Ir al Scanner
                   </button>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {alertasOrdenadas.map((v) => (
                     <AlertaItem
                       key={v.id}

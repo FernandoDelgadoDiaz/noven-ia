@@ -1,9 +1,5 @@
 import { type FormEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { useAuth } from '@/hooks/useAuth'
 
 function getErrorMessage(error: string): string {
@@ -31,16 +27,8 @@ export default function Login() {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setErrorMessage(null)
-
-    if (!email.trim()) {
-      setErrorMessage('Ingresá tu email.')
-      return
-    }
-    if (!password) {
-      setErrorMessage('Ingresá tu contraseña.')
-      return
-    }
-
+    if (!email.trim()) { setErrorMessage('Ingresá tu email.'); return }
+    if (!password) { setErrorMessage('Ingresá tu contraseña.'); return }
     setIsLoading(true)
     try {
       const error = await signIn(email.trim(), password)
@@ -55,109 +43,108 @@ export default function Login() {
   }
 
   return (
-    <div className="dark min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a] px-4 py-12">
-      {/* Logo / marca */}
-      <div className="mb-8 text-center">
-        <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-[#22c55e]/10 border border-[#22c55e]/30 mb-4">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#22c55e"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-7 w-7"
-            aria-hidden="true"
-          >
-            <path d="M12 2a10 10 0 1 0 10 10H12V2Z" />
-            <path d="M12 2a10 10 0 0 1 10 10" />
-            <path d="M12 12 2.1 9.1" />
-          </svg>
+    <div className="min-h-screen bg-surface-base flex flex-col items-center justify-center px-4 py-12">
+
+      {/* Brand mark */}
+      <div className="mb-10 text-center">
+        <div className="inline-flex items-center justify-center h-16 w-16 rounded-[20px] bg-brand shadow-brand mb-5">
+          <ScanLineIcon />
         </div>
-        <h1 className="text-3xl font-bold tracking-tight text-white">
-          NoVen <span className="text-[#22c55e]">IA</span>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+          NoVen <span className="text-brand">IA</span>
         </h1>
-        <p className="mt-1 text-sm text-zinc-400">Control predictivo de vencimientos</p>
+        <p className="mt-1.5 text-sm text-muted-foreground">Control predictivo de vencimientos</p>
       </div>
 
-      {/* Card de login */}
-      <Card className="w-full max-w-sm bg-zinc-900 border-zinc-800 text-white shadow-xl">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg font-semibold text-white">Ingresá a tu cuenta</CardTitle>
-          <CardDescription className="text-zinc-400">
-            Completá tus datos para continuar
-          </CardDescription>
-        </CardHeader>
+      {/* Login card */}
+      <div className="w-full max-w-sm bg-white rounded-card shadow-elevated p-8">
+        <h2 className="text-lg font-semibold text-foreground mb-1">Ingresá a tu cuenta</h2>
+        <p className="text-sm text-muted-foreground mb-6">Completá tus datos para continuar</p>
 
-        <CardContent>
-          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
-            {/* Campo email */}
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="email" className="text-zinc-300">
-                Email
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                placeholder="tu@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoading}
-                className="bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500 focus-visible:ring-[#22c55e] focus-visible:border-[#22c55e]"
-              />
-            </div>
-
-            {/* Campo contraseña */}
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="password" className="text-zinc-300">
-                Contraseña
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                placeholder="Tu contraseña"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading}
-                className="bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500 focus-visible:ring-[#22c55e] focus-visible:border-[#22c55e]"
-              />
-            </div>
-
-            {/* Mensaje de error */}
-            {errorMessage && (
-              <div
-                role="alert"
-                className="rounded-md bg-red-950/60 border border-red-800/60 px-3 py-2.5 text-sm text-red-400"
-              >
-                {errorMessage}
-              </div>
-            )}
-
-            {/* Botón de envío */}
-            <Button
-              type="submit"
+        <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="email" className="text-xs font-semibold text-foreground uppercase tracking-wide">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              placeholder="tu@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               disabled={isLoading}
-              className="w-full h-11 bg-[#22c55e] hover:bg-[#16a34a] text-black font-semibold transition-colors"
-            >
-              {isLoading ? (
-                <span className="flex items-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/30 border-t-black" />
-                  Ingresando...
-                </span>
-              ) : (
-                'Ingresar'
-              )}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              className="h-12 px-4 w-full bg-surface-base border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150 text-sm disabled:opacity-50"
+            />
+          </div>
 
-      <p className="mt-8 text-xs text-zinc-600">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="password" className="text-xs font-semibold text-foreground uppercase tracking-wide">
+              Contraseña
+            </label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              placeholder="Tu contraseña"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={isLoading}
+              className="h-12 px-4 w-full bg-surface-base border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150 text-sm disabled:opacity-50"
+            />
+          </div>
+
+          {errorMessage && (
+            <div
+              role="alert"
+              className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600 animate-fade-in"
+            >
+              {errorMessage}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="mt-1 w-full h-12 bg-brand hover:bg-brand-hover text-white font-semibold rounded-lg shadow-brand hover:shadow-brand-lg transition-all duration-150 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isLoading ? (
+              <>
+                <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                Ingresando...
+              </>
+            ) : (
+              'Ingresar'
+            )}
+          </button>
+        </form>
+      </div>
+
+      <p className="mt-8 text-xs text-muted-foreground">
         Si no tenés cuenta, contactá al administrador del sistema.
       </p>
     </div>
+  )
+}
+
+function ScanLineIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="white"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-7 w-7"
+      aria-hidden="true"
+    >
+      <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+      <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+      <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+      <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+      <line x1="7" y1="12" x2="17" y2="12" />
+    </svg>
   )
 }

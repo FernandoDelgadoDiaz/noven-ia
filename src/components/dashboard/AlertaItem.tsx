@@ -1,55 +1,10 @@
+import { RISK_VISUAL } from '@/lib/risk-config'
 import { calcularDiasStock } from '@/lib/riesgo'
-import type { RiesgoNivel, VencimientoConRiesgo } from '@/types/index'
+import type { VencimientoConRiesgo } from '@/types/index'
 
 interface AlertaItemProps {
   vencimiento: VencimientoConRiesgo
   onClick?: () => void
-}
-
-interface NivelConfig {
-  label: string
-  badgeCls: string
-  dotCls: string
-  pulsante: boolean
-  diasCls: string
-}
-
-const nivelConfig: Record<RiesgoNivel, NivelConfig> = {
-  seguro: {
-    label: 'Seguro',
-    badgeCls: 'bg-green-500/20 text-green-400 border border-green-500/40',
-    dotCls: 'bg-green-500',
-    pulsante: false,
-    diasCls: 'text-green-400',
-  },
-  radar: {
-    label: 'Radar',
-    badgeCls: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40',
-    dotCls: 'bg-yellow-500',
-    pulsante: false,
-    diasCls: 'text-yellow-400',
-  },
-  urgente: {
-    label: 'Urgente',
-    badgeCls: 'bg-orange-500/20 text-orange-400 border border-orange-500/40',
-    dotCls: 'bg-orange-500',
-    pulsante: false,
-    diasCls: 'text-orange-400',
-  },
-  donacion: {
-    label: 'Donación',
-    badgeCls: 'bg-red-500/20 text-red-400 border border-red-500/40',
-    dotCls: 'bg-red-500',
-    pulsante: true,
-    diasCls: 'text-red-400',
-  },
-  decomiso: {
-    label: 'Decomiso',
-    badgeCls: 'bg-gray-900/80 text-gray-300 border border-red-600/60',
-    dotCls: 'bg-gray-700',
-    pulsante: true,
-    diasCls: 'text-gray-400',
-  },
 }
 
 function formatTitulo(descripcion: string, gramaje: string | null, marca: string | null): string {
@@ -68,94 +23,97 @@ function formatDiasRestantes(dias: number): string {
 
 function formatDiasStock(cantidadLote: number, ventaMediaDiaria: number): string {
   if (ventaMediaDiaria <= 0) return 'Sin rotación'
-  const dias = calcularDiasStock(cantidadLote, ventaMediaDiaria)
-  return `${dias} días`
+  return `${calcularDiasStock(cantidadLote, ventaMediaDiaria)} días de stock`
 }
 
 export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
-  const cfg = nivelConfig[vencimiento.nivel_riesgo]
+  const cfg = RISK_VISUAL[vencimiento.nivel_riesgo]
   const { producto } = vencimiento
 
   const titulo = formatTitulo(producto.descripcion, producto.gramaje, producto.marca)
-  const diasRestantesLabel = formatDiasRestantes(vencimiento.dias_restantes)
-  const diasStockLabel = formatDiasStock(vencimiento.cantidad, producto.venta_media_diaria)
+  const diasLabel = formatDiasRestantes(vencimiento.dias_restantes)
+  const stockLabel = formatDiasStock(vencimiento.cantidad, producto.venta_media_diaria)
+  const isDecomiso = vencimiento.nivel_riesgo === 'decomiso'
 
   return (
     <div
-      className={`flex items-start gap-3 rounded-xl bg-zinc-900 border border-zinc-800 p-4 transition-colors ${onClick ? 'cursor-pointer hover:bg-gray-800 active:bg-gray-700' : ''}`}
+      className={[
+        'flex items-stretch rounded-card shadow-card overflow-hidden',
+        'transition-all duration-150',
+        onClick ? 'cursor-pointer hover:shadow-elevated active:scale-[0.99]' : '',
+        cfg.rowBg,
+      ].join(' ')}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick() } : undefined}
     >
-      {/* Semaforo */}
-      <div className="flex-shrink-0 mt-1">
-        {cfg.pulsante ? (
-          <span className="relative flex h-3 w-3">
-            <span
-              className={`animate-ping absolute inline-flex h-full w-full rounded-full ${cfg.dotCls} opacity-75`}
-            />
-            <span className={`relative inline-flex rounded-full h-3 w-3 ${cfg.dotCls}`} />
-          </span>
-        ) : (
-          <span className={`inline-flex rounded-full h-3 w-3 ${cfg.dotCls}`} />
-        )}
-      </div>
+      {/* Left accent bar — visual urgency signal */}
+      <div className={`w-1 shrink-0 ${cfg.accentBar}`} />
 
-      {/* Contenido */}
-      <div className="flex-1 min-w-0">
-
-        {/* Linea 1: titulo + badge */}
+      {/* Content */}
+      <div className="flex-1 px-4 py-3.5 min-w-0">
+        {/* Row 1: title + badge */}
         <div className="flex items-start justify-between gap-2">
           <p
-            className="text-sm font-bold text-white leading-tight truncate"
+            className={[
+              'text-sm leading-snug line-clamp-2 flex-1 min-w-0',
+              isDecomiso ? 'font-bold text-red-900' : 'font-semibold text-foreground',
+            ].join(' ')}
             title={titulo}
           >
             {titulo}
           </p>
-          <span className={`flex-shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.badgeCls}`}>
-            {cfg.label}
+          <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg.badge}`}>
+            {cfg.label.toUpperCase()}
           </span>
         </div>
 
-        {/* Linea 2: Cod. Art y EAN lado a lado */}
-        <div className="mt-1 flex justify-between gap-2 text-xs text-gray-400">
-          <span>
-            Cod. Art: <span className="font-mono text-zinc-300">{producto.cod_art || '—'}</span>
-          </span>
-          <span>
-            EAN: <span className="text-zinc-300">{producto.codigo_barras ?? 'Sin mapear'}</span>
-          </span>
+        {/* Row 2: días restantes + días de stock */}
+        <div className="flex items-center gap-3 mt-2">
+          {/* Dot indicator */}
+          <div className="shrink-0">
+            {cfg.dotPulse ? (
+              <span className="relative flex h-2.5 w-2.5">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${cfg.dot} opacity-60`} />
+                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${cfg.dot}`} />
+              </span>
+            ) : (
+              <span className={`inline-flex rounded-full h-2.5 w-2.5 ${cfg.dot}`} />
+            )}
+          </div>
+          <span className={`text-sm font-semibold ${cfg.daysText}`}>{diasLabel}</span>
+          <span className="text-muted-foreground text-xs">·</span>
+          <span className="text-muted-foreground text-xs">{stockLabel}</span>
         </div>
 
-        {/* Linea 3: venta media y dias de stock lado a lado */}
-        <div className="mt-0.5 flex justify-between gap-2 text-xs text-gray-400">
-          <span>
-            Venta media: <span className="text-zinc-300">{producto.venta_media_diaria} unid/día</span>
-          </span>
-          <span>
-            Días de stock (lote): <span className="text-zinc-300">{diasStockLabel}</span>
-          </span>
+        {/* Row 3: metadata */}
+        <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+          <span>{vencimiento.cantidad} unids</span>
+          {producto.venta_media_diaria > 0 && (
+            <>
+              <span>·</span>
+              <span>{producto.venta_media_diaria} unid/día</span>
+            </>
+          )}
+          {producto.cod_art && (
+            <>
+              <span>·</span>
+              <span className="font-mono">{producto.cod_art}</span>
+            </>
+          )}
         </div>
 
-        {/* Linea 4: dias restantes con color segun nivel */}
-        <div className="mt-1">
-          <span className={`text-xs font-semibold ${cfg.diasCls}`}>
-            {diasRestantesLabel}
-          </span>
-        </div>
-
-        {/* Linea 5: acciones sugeridas */}
+        {/* Row 4: acciones sugeridas */}
         {vencimiento.acciones_sugeridas.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5 mt-2.5">
             {vencimiento.acciones_sugeridas.map((accion) => (
-              <button
+              <span
                 key={accion}
-                type="button"
-                className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors active:scale-95"
+                className="text-[11px] px-2.5 py-1 rounded-full bg-white/80 border border-border text-foreground/70 font-medium"
               >
                 {accion}
-              </button>
+              </span>
             ))}
           </div>
         )}
