@@ -142,8 +142,7 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
               const titulo = vencimiento.productos.marca ? `${base} — ${vencimiento.productos.marca}` : base
               return (
                 <h2
-                  className="text-white font-bold text-sm leading-tight truncate"
-                  title={titulo}
+                  className="text-white font-bold text-sm leading-tight break-words"
                 >
                   {titulo}
                 </h2>
