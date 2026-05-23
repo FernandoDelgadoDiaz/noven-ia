@@ -116,7 +116,7 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
         const diasRestantes = calcularDiasRestantes(row.fecha_vencimiento)
         const nivelRiesgo = calcularNivelRiesgo(
           diasRestantes,
-          row.productos.stock_actual,
+          row.cantidad,
           row.productos.venta_media_diaria,
         )
         return {

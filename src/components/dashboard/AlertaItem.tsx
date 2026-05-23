@@ -66,9 +66,9 @@ function formatDiasRestantes(dias: number): string {
   return `Vence en ${dias} días`
 }
 
-function formatDiasStock(stockActual: number, ventaMediaDiaria: number): string {
+function formatDiasStock(cantidadLote: number, ventaMediaDiaria: number): string {
   if (ventaMediaDiaria <= 0) return 'Sin rotación'
-  const dias = calcularDiasStock(stockActual, ventaMediaDiaria)
+  const dias = calcularDiasStock(cantidadLote, ventaMediaDiaria)
   return `${dias} días`
 }
 
@@ -78,7 +78,7 @@ export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
 
   const titulo = formatTitulo(producto.descripcion, producto.gramaje, producto.marca)
   const diasRestantesLabel = formatDiasRestantes(vencimiento.dias_restantes)
-  const diasStockLabel = formatDiasStock(producto.stock_actual, producto.venta_media_diaria)
+  const diasStockLabel = formatDiasStock(vencimiento.cantidad, producto.venta_media_diaria)
 
   return (
     <div
@@ -134,7 +134,7 @@ export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
             Venta media: <span className="text-zinc-300">{producto.venta_media_diaria} unid/día</span>
           </span>
           <span>
-            Días de stock: <span className="text-zinc-300">{diasStockLabel}</span>
+            Días de stock (lote): <span className="text-zinc-300">{diasStockLabel}</span>
           </span>
         </div>
 

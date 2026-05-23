@@ -35,12 +35,12 @@ export function calcularRiesgo(
 
   const cobertura_dias =
     p.venta_media_diaria > 0
-      ? p.stock_actual / p.venta_media_diaria
+      ? v.cantidad / p.venta_media_diaria
       : Infinity
 
   const nivel_riesgo: RiesgoNivel = calcularNivelRiesgo(
     diasRestantes,
-    p.stock_actual,
+    v.cantidad,
     p.venta_media_diaria,
   )
 

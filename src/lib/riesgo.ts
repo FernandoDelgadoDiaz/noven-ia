@@ -25,17 +25,17 @@ export function calcularDiasRestantes(fechaVencimiento: string): number {
   return Math.floor((vence.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-export function calcularDiasStock(stockActual: number, ventaMediaDiaria: number): number {
+export function calcularDiasStock(cantidadLote: number, ventaMediaDiaria: number): number {
   if (ventaMediaDiaria <= 0) return Infinity
-  return Math.floor(stockActual / ventaMediaDiaria)
+  return Math.floor(cantidadLote / ventaMediaDiaria)
 }
 
 export function calcularNivelRiesgo(
   diasRestantes: number,
-  stockActual: number,
+  cantidadLote: number,
   ventaMediaDiaria: number,
 ): NivelRiesgo {
-  const diasStock = calcularDiasStock(stockActual, ventaMediaDiaria)
+  const diasStock = calcularDiasStock(cantidadLote, ventaMediaDiaria)
   const hayRiesgoMerma = diasStock > diasRestantes
 
   if (diasRestantes <= 0) return 'decomiso'

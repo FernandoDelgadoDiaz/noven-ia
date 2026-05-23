@@ -39,7 +39,7 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
   const [nivelCalculado, setNivelCalculado] = useState<NivelRiesgo>(() =>
     calcularNivelRiesgo(
       calcularDiasRestantes(vencimiento.fecha_vencimiento),
-      vencimiento.productos.stock_actual,
+      vencimiento.cantidad,
       vencimiento.productos.venta_media_diaria,
     ),
   )
@@ -48,11 +48,11 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
     setNivelCalculado(
       calcularNivelRiesgo(
         calcularDiasRestantes(fechaVencimiento),
-        stockActual,
+        cantidad,
         vencimiento.productos.venta_media_diaria,
       ),
     )
-  }, [fechaVencimiento, stockActual, vencimiento.productos.venta_media_diaria])
+  }, [fechaVencimiento, cantidad, vencimiento.productos.venta_media_diaria])
 
   async function handleGuardar(): Promise<void> {
     setError(null)
@@ -163,11 +163,11 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
                 Venta media: <span className="text-gray-300">{vencimiento.productos.venta_media_diaria} unid/día</span>
               </span>
               <span>
-                Días de stock:{' '}
+                Días de stock (lote):{' '}
                 <span className="text-gray-300">
                   {vencimiento.productos.venta_media_diaria <= 0
                     ? 'Sin rotación'
-                    : `${Math.floor(vencimiento.productos.stock_actual / vencimiento.productos.venta_media_diaria)} días`}
+                    : `${Math.floor(cantidad / vencimiento.productos.venta_media_diaria)} días`}
                 </span>
               </span>
             </div>
