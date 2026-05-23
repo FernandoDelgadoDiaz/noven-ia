@@ -71,6 +71,7 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
           codigo_barras,
           descripcion,
           marca,
+          gramaje,
           categoria,
           proveedor,
           sector,

@@ -76,28 +76,36 @@ interface NivelConfig {
 
 function getNivelConfig(nivel: RiesgoNivel): NivelConfig {
   switch (nivel) {
-    case 'critico':
+    case 'decomiso':
+      return {
+        bg: 'bg-gray-900/80',
+        border: 'border-red-700',
+        text: 'text-gray-300',
+        label: 'Decomiso — retirar inmediatamente',
+        Icon: AlertCircle,
+      }
+    case 'donacion':
       return {
         bg: 'bg-red-900/40',
         border: 'border-red-700',
         text: 'text-red-400',
-        label: 'Riesgo critico',
+        label: 'Donacion — retirar de gondola',
         Icon: AlertCircle,
       }
-    case 'alto':
+    case 'urgente':
       return {
         bg: 'bg-orange-900/40',
         border: 'border-orange-700',
         text: 'text-orange-400',
-        label: 'Riesgo alto',
+        label: 'Urgente — promocion agresiva',
         Icon: AlertTriangle,
       }
-    case 'moderado':
+    case 'radar':
       return {
         bg: 'bg-yellow-900/40',
         border: 'border-yellow-700',
         text: 'text-yellow-400',
-        label: 'Riesgo moderado',
+        label: 'Radar — aplicar oferta proximo consumo',
         Icon: AlertTriangle,
       }
     case 'seguro':
@@ -105,7 +113,7 @@ function getNivelConfig(nivel: RiesgoNivel): NivelConfig {
         bg: 'bg-green-900/40',
         border: 'border-green-700',
         text: 'text-green-400',
-        label: 'Sin riesgo',
+        label: 'Seguro — sin riesgo de merma',
         Icon: ShieldCheck,
       }
   }

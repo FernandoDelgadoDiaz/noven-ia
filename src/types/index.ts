@@ -1,4 +1,4 @@
-export type RiesgoNivel = 'seguro' | 'moderado' | 'alto' | 'critico'
+export type RiesgoNivel = 'seguro' | 'radar' | 'urgente' | 'donacion' | 'decomiso'
 
 export interface Sucursal {
   id: string
@@ -14,6 +14,7 @@ export interface Producto {
   codigo_barras: string | null
   descripcion: string
   marca: string | null
+  gramaje: string | null
   categoria: string | null
   proveedor: string | null
   sector: string | null

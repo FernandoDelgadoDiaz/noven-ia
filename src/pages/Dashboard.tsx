@@ -9,11 +9,13 @@ import type { VencimientoConRiesgo } from '@/types/index'
 
 const SUCURSAL_ID = '00000000-0000-0000-0000-000000000001'
 
+// decomiso primero, luego donacion, urgente, radar, seguro
 const ORDEN_RIESGO: Record<string, number> = {
-  critico: 0,
-  alto: 1,
-  moderado: 2,
-  seguro: 3,
+  decomiso: 0,
+  donacion: 1,
+  urgente: 2,
+  radar: 3,
+  seguro: 4,
 }
 
 function calcularUnidadesEnRiesgo(items: VencimientoConRiesgo[]): number {
@@ -25,22 +27,32 @@ export default function Dashboard() {
   const { data, loading, error, refetch } = useVencimientos(SUCURSAL_ID)
   const [vencimientoEditando, setVencimientoEditando] = useState<VencimientoConRiesgo | null>(null)
 
-  // Ordenar por nivel de riesgo
+  // Ordenar por nivel de riesgo (mayor urgencia primero)
   const alertasOrdenadas = [...data].sort(
     (a, b) => ORDEN_RIESGO[a.nivel_riesgo] - ORDEN_RIESGO[b.nivel_riesgo],
   )
 
+  // Productos en riesgo activo: decomiso + donacion + urgente
   const enRiesgo = data.filter(
-    (v) => v.nivel_riesgo === 'critico' || v.nivel_riesgo === 'alto',
+    (v) =>
+      v.nivel_riesgo === 'decomiso' ||
+      v.nivel_riesgo === 'donacion' ||
+      v.nivel_riesgo === 'urgente',
   ).length
 
   const unidadesEnRiesgo = calcularUnidadesEnRiesgo(
-    data.filter((v) => v.nivel_riesgo === 'critico' || v.nivel_riesgo === 'alto'),
+    data.filter(
+      (v) =>
+        v.nivel_riesgo === 'decomiso' ||
+        v.nivel_riesgo === 'donacion' ||
+        v.nivel_riesgo === 'urgente',
+    ),
   )
 
-  const proximosA30 = data.filter((v) => v.dias_restantes >= 0 && v.dias_restantes <= 30).length
+  // En radar = riesgo latente
+  const enRadar = data.filter((v) => v.nivel_riesgo === 'radar').length
 
-  const vencidosHoy = data.filter((v) => v.dias_restantes === 0).length
+  const decomisados = data.filter((v) => v.nivel_riesgo === 'decomiso').length
 
   return (
     <div className="dark min-h-screen bg-[#0a0a0a]">
@@ -55,6 +67,9 @@ export default function Dashboard() {
             nivel_riesgo: vencimientoEditando.nivel_riesgo,
             productos: {
               descripcion: vencimientoEditando.producto.descripcion,
+              cod_art: vencimientoEditando.producto.cod_art,
+              codigo_barras: vencimientoEditando.producto.codigo_barras,
+              gramaje: vencimientoEditando.producto.gramaje,
               stock_actual: vencimientoEditando.producto.stock_actual,
               venta_media_diaria: vencimientoEditando.producto.venta_media_diaria,
             },
@@ -92,7 +107,7 @@ export default function Dashboard() {
             role="alert"
             className="rounded-xl bg-red-950/60 border border-red-800/60 px-4 py-3 text-sm text-red-400"
           >
-            No pudimos cargar los datos. Revisá tu conexion e intentá de nuevo.
+            No pudimos cargar los datos. Revisa tu conexion e intenta de nuevo.
           </div>
         )}
 
@@ -126,16 +141,16 @@ export default function Dashboard() {
                   color="red"
                 />
                 <RiesgoCard
-                  titulo="Proximos 30 dias"
-                  valor={proximosA30}
-                  icono="📅"
+                  titulo="En radar"
+                  valor={enRadar}
+                  icono="📡"
                   color="blue"
                 />
                 <RiesgoCard
-                  titulo="Vencen hoy"
-                  valor={vencidosHoy}
-                  icono="⚠️"
-                  color={vencidosHoy > 0 ? 'red' : 'green'}
+                  titulo="Decomiso"
+                  valor={decomisados}
+                  icono="⛔"
+                  color={decomisados > 0 ? 'red' : 'green'}
                 />
               </div>
             </section>

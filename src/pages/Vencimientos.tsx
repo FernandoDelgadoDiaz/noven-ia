@@ -6,7 +6,7 @@ import type { VencimientoConProducto, FiltroNivel, NivelRiesgo } from '@/hooks/u
 import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
 
 // ───────────────────────────────────────────────
-// Helpers de color por nivel de riesgo
+// Helpers de color por nivel de riesgo (5 niveles)
 // ───────────────────────────────────────────────
 
 interface NivelConfig {
@@ -18,33 +18,40 @@ interface NivelConfig {
 }
 
 const NIVEL_CONFIG: Record<NivelRiesgo, NivelConfig> = {
-  critico: {
-    semaforo: 'bg-red-500',
-    chipInactivo: 'bg-red-500/20 text-red-400',
-    chipActivo: 'bg-red-500 text-white',
-    badge: 'bg-red-500/20 text-red-400 border border-red-500/40',
-    label: 'Crítico',
-  },
-  alto: {
-    semaforo: 'bg-orange-500',
-    chipInactivo: 'bg-orange-500/20 text-orange-400',
-    chipActivo: 'bg-orange-500 text-white',
-    badge: 'bg-orange-500/20 text-orange-400 border border-orange-500/40',
-    label: 'Alto',
-  },
-  moderado: {
-    semaforo: 'bg-yellow-500',
-    chipInactivo: 'bg-yellow-500/20 text-yellow-400',
-    chipActivo: 'bg-yellow-500 text-white',
-    badge: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40',
-    label: 'Moderado',
-  },
   seguro: {
     semaforo: 'bg-green-500',
     chipInactivo: 'bg-green-500/20 text-green-400',
     chipActivo: 'bg-green-500 text-white',
     badge: 'bg-green-500/20 text-green-400 border border-green-500/40',
     label: 'Seguro',
+  },
+  radar: {
+    semaforo: 'bg-yellow-500',
+    chipInactivo: 'bg-yellow-500/20 text-yellow-400',
+    chipActivo: 'bg-yellow-500 text-black',
+    badge: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40',
+    label: 'Radar',
+  },
+  urgente: {
+    semaforo: 'bg-orange-500',
+    chipInactivo: 'bg-orange-500/20 text-orange-400',
+    chipActivo: 'bg-orange-500 text-white',
+    badge: 'bg-orange-500/20 text-orange-400 border border-orange-500/40',
+    label: 'Urgente',
+  },
+  donacion: {
+    semaforo: 'bg-red-500',
+    chipInactivo: 'bg-red-500/20 text-red-400',
+    chipActivo: 'bg-red-500 text-white',
+    badge: 'bg-red-500/20 text-red-400 border border-red-500/40',
+    label: 'Donacion',
+  },
+  decomiso: {
+    semaforo: 'bg-gray-700',
+    chipInactivo: 'bg-gray-800 text-gray-300 border border-red-700/40',
+    chipActivo: 'bg-gray-900 text-gray-200 border border-red-600',
+    badge: 'bg-gray-900/80 text-gray-300 border border-red-600/60',
+    label: 'Decomiso',
   },
 }
 
@@ -56,14 +63,14 @@ function textoFecha(diasRestantes: number): { texto: string; claseTexto: string 
   if (diasRestantes < 0) {
     const dias = Math.abs(diasRestantes)
     return {
-      texto: `Vencido hace ${dias} ${dias === 1 ? 'día' : 'días'}`,
+      texto: `Vencido hace ${dias} ${dias === 1 ? 'dia' : 'dias'}`,
       claseTexto: 'text-red-400',
     }
   }
   if (diasRestantes === 0) {
     return { texto: 'Vence hoy', claseTexto: 'text-red-400' }
   }
-  return { texto: `${diasRestantes} días`, claseTexto: 'text-gray-400' }
+  return { texto: `${diasRestantes} dias`, claseTexto: 'text-gray-400' }
 }
 
 // ───────────────────────────────────────────────
@@ -175,6 +182,9 @@ function ChipFiltro({ activo, onClick, children, claseInactivo, claseActivo }: C
 // Página principal
 // ───────────────────────────────────────────────
 
+// Orden de los niveles en los chips de filtro
+const NIVELES_FILTRO: NivelRiesgo[] = ['decomiso', 'donacion', 'urgente', 'radar', 'seguro']
+
 export default function Vencimientos() {
   const navigate = useNavigate()
   const {
@@ -217,6 +227,9 @@ export default function Vencimientos() {
             nivel_riesgo: vencimientoEditando.nivel_riesgo,
             productos: {
               descripcion: vencimientoEditando.productos.descripcion,
+              cod_art: vencimientoEditando.productos.cod_art,
+              codigo_barras: vencimientoEditando.productos.codigo_barras,
+              gramaje: vencimientoEditando.productos.gramaje,
               stock_actual: vencimientoEditando.productos.stock_actual,
               venta_media_diaria: vencimientoEditando.productos.venta_media_diaria,
             },
@@ -257,7 +270,7 @@ export default function Vencimientos() {
             className="rounded-xl bg-red-950/60 border border-red-800/60 px-4 py-3 flex items-center justify-between gap-3"
           >
             <p className="text-sm text-red-400">
-              No pudimos cargar los datos. Revisá tu conexion e intentá de nuevo.
+              No pudimos cargar los datos. Revisa tu conexion e intenta de nuevo.
             </p>
             <button
               type="button"
@@ -271,7 +284,7 @@ export default function Vencimientos() {
 
         {/* Filtros */}
         <div className="space-y-3">
-          {/* Chips de nivel */}
+          {/* Chips de nivel: Todos + 5 niveles */}
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             <ChipFiltro
               activo={filtroNivel === 'todos'}
@@ -281,7 +294,7 @@ export default function Vencimientos() {
             >
               Todos
             </ChipFiltro>
-            {(['critico', 'alto', 'moderado', 'seguro'] as const).map((nivel) => {
+            {NIVELES_FILTRO.map((nivel) => {
               const cfg = NIVEL_CONFIG[nivel]
               return (
                 <ChipFiltro
@@ -297,15 +310,15 @@ export default function Vencimientos() {
             })}
           </div>
 
-          {/* Select categoría + buscador */}
+          {/* Select categoria + buscador */}
           <div className="flex gap-2">
             <select
               value={filtroCategoria}
               onChange={(e) => setFiltroCategoria(e.target.value)}
               className="flex-1 h-9 px-3 bg-gray-900 border border-gray-800 rounded-xl text-sm text-gray-300 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors"
-              aria-label="Filtrar por categoría"
+              aria-label="Filtrar por categoria"
             >
-              <option value="">Todas las categorías</option>
+              <option value="">Todas las categorias</option>
               {categorias.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
@@ -319,7 +332,7 @@ export default function Vencimientos() {
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder="Buscar producto..."
               className="flex-1 h-9 px-3 bg-gray-900 border border-gray-800 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors"
-              aria-label="Buscar por descripción"
+              aria-label="Buscar por descripcion"
             />
           </div>
         </div>
@@ -346,7 +359,7 @@ export default function Vencimientos() {
           </div>
         )}
 
-        {/* Estado vacío */}
+        {/* Estado vacio */}
         {!loading && !error && vencimientos.length === 0 && (
           <div className="rounded-xl border border-gray-800 bg-gray-900/40 px-6 py-12 flex flex-col items-center text-center gap-4">
             <CalendarX className="h-12 w-12 text-gray-600" aria-hidden="true" />
@@ -355,10 +368,10 @@ export default function Vencimientos() {
                 No hay vencimientos registrados
               </p>
               {hayFiltrosActivos ? (
-                <p className="text-gray-400 text-sm mt-1">Probá con otros filtros</p>
+                <p className="text-gray-400 text-sm mt-1">Proba con otros filtros</p>
               ) : (
                 <p className="text-gray-400 text-sm mt-1">
-                  Empezá escaneando un producto para registrar vencimientos.
+                  Empieza escaneando un producto para registrar vencimientos.
                 </p>
               )}
             </div>

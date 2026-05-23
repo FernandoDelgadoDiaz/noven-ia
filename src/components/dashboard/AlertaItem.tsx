@@ -13,29 +13,35 @@ interface NivelConfig {
 }
 
 const nivelConfig: Record<RiesgoNivel, NivelConfig> = {
-  critico: {
-    label: 'Critico',
+  seguro: {
+    label: 'Seguro',
+    badgeCls: 'bg-green-500/20 text-green-400 border border-green-500/40',
+    dotCls: 'bg-green-500',
+    pulsante: false,
+  },
+  radar: {
+    label: 'Radar',
+    badgeCls: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40',
+    dotCls: 'bg-yellow-500',
+    pulsante: false,
+  },
+  urgente: {
+    label: 'Urgente',
+    badgeCls: 'bg-orange-500/20 text-orange-400 border border-orange-500/40',
+    dotCls: 'bg-orange-500',
+    pulsante: false,
+  },
+  donacion: {
+    label: 'Donacion',
     badgeCls: 'bg-red-500/20 text-red-400 border border-red-500/40',
     dotCls: 'bg-red-500',
     pulsante: true,
   },
-  alto: {
-    label: 'Alto',
-    badgeCls: 'bg-red-800/20 text-red-300 border border-red-700/40',
-    dotCls: 'bg-red-400',
-    pulsante: false,
-  },
-  moderado: {
-    label: 'Moderado',
-    badgeCls: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40',
-    dotCls: 'bg-yellow-400',
-    pulsante: false,
-  },
-  seguro: {
-    label: 'Seguro',
-    badgeCls: 'bg-green-500/20 text-green-400 border border-green-500/40',
-    dotCls: 'bg-green-400',
-    pulsante: false,
+  decomiso: {
+    label: 'Decomiso',
+    badgeCls: 'bg-gray-900/80 text-gray-300 border border-red-600/60',
+    dotCls: 'bg-gray-700',
+    pulsante: true,
   },
 }
 
@@ -85,6 +91,14 @@ export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
           <span className={`flex-shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.badgeCls}`}>
             {cfg.label}
           </span>
+        </div>
+
+        {/* Metadatos del producto */}
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-zinc-500">
+          <span>Cod. Art: <span className="text-zinc-300 font-mono">{vencimiento.producto.cod_art || '—'}</span></span>
+          <span>EAN: <span className="text-zinc-300">{vencimiento.producto.codigo_barras ?? 'Sin mapear'}</span></span>
+          <span>Gramaje: <span className="text-zinc-300">{vencimiento.producto.gramaje ?? '—'}</span></span>
+          <span>Venta media: <span className="text-zinc-300">{vencimiento.producto.venta_media_diaria} unid/día</span></span>
         </div>
 
         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-zinc-400">

@@ -12,6 +12,9 @@ interface VencimientoParaEditar {
   nivel_riesgo: string
   productos: {
     descripcion: string
+    cod_art: string | null
+    codigo_barras: string | null
+    gramaje: string | null
     stock_actual: number
     venta_media_diaria: number
   }
@@ -133,6 +136,16 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
             <h2 className="text-white font-bold text-base leading-tight line-clamp-2">
               {vencimiento.productos.descripcion}
             </h2>
+            <p className="text-xs text-gray-500 mt-1">
+              <span className="text-gray-400">Cod. Art: {vencimiento.productos.cod_art ?? '—'}</span>
+              {'  '}
+              <span className="text-gray-400">EAN: {vencimiento.productos.codigo_barras ?? 'Sin mapear'}</span>
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              <span className="text-gray-400">Gramaje: {vencimiento.productos.gramaje ?? '—'}</span>
+              {'  '}
+              <span className="text-gray-400">Venta media: {vencimiento.productos.venta_media_diaria} unid/día</span>
+            </p>
           </div>
           <button
             type="button"
@@ -241,7 +254,7 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
           ) : (
             <div className="space-y-2">
               <p className="text-xs text-center text-gray-400">
-                Esta accion no se puede deshacer. ¿Confirmas la eliminacion?
+                Esta accion no se puede deshacer. Confirmas la eliminacion?
               </p>
               <div className="flex gap-2">
                 <button

@@ -8,6 +8,7 @@ interface FilaParseada {
   cod_art: string
   descripcion: string
   marca: string
+  gramaje: string | null
   stockCsv: number
   ventaMediaCsv: number
 }
@@ -40,6 +41,9 @@ interface ResultadoImportacion {
  *   0  → Cod.Art.
  *   1  → Descripción
  *   2  → Marca
+ *   3  → Bto (bultos)
+ *   4  → Cont (contenido)
+ *   5  → U/M (unidad de medida: GR, CU, ML, etc.)
  *   8  → Stock Suc.
  *   13 → Venta Media
  */
@@ -86,6 +90,11 @@ function parsearCsvGlaciar(textoCompleto: string): FilaParseada[] {
     const descripcion = campos[1]?.trim() ?? codArt
     const marca = campos[2]?.trim() ?? ''
 
+    // Índices 4 y 5 → Gramaje (Cont + U/M)
+    const cont = campos[4]?.trim() ?? ''
+    const um = campos[5]?.trim() ?? ''
+    const gramaje: string | null = cont && um ? `${cont} ${um}` : null
+
     // Índice 8 → Stock Suc.
     const stockRaw = campos[8]?.trim() ?? ''
     const stock = parseInt(stockRaw, 10)
@@ -102,6 +111,7 @@ function parsearCsvGlaciar(textoCompleto: string): FilaParseada[] {
       cod_art: codArt,
       descripcion,
       marca,
+      gramaje,
       stockCsv: stock,
       ventaMediaCsv: ventaMedia,
     })
@@ -224,6 +234,7 @@ export default function Importar() {
         .update({
           stock_actual: fila.stockCsv,
           venta_media_diaria: fila.ventaMediaCsv,
+          gramaje: fila.gramaje,
         })
         .eq('id', fila.id!)
 
@@ -240,6 +251,7 @@ export default function Importar() {
         cod_art: fila.cod_art,
         descripcion: fila.descripcion,
         marca: fila.marca || '',
+        gramaje: fila.gramaje,
         stock_actual: fila.stockCsv,
         venta_media_diaria: fila.ventaMediaCsv,
         activo: true,

@@ -21,6 +21,9 @@ export interface VencimientoConProducto {
   created_at: string
   productos: {
     descripcion: string
+    cod_art: string | null
+    codigo_barras: string | null
+    gramaje: string | null
     marca: string | null
     categoria: string | null
     stock_actual: number
@@ -45,6 +48,9 @@ interface RawRow {
   created_at: string
   productos: {
     descripcion: string
+    cod_art: string | null
+    codigo_barras: string | null
+    gramaje: string | null
     marca: string | null
     categoria: string | null
     stock_actual: number
@@ -87,7 +93,7 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
         id, producto_id, sucursal_id, usuario_id, cantidad, lote,
         fecha_vencimiento, fecha_carga, activo, created_at,
         productos (
-          descripcion, marca, categoria, stock_actual, venta_media_diaria
+          descripcion, cod_art, codigo_barras, gramaje, marca, categoria, stock_actual, venta_media_diaria
         )
       `)
       .eq('activo', true)
