@@ -15,6 +15,7 @@ interface VencimientoParaEditar {
     cod_art: string | null
     codigo_barras: string | null
     gramaje: string | null
+    marca: string | null
     stock_actual: number
     venta_media_diaria: number
   }
@@ -132,20 +133,45 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-800">
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-gray-500 mb-0.5">Editando registro</p>
-            <h2 className="text-white font-bold text-base leading-tight line-clamp-2">
-              {vencimiento.productos.descripcion}
-            </h2>
-            <p className="text-xs text-gray-500 mt-1">
-              <span className="text-gray-400">Cod. Art: {vencimiento.productos.cod_art ?? '—'}</span>
-              {'  '}
-              <span className="text-gray-400">EAN: {vencimiento.productos.codigo_barras ?? 'Sin mapear'}</span>
-            </p>
-            <p className="text-xs text-gray-500 mt-0.5">
-              <span className="text-gray-400">Gramaje: {vencimiento.productos.gramaje ?? '—'}</span>
-              {'  '}
-              <span className="text-gray-400">Venta media: {vencimiento.productos.venta_media_diaria} unid/día</span>
-            </p>
+            <p className="text-xs text-gray-500 mb-1">Editando registro</p>
+            {/* Linea 1: descripcion + gramaje — marca */}
+            {(() => {
+              const partes: string[] = [vencimiento.productos.descripcion]
+              if (vencimiento.productos.gramaje) partes.push(vencimiento.productos.gramaje)
+              const base = partes.join(' ')
+              const titulo = vencimiento.productos.marca ? `${base} — ${vencimiento.productos.marca}` : base
+              return (
+                <h2
+                  className="text-white font-bold text-sm leading-tight truncate"
+                  title={titulo}
+                >
+                  {titulo}
+                </h2>
+              )
+            })()}
+            {/* Linea 2: Cod. Art y EAN lado a lado */}
+            <div className="mt-1 flex justify-between gap-2 text-xs text-gray-400">
+              <span>
+                Cod. Art: <span className="font-mono text-gray-300">{vencimiento.productos.cod_art ?? '—'}</span>
+              </span>
+              <span>
+                EAN: <span className="text-gray-300">{vencimiento.productos.codigo_barras ?? 'Sin mapear'}</span>
+              </span>
+            </div>
+            {/* Linea 3: venta media y dias de stock lado a lado */}
+            <div className="mt-0.5 flex justify-between gap-2 text-xs text-gray-400">
+              <span>
+                Venta media: <span className="text-gray-300">{vencimiento.productos.venta_media_diaria} unid/día</span>
+              </span>
+              <span>
+                Días de stock:{' '}
+                <span className="text-gray-300">
+                  {vencimiento.productos.venta_media_diaria <= 0
+                    ? 'Sin rotación'
+                    : `${Math.floor(vencimiento.productos.stock_actual / vencimiento.productos.venta_media_diaria)} días`}
+                </span>
+              </span>
+            </div>
           </div>
           <button
             type="button"

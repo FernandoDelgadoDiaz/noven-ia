@@ -70,6 +70,7 @@ export default function Dashboard() {
               cod_art: vencimientoEditando.producto.cod_art,
               codigo_barras: vencimientoEditando.producto.codigo_barras,
               gramaje: vencimientoEditando.producto.gramaje,
+              marca: vencimientoEditando.producto.marca,
               stock_actual: vencimientoEditando.producto.stock_actual,
               venta_media_diaria: vencimientoEditando.producto.venta_media_diaria,
             },

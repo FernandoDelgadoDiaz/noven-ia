@@ -230,6 +230,7 @@ export default function Vencimientos() {
               cod_art: vencimientoEditando.productos.cod_art,
               codigo_barras: vencimientoEditando.productos.codigo_barras,
               gramaje: vencimientoEditando.productos.gramaje,
+              marca: vencimientoEditando.productos.marca,
               stock_actual: vencimientoEditando.productos.stock_actual,
               venta_media_diaria: vencimientoEditando.productos.venta_media_diaria,
             },
