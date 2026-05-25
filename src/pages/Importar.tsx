@@ -26,12 +26,35 @@ interface ResultadoImportacion {
   errores: string[]
 }
 
+interface FamiliaInfo {
+  id: string
+  codigo: string
+  nombre: string
+}
+
 // ─── Parser CSV de Glaciar ────────────────────────────────────────────────────
 
-function parsearCsvGlaciar(textoCompleto: string): FilaParseada[] {
+interface ResultadoParser {
+  filas: FilaParseada[]
+  codigoFamilia: string | null
+}
+
+function parsearCsvGlaciar(textoCompleto: string): ResultadoParser {
   const lineas = textoCompleto.split(/\r?\n/)
   const resultado: FilaParseada[] = []
   let headerEncontrado = false
+  let codigoFamilia: string | null = null
+
+  // Buscar código de familia en las primeras 20 líneas
+  const primerasLineas = lineas.slice(0, 20)
+  for (const linea of primerasLineas) {
+    const match = linea.match(/C[oó]d\.Familia:\s*(\d+)/i)
+    if (match) {
+      codigoFamilia = match[1].trim()
+      break
+    }
+  }
+
   const FOOTER_PATTERNS = ['rptPedidosReposicionAsistida', 'Usuario:', 'Cant.Artículos', 'Cant.Articulos', 'Fecha', 'Sucursal:', 'Proveedor:']
   for (const linea of lineas) {
     if (!headerEncontrado) { if (linea.includes('Cod.Art.')) headerEncontrado = true; continue }
@@ -54,7 +77,7 @@ function parsearCsvGlaciar(textoCompleto: string): FilaParseada[] {
     if (isNaN(ventaMedia)) continue
     resultado.push({ cod_art: codArt, descripcion, marca, gramaje, stockCsv: stock, ventaMediaCsv: ventaMedia })
   }
-  return resultado
+  return { filas: resultado, codigoFamilia }
 }
 
 // ─── Componente ───────────────────────────────────────────────────────────────
@@ -65,6 +88,7 @@ export default function Importar() {
   const [parseando, setParseando] = useState(false)
   const [errorParseo, setErrorParseo] = useState<string | null>(null)
   const [filas, setFilas] = useState<FilaPreview[]>([])
+  const [familiaDetectada, setFamiliaDetectada] = useState<FamiliaInfo | null>(null)
   const [importando, setImportando] = useState(false)
   const [resultado, setResultado] = useState<ResultadoImportacion | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -78,15 +102,29 @@ export default function Importar() {
     setParseando(true)
     setErrorParseo(null)
     setFilas([])
+    setFamiliaDetectada(null)
     setResultado(null)
     try {
       const texto = await file.text()
-      const filasParsed = parsearCsvGlaciar(texto)
+      const { filas: filasParsed, codigoFamilia } = parsearCsvGlaciar(texto)
       if (filasParsed.length === 0) {
         setErrorParseo('No se encontraron productos en el CSV. Verificá que sea el reporte de Reposición Asistida de Glaciar.')
         setParseando(false)
         return
       }
+
+      // Resolver familia detectada
+      if (codigoFamilia) {
+        const { data: familiaData } = await supabase
+          .from('familias')
+          .select('id, codigo, nombre')
+          .eq('codigo', codigoFamilia)
+          .maybeSingle()
+        if (familiaData) {
+          setFamiliaDetectada({ id: familiaData.id as string, codigo: familiaData.codigo as string, nombre: familiaData.nombre as string })
+        }
+      }
+
       const codArts = filasParsed.map((f) => f.cod_art)
       const { data: productosDb, error: dbError } = await supabase
         .from('productos')
@@ -126,13 +164,18 @@ export default function Importar() {
     const errores: string[] = []
     let actualizados = 0
     let nuevos = 0
+    const familiaId = familiaDetectada?.id ?? null
     for (const fila of filasExistentes) {
-      const { error } = await supabase.from('productos').update({ stock_actual: fila.stockCsv, venta_media_diaria: fila.ventaMediaCsv, gramaje: fila.gramaje }).eq('id', fila.id!)
+      const updatePayload: Record<string, unknown> = { stock_actual: fila.stockCsv, venta_media_diaria: fila.ventaMediaCsv, gramaje: fila.gramaje }
+      if (familiaId !== null) updatePayload.familia_id = familiaId
+      const { error } = await supabase.from('productos').update(updatePayload).eq('id', fila.id!)
       if (error) errores.push(`${fila.cod_art}: ${error.message}`)
       else actualizados++
     }
     for (const fila of filasNuevas) {
-      const { error } = await supabase.from('productos').insert({ cod_art: fila.cod_art, descripcion: fila.descripcion, marca: fila.marca || '', gramaje: fila.gramaje, stock_actual: fila.stockCsv, venta_media_diaria: fila.ventaMediaCsv, activo: true, categoria: 'OTRO' })
+      const insertPayload: Record<string, unknown> = { cod_art: fila.cod_art, descripcion: fila.descripcion, marca: fila.marca || '', gramaje: fila.gramaje, stock_actual: fila.stockCsv, venta_media_diaria: fila.ventaMediaCsv, activo: true, categoria: 'OTRO' }
+      if (familiaId !== null) insertPayload.familia_id = familiaId
+      const { error } = await supabase.from('productos').insert(insertPayload)
       if (error) errores.push(`${fila.cod_art} (nuevo): ${error.message}`)
       else nuevos++
     }
@@ -143,6 +186,7 @@ export default function Importar() {
   function handleReset(): void {
     setArchivo(null)
     setFilas([])
+    setFamiliaDetectada(null)
     setErrorParseo(null)
     setResultado(null)
     if (inputRef.current) inputRef.current.value = ''
@@ -273,6 +317,17 @@ export default function Importar() {
         {/* Preview */}
         {filas.length > 0 && !resultado && !parseando && (
           <>
+            {/* Familia detectada */}
+            {familiaDetectada && (
+              <div className="bg-brand-light border border-brand/20 rounded-card px-4 py-3 flex items-center gap-3 animate-fade-in">
+                <div className="flex-1">
+                  <p className="text-brand text-xs font-semibold uppercase tracking-wide">Familia detectada</p>
+                  <p className="text-foreground font-bold text-sm mt-0.5">{familiaDetectada.nombre} <span className="font-mono text-muted-foreground font-normal">({familiaDetectada.codigo})</span></p>
+                </div>
+                <span className="px-2.5 py-1 bg-brand text-white text-xs font-bold rounded-lg">{familiaDetectada.codigo}</span>
+              </div>
+            )}
+
             {/* Resumen */}
             <div className="bg-white rounded-card shadow-card px-4 py-3.5 animate-fade-in">
               <p className="text-foreground font-bold text-sm">

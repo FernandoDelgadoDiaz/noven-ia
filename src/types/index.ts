@@ -21,6 +21,8 @@ export interface Producto {
   venta_media_diaria: number
   stock_actual: number
   precio_costo: number | null
+  imagen_url: string | null
+  familia_id: string | null
   activo: boolean
   created_at: string
   updated_at: string

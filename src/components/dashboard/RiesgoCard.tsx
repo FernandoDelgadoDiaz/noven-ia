@@ -9,6 +9,8 @@ interface RiesgoCardProps {
   icono?: string
   IconoComponente?: React.ComponentType<{ className?: string }>
   onClick?: () => void
+  subtexto?: string
+  subtextoColor?: string
 }
 
 export default function RiesgoCard({
@@ -18,6 +20,8 @@ export default function RiesgoCard({
   icono,
   IconoComponente,
   onClick,
+  subtexto,
+  subtextoColor,
 }: RiesgoCardProps) {
   const v = RISK_VISUAL[nivel]
   const isInteractive = Boolean(onClick)
@@ -48,7 +52,7 @@ export default function RiesgoCard({
         </div>
 
         {typeof valor === 'number' && valor > 0 && (
-          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${v.badge}`}>
+          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
             activo
           </span>
         )}
@@ -63,6 +67,12 @@ export default function RiesgoCard({
       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mt-2.5 leading-tight">
         {titulo}
       </p>
+
+      {subtexto && (
+        <p className={`text-[10px] font-medium mt-0.5 ${subtextoColor ?? 'text-muted-foreground'}`}>
+          {subtexto}
+        </p>
+      )}
     </div>
   )
 }

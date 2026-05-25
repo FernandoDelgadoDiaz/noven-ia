@@ -7,7 +7,7 @@
 @layer base {
   :root {
     /* ── shadcn base tokens (updated values) ── */
-    --background: 215 25% 97%;
+    --background: 214 32% 94%;
     --foreground: 222 47% 6%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 6%;
@@ -36,7 +36,7 @@
     --brand-foreground: 0 0% 100%;
 
     /* ── Surface ── */
-    --surface-base: 215 25% 97%;
+    --surface-base: 214 32% 94%;
 
     /* ── Radius ── */
     --radius-card: 20px;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { X, Trash2, Save, AlertTriangle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { BADGE_CONFIG, calcularDiasRestantes, calcularNivelRiesgo } from '@/lib/riesgo'
@@ -19,6 +19,7 @@ interface VencimientoParaEditar {
     marca: string | null
     stock_actual: number
     venta_media_diaria: number
+    imagen_url?: string | null
   }
 }
 
@@ -43,6 +44,41 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
       vencimiento.productos.venta_media_diaria,
     ),
   )
+
+  const fotoInputRef = useRef<HTMLInputElement>(null)
+  const [fotoUrl, setFotoUrl] = useState<string | null>(vencimiento.productos.imagen_url ?? null)
+  const [subiendoFoto, setSubiendoFoto] = useState(false)
+  const [fotoGuardada, setFotoGuardada] = useState(false)
+
+  async function handleFotoChange(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const localUrl = URL.createObjectURL(file)
+    setFotoUrl(localUrl)
+    setSubiendoFoto(true)
+    setFotoGuardada(false)
+    try {
+      const codArt = vencimiento.productos.cod_art ?? vencimiento.producto_id
+      const ext = file.name.split('.').pop() ?? 'jpg'
+      const path = `${codArt}.${ext}`
+      const { error: uploadError } = await supabase.storage
+        .from('productos-imagenes')
+        .upload(path, file, { upsert: true })
+      if (uploadError) throw uploadError
+      const { data: urlData } = supabase.storage.from('productos-imagenes').getPublicUrl(path)
+      const publicUrl = urlData.publicUrl
+      await supabase
+        .from('productos')
+        .update({ imagen_url: publicUrl, updated_at: new Date().toISOString() })
+        .eq('id', vencimiento.producto_id)
+      setFotoUrl(publicUrl)
+      setFotoGuardada(true)
+    } catch {
+      setFotoUrl(vencimiento.productos.imagen_url ?? null)
+    } finally {
+      setSubiendoFoto(false)
+    }
+  }
 
   useEffect(() => {
     setNivelCalculado(
@@ -119,16 +155,57 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
 
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-border">
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-muted-foreground font-medium mb-1">Editando registro</p>
-            <h2 className="text-foreground font-bold text-sm leading-snug">{titulo}</h2>
-            <div className="flex items-center justify-between mt-1.5 text-xs text-muted-foreground">
-              <span>Cod: <span className="font-mono text-foreground/70">{vencimiento.productos.cod_art ?? '—'}</span></span>
-              <span>EAN: <span className="text-foreground/70">{vencimiento.productos.codigo_barras ?? 'Sin mapear'}</span></span>
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            {/* Foto del producto o botón agregar foto */}
+            <div className="shrink-0">
+              <div>
+                {fotoUrl ? (
+                  <img
+                    src={fotoUrl}
+                    alt={vencimiento.productos.descripcion}
+                    className="h-20 w-20 rounded-2xl object-cover"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fotoInputRef.current?.click()}
+                    disabled={subiendoFoto}
+                    className="h-20 w-20 rounded-2xl bg-muted flex flex-col items-center justify-center gap-1 hover:bg-muted/70 transition-colors disabled:opacity-50"
+                  >
+                    {subiendoFoto ? (
+                      <span className="h-5 w-5 border-2 border-brand/40 border-t-brand rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <span className="text-xl" aria-hidden="true">📷</span>
+                        <span className="text-[9px] text-muted-foreground font-medium leading-none">Agregar foto</span>
+                      </>
+                    )}
+                  </button>
+                )}
+                <input
+                  ref={fotoInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => { void handleFotoChange(e) }}
+                />
+              </div>
+              {fotoGuardada && (
+                <p className="text-[10px] text-emerald-600 font-medium text-center mt-1">Foto guardada</p>
+              )}
             </div>
-            <div className="flex items-center justify-between mt-0.5 text-xs text-muted-foreground">
-              <span>Venta media: <span className="text-foreground/70">{vencimiento.productos.venta_media_diaria} unid/día</span></span>
-              <span>Stock lote: <span className="text-foreground/70">{diasStock}</span></span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground font-medium mb-1">Editando registro</p>
+              <h2 className="text-foreground font-bold text-sm leading-snug">{titulo}</h2>
+              <div className="flex items-center justify-between mt-1.5 text-xs text-muted-foreground">
+                <span>Cod: <span className="font-mono text-foreground/70">{vencimiento.productos.cod_art ?? '—'}</span></span>
+                <span>EAN: <span className="text-foreground/70">{vencimiento.productos.codigo_barras ?? 'Sin mapear'}</span></span>
+              </div>
+              <div className="flex items-center justify-between mt-0.5 text-xs text-muted-foreground">
+                <span>Venta media: <span className="text-foreground/70">{vencimiento.productos.venta_media_diaria} unid/día</span></span>
+                <span>Stock lote: <span className="text-foreground/70">{diasStock}</span></span>
+              </div>
             </div>
           </div>
           <button

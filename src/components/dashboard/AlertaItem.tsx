@@ -24,7 +24,7 @@ function formatDiasRestantes(dias: number): string {
 
 function formatDiasStock(cantidadLote: number, ventaMediaDiaria: number): string {
   if (ventaMediaDiaria <= 0) return 'Sin rotación'
-  return `${calcularDiasStock(cantidadLote, ventaMediaDiaria)} días de stock`
+  return `${calcularDiasStock(cantidadLote, ventaMediaDiaria)} días stock`
 }
 
 export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
@@ -35,11 +35,13 @@ export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
   const diasLabel = formatDiasRestantes(vencimiento.dias_restantes)
   const stockLabel = formatDiasStock(vencimiento.cantidad, producto.venta_media_diaria)
   const isDecomiso = vencimiento.nivel_riesgo === 'decomiso'
+  const showPulse = cfg.dotPulse
 
   return (
     <div
       className={[
         'bg-white rounded-[24px] shadow-card overflow-hidden',
+        `border-l-4 ${cfg.borderLeft}`,
         'transition-all duration-150',
         onClick
           ? 'cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 active:scale-[0.99] active:translate-y-0'
@@ -52,10 +54,20 @@ export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
     >
       <div className="p-4 md:p-5 flex items-start gap-4">
 
-        {/* Left: product thumbnail placeholder */}
-        <div className={`relative h-14 w-14 rounded-2xl ${cfg.statIconBg} flex items-center justify-center shrink-0`}>
-          <Package className={`h-6 w-6 ${cfg.statIconColor}`} aria-hidden="true" />
-          {cfg.dotPulse && (
+        {/* Left: product thumbnail 60x60 */}
+        <div className="relative shrink-0">
+          {producto.imagen_url ? (
+            <img
+              src={producto.imagen_url}
+              alt={producto.descripcion}
+              className="h-[60px] w-[60px] rounded-2xl object-cover"
+            />
+          ) : (
+            <div className={`h-[60px] w-[60px] rounded-2xl ${cfg.statIconBg} flex items-center justify-center`}>
+              <Package className={`h-6 w-6 ${cfg.statIconColor}`} aria-hidden="true" />
+            </div>
+          )}
+          {showPulse && (
             <span className="absolute -top-1 -right-1">
               <span className="relative flex h-3 w-3">
                 <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${cfg.dot} opacity-60`} />
@@ -98,7 +110,7 @@ export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
 
         {/* Right: badge + arrow */}
         <div className="flex flex-col items-end gap-2 shrink-0 pt-0.5">
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg.badge}`}>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full text-white ${cfg.badgeSolid}`}>
             {cfg.label.toUpperCase()}
           </span>
           <ChevronRight className="h-4 w-4 text-muted-foreground mt-1" aria-hidden="true" />

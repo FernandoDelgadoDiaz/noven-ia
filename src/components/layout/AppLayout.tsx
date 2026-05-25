@@ -6,7 +6,6 @@ interface NavItem {
   label: string
   Icon: React.ComponentType<{ className?: string }>
   isMain?: boolean
-  soloDesktop?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -14,7 +13,14 @@ const navItems: NavItem[] = [
   { to: '/scanner', label: 'Scanner', Icon: ScanLine, isMain: true },
   { to: '/vencimientos', label: 'Vencimientos', Icon: Calendar },
   { to: '/maestro', label: 'Maestro', Icon: Package },
-  { to: '/importar', label: 'Importar', Icon: FileUp, soloDesktop: true },
+  { to: '/importar', label: 'Importar', Icon: FileUp },
+]
+
+const mobileNavItems: NavItem[] = [
+  { to: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
+  { to: '/vencimientos', label: 'Vencimientos', Icon: Calendar },
+  { to: '/maestro', label: 'Maestro', Icon: Package },
+  { to: '/importar', label: 'Importar', Icon: FileUp },
 ]
 
 export default function AppLayout() {
@@ -87,73 +93,65 @@ export default function AppLayout() {
         </main>
       </div>
 
+      {/* ── Scanner flotante — mobile only ──────────────────────────── */}
+      <div className="md:hidden fixed bottom-[calc(32px+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-30">
+        <NavLink to="/scanner">
+          {({ isActive }) => (
+            <div
+              className={[
+                'h-16 w-16 rounded-full flex items-center justify-center active:scale-[0.95] transition-transform duration-150',
+                isActive
+                  ? 'bg-brand-hover shadow-brand-lg'
+                  : 'bg-brand shadow-brand-lg',
+              ].join(' ')}
+            >
+              <ScanLine className="h-7 w-7 text-white" aria-hidden="true" />
+            </div>
+          )}
+        </NavLink>
+      </div>
+
       {/* ── Mobile bottom nav — hidden on desktop ───────────────────── */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur-xl border-t border-border/40 shadow-nav"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-border/40 shadow-nav"
         style={{
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-          minHeight: 'calc(64px + env(safe-area-inset-bottom, 0px))',
+          height: 'calc(64px + env(safe-area-inset-bottom, 0px))',
         }}
         aria-label="Navegación principal"
       >
-        <div className="h-full flex items-end justify-around px-2">
-          {navItems
-            .filter(({ soloDesktop }) => !soloDesktop)
-            .map(({ to, label, Icon, isMain }) => {
-              if (isMain) {
-                return (
-                  <NavLink key={to} to={to} className="flex items-end justify-center pb-2">
-                    {({ isActive }) => (
-                      <div
-                        className={[
-                          'relative flex flex-col items-center gap-1 px-5 py-2.5 rounded-[18px]',
-                          '-translate-y-3 transition-all duration-200 select-none',
-                          isActive
-                            ? 'bg-brand shadow-brand-lg scale-105'
-                            : 'bg-brand shadow-brand active:scale-[0.96]',
-                        ].join(' ')}
-                      >
-                        <Icon className="h-5 w-5 text-white" />
-                        <span className="text-[10px] font-bold text-white leading-none tracking-wide">
-                          {label}
-                        </span>
-                      </div>
-                    )}
-                  </NavLink>
-                )
+        <div className="h-full grid grid-cols-4 items-center px-2">
+          {mobileNavItems.map(({ to, label, Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                [
+                  'flex flex-col items-center gap-1 py-2 rounded-xl transition-all duration-150 select-none active:scale-[0.94]',
+                  isActive
+                    ? 'text-brand bg-brand-light'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+                ].join(' ')
               }
-              return (
-                <NavLink
-                  key={to}
-                  to={to}
-                  className={({ isActive }) =>
-                    [
-                      'flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-150 min-w-[48px] mb-1 select-none active:scale-[0.94]',
-                      isActive
-                        ? 'text-brand bg-brand-light'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted',
-                    ].join(' ')
-                  }
-                >
-                  {({ isActive }) => (
-                    <>
-                      <Icon
-                        className={`h-5 w-5 transition-colors ${
-                          isActive ? 'text-brand' : 'text-muted-foreground'
-                        }`}
-                      />
-                      <span
-                        className={`text-[10px] leading-none transition-colors ${
-                          isActive ? 'text-brand font-semibold' : 'text-muted-foreground font-medium'
-                        }`}
-                      >
-                        {label}
-                      </span>
-                    </>
-                  )}
-                </NavLink>
-              )
-            })}
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon
+                    className={`h-5 w-5 transition-colors ${
+                      isActive ? 'text-brand' : 'text-muted-foreground'
+                    }`}
+                  />
+                  <span
+                    className={`text-[10px] leading-none transition-colors ${
+                      isActive ? 'text-brand font-semibold' : 'text-muted-foreground font-medium'
+                    }`}
+                  >
+                    {label}
+                  </span>
+                </>
+              )}
+            </NavLink>
+          ))}
         </div>
       </nav>
     </div>

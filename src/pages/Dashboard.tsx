@@ -22,19 +22,16 @@ function calcularUnidadesEnRiesgo(items: VencimientoConRiesgo[]): number {
   return items.reduce((acc, v) => acc + v.cantidad, 0)
 }
 
-function formatFechaHoy(): string {
-  return new Intl.DateTimeFormat('es-AR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  }).format(new Date())
+function formatFechaHeader(): string {
+  const raw = new Intl.DateTimeFormat('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date())
+  return raw.charAt(0).toUpperCase() + raw.slice(1)
 }
 
 function getGreeting(): string {
   const h = new Date().getHours()
-  if (h < 12) return 'Buenos días'
-  if (h < 18) return 'Buenas tardes'
-  return 'Buenas noches'
+  if (h < 12) return 'Buenos días 👋'
+  if (h < 18) return 'Buenas tardes 👋'
+  return 'Buenas noches 👋'
 }
 
 export default function Dashboard() {
@@ -81,6 +78,7 @@ export default function Dashboard() {
               marca: vencimientoEditando.producto.marca,
               stock_actual: vencimientoEditando.producto.stock_actual,
               venta_media_diaria: vencimientoEditando.producto.venta_media_diaria,
+              imagen_url: vencimientoEditando.producto.imagen_url,
             },
           }}
           onClose={() => setVencimientoEditando(null)}
@@ -97,8 +95,8 @@ export default function Dashboard() {
             <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight leading-none">
               {getGreeting()}
             </h1>
-            <p className="text-sm text-muted-foreground mt-1 capitalize">
-              {formatFechaHoy()} · <span className="font-medium">Sucursal Norte</span>
+            <p className="text-sm text-muted-foreground mt-1">
+              {formatFechaHeader()}
             </p>
           </div>
 
@@ -157,27 +155,23 @@ export default function Dashboard() {
         {!loading && (
           <>
             {/* ── Critical hero banner ── */}
-            {hayCriticos && (
-              <div className="bg-red-50 border border-red-100 rounded-[24px] shadow-card px-5 py-4 md:py-5 flex items-center gap-4 animate-fade-in">
-                <div className="h-12 w-12 rounded-2xl bg-red-100 flex items-center justify-center shrink-0">
-                  <AlertTriangle className="h-6 w-6 text-red-600" aria-hidden="true" />
+            {enRiesgo > 0 && (
+              <div className="flex items-center gap-4 bg-red-50 border-l-4 border-red-600 rounded-r-2xl px-5 py-4 animate-fade-in">
+                <div className="h-10 w-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="h-5 w-5 text-red-600" aria-hidden="true" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-red-900 text-base leading-snug">
-                    Atención requerida
-                  </p>
-                  <p className="text-red-600 text-sm mt-0.5">
-                    {decomisados > 0
-                      ? `${decomisados} producto${decomisados > 1 ? 's' : ''} en decomiso — acción inmediata`
-                      : 'Productos para donación detectados — revisión necesaria'}
+                  <p className="font-bold text-red-800 text-sm leading-snug">Atención requerida</p>
+                  <p className="text-red-600 text-xs mt-0.5">
+                    {enRiesgo} producto{enRiesgo !== 1 ? 's' : ''} en estado crítico — Requieren acción inmediata para evitar pérdidas.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => navigate('/vencimientos')}
-                  className="shrink-0 px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-xl transition-colors duration-150 active:scale-[0.97] whitespace-nowrap"
+                  className="shrink-0 px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-xl transition-colors duration-150 active:scale-[0.97] whitespace-nowrap"
                 >
-                  Revisar
+                  Ver vencimientos →
                 </button>
               </div>
             )}
@@ -190,6 +184,8 @@ export default function Dashboard() {
                   valor={enRiesgo}
                   nivel={enRiesgo > 0 ? 'urgente' : 'seguro'}
                   onClick={() => navigate('/vencimientos')}
+                  subtexto={enRiesgo > 0 ? 'Acción inmediata' : undefined}
+                  subtextoColor="text-red-500"
                 />
                 <RiesgoCard
                   titulo="Unidades"
@@ -197,18 +193,24 @@ export default function Dashboard() {
                   nivel={unidadesEnRiesgo > 0 ? 'urgente' : 'seguro'}
                   IconoComponente={Package}
                   onClick={() => navigate('/vencimientos')}
+                  subtexto={`En ${enRiesgo} productos`}
+                  subtextoColor="text-muted-foreground"
                 />
                 <RiesgoCard
                   titulo="En radar"
                   valor={enRadar}
                   nivel={enRadar > 0 ? 'radar' : 'seguro'}
                   onClick={() => navigate('/vencimientos')}
+                  subtexto="Próximos 30 días"
+                  subtextoColor="text-muted-foreground"
                 />
                 <RiesgoCard
                   titulo="Decomiso"
                   valor={decomisados}
                   nivel={decomisados > 0 ? 'decomiso' : 'seguro'}
                   onClick={() => navigate('/vencimientos')}
+                  subtexto={decomisados === 0 ? 'Excelente' : `${decomisados} vencidos`}
+                  subtextoColor={decomisados === 0 ? 'text-emerald-600' : 'text-red-500'}
                 />
               </div>
             </section>
