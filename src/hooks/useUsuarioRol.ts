@@ -11,11 +11,14 @@ interface UseUsuarioRolReturn {
 }
 
 export function useUsuarioRol(): UseUsuarioRolReturn {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const [perfil, setPerfil] = useState<UsuarioPerfil | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Esperar a que auth termine de resolver antes de decidir
+    if (authLoading) return
+
     if (!user) {
       setPerfil(null)
       setLoading(false)
@@ -36,7 +39,7 @@ export function useUsuarioRol(): UseUsuarioRolReturn {
         }
         setLoading(false)
       })
-  }, [user])
+  }, [user, authLoading])
 
   return {
     perfil,
