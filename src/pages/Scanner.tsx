@@ -318,10 +318,10 @@ export default function Scanner() {
 
       <div className="min-h-screen bg-surface-base flex flex-col">
         {/* Header */}
-        <div className="px-4 pt-6 pb-4">
+        <div className="px-4 pt-5 pb-4">
           <StepIndicator current={1} total={3} />
-          <h1 className="text-foreground text-2xl font-bold mt-3">Registrar vencimiento</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Escaneá el código de barras del producto</p>
+          <h1 className="text-foreground text-xl font-bold mt-3 tracking-tight">Registrar vencimiento</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">Escaneá o ingresá el código del producto</p>
         </div>
 
         <div className="flex-1 flex flex-col px-4 pb-nav gap-5">
@@ -336,9 +336,9 @@ export default function Scanner() {
               'flex flex-col items-center justify-center gap-5',
               'bg-brand hover:bg-brand-hover',
               'rounded-card py-14',
-              'shadow-brand-lg hover:shadow-[0_10px_40px_rgba(13,148,136,0.50)]',
+              'shadow-brand-lg hover:shadow-[0_12px_48px_rgba(13,148,136,0.52)]',
               'transition-all duration-200',
-              'active:scale-[0.97]',
+              'active:scale-[0.97] active:shadow-brand',
               'disabled:opacity-50 disabled:cursor-not-allowed',
               'focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/40',
             ].join(' ')}
@@ -445,19 +445,19 @@ interface SubHeaderProps {
 
 function SubHeader({ paso, titulo, subtitulo, onBack }: SubHeaderProps) {
   return (
-    <div className="px-4 pt-5 pb-3 bg-surface-base">
-      <div className="flex items-center gap-3 mb-3">
+    <div className="sticky top-0 z-10 px-4 pt-4 pb-3 bg-white/95 backdrop-blur-xl border-b border-border/60 shadow-nav">
+      <div className="flex items-center gap-3 mb-2.5">
         <button
           type="button"
           onClick={onBack}
-          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors duration-150 active:scale-[0.94]"
           aria-label="Volver"
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
         <StepIndicator current={paso} total={3} />
       </div>
-      <h1 className="text-foreground text-xl font-bold">{titulo}</h1>
+      <h1 className="text-foreground text-lg font-bold tracking-tight">{titulo}</h1>
       <p className="text-muted-foreground text-sm mt-0.5">{subtitulo}</p>
     </div>
   )

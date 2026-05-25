@@ -23,7 +23,7 @@ function formatDiasRestantes(dias: number): string {
 
 function formatDiasStock(cantidadLote: number, ventaMediaDiaria: number): string {
   if (ventaMediaDiaria <= 0) return 'Sin rotación'
-  return `${calcularDiasStock(cantidadLote, ventaMediaDiaria)} días de stock`
+  return `${calcularDiasStock(cantidadLote, ventaMediaDiaria)} días stock`
 }
 
 export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
@@ -40,7 +40,7 @@ export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
       className={[
         'flex items-stretch rounded-card shadow-card overflow-hidden',
         'transition-all duration-150',
-        onClick ? 'cursor-pointer hover:shadow-elevated active:scale-[0.99]' : '',
+        onClick ? 'cursor-pointer hover:shadow-elevated hover:-translate-y-px active:translate-y-0 active:scale-[0.99]' : '',
         cfg.rowBg,
       ].join(' ')}
       onClick={onClick}
@@ -48,8 +48,8 @@ export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick() } : undefined}
     >
-      {/* Left accent bar — visual urgency signal */}
-      <div className={`w-1 shrink-0 ${cfg.accentBar}`} />
+      {/* Left accent bar — primary urgency signal */}
+      <div className={`w-1.5 shrink-0 ${cfg.accentBar}`} />
 
       {/* Content */}
       <div className="flex-1 px-4 py-3.5 min-w-0">
@@ -69,48 +69,45 @@ export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
           </span>
         </div>
 
-        {/* Row 2: días restantes + días de stock */}
-        <div className="flex items-center gap-3 mt-2">
-          {/* Dot indicator */}
-          <div className="shrink-0">
-            {cfg.dotPulse ? (
-              <span className="relative flex h-2.5 w-2.5">
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${cfg.dot} opacity-60`} />
-                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${cfg.dot}`} />
-              </span>
-            ) : (
-              <span className={`inline-flex rounded-full h-2.5 w-2.5 ${cfg.dot}`} />
-            )}
-          </div>
+        {/* Row 2: indicator + días + stock */}
+        <div className="flex items-center gap-2.5 mt-2">
+          {cfg.dotPulse ? (
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${cfg.dot} opacity-60`} />
+              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${cfg.dot}`} />
+            </span>
+          ) : (
+            <span className={`shrink-0 inline-flex rounded-full h-2 w-2 ${cfg.dot}`} />
+          )}
           <span className={`text-sm font-semibold ${cfg.daysText}`}>{diasLabel}</span>
-          <span className="text-muted-foreground text-xs">·</span>
+          <span className="text-border text-xs">·</span>
           <span className="text-muted-foreground text-xs">{stockLabel}</span>
         </div>
 
         {/* Row 3: metadata */}
-        <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2.5 mt-1.5 text-xs text-muted-foreground">
           <span>{vencimiento.cantidad} unids</span>
           {producto.venta_media_diaria > 0 && (
             <>
-              <span>·</span>
-              <span>{producto.venta_media_diaria} unid/día</span>
+              <span className="text-border">·</span>
+              <span>{producto.venta_media_diaria} u/día</span>
             </>
           )}
           {producto.cod_art && (
             <>
-              <span>·</span>
-              <span className="font-mono">{producto.cod_art}</span>
+              <span className="text-border">·</span>
+              <span className="font-mono text-foreground/50">{producto.cod_art}</span>
             </>
           )}
         </div>
 
-        {/* Row 4: acciones sugeridas */}
+        {/* Row 4: smart action chips */}
         {vencimiento.acciones_sugeridas.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2.5">
             {vencimiento.acciones_sugeridas.map((accion) => (
               <span
                 key={accion}
-                className="text-[11px] px-2.5 py-1 rounded-full bg-white/80 border border-border text-foreground/70 font-medium"
+                className={`text-[11px] px-2.5 py-1 rounded-full font-semibold border transition-colors ${cfg.actionChipCls}`}
               >
                 {accion}
               </span>

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Package, ScanLine, RefreshCw } from 'lucide-react'
+import { Package, ScanLine, RefreshCw, AlertTriangle } from 'lucide-react'
 import { useVencimientos } from '@/hooks/useVencimientos'
 import RiesgoCard from '@/components/dashboard/RiesgoCard'
 import AlertaItem from '@/components/dashboard/AlertaItem'
@@ -77,22 +77,31 @@ export default function Dashboard() {
       )}
 
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-border shadow-nav px-4 py-3.5">
+      <header className="sticky top-0 z-10 bg-white/95 backdrop-blur-xl border-b border-border/60 shadow-nav px-4 py-3">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-base font-bold text-foreground leading-tight">
-              NoVen <span className="text-brand">IA</span>
-            </h1>
-            <p className="text-xs text-muted-foreground capitalize">{formatFechaHoy()}</p>
+          {/* Brand mark */}
+          <div className="flex items-center gap-2.5">
+            <div className="h-7 w-7 rounded-lg bg-brand shadow-brand flex items-center justify-center shrink-0">
+              <ScanLine className="h-3.5 w-3.5 text-white" aria-hidden="true" />
+            </div>
+            <div>
+              <h1 className="text-sm font-bold text-foreground leading-none tracking-tight">
+                NoVen <span className="text-brand">IA</span>
+              </h1>
+              <p className="text-[11px] text-muted-foreground mt-0.5 capitalize leading-none">
+                {formatFechaHoy()}
+              </p>
+            </div>
           </div>
+
           <button
             type="button"
             onClick={() => void refetch()}
             disabled={loading}
-            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
+            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors duration-150 disabled:opacity-40 active:scale-[0.94]"
             aria-label="Actualizar datos"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 transition-transform ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </header>
@@ -108,7 +117,7 @@ export default function Dashboard() {
 
         {/* Skeleton */}
         {loading && data.length === 0 && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[0, 1, 2, 3].map((i) => (
               <div key={i} className="rounded-card bg-white shadow-card h-[108px] animate-pulse" />
             ))}
@@ -119,22 +128,28 @@ export default function Dashboard() {
           <>
             {/* Banner crítico */}
             {hayCriticos && (
-              <div className="bg-red-50 border border-red-200 rounded-card px-4 py-3.5 flex items-center gap-3 animate-fade-in">
+              <div className="rounded-card bg-red-50 border-2 border-red-200 px-4 py-3.5 flex items-center gap-3 animate-fade-in">
+                <div className="shrink-0 p-1.5 bg-red-100 rounded-lg">
+                  <AlertTriangle className="h-4 w-4 text-red-600" aria-hidden="true" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-red-800 leading-snug">
+                    {decomisados > 0
+                      ? `${decomisados} producto${decomisados > 1 ? 's' : ''} en decomiso`
+                      : 'Productos para donación detectados'}
+                  </p>
+                  <p className="text-xs text-red-600 mt-0.5">Requiere acción inmediata</p>
+                </div>
                 <span className="relative flex h-3 w-3 shrink-0">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-60" />
                   <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
                 </span>
-                <p className="text-sm font-semibold text-red-700">
-                  {decomisados > 0
-                    ? `${decomisados} producto${decomisados > 1 ? 's' : ''} en decomiso — acción inmediata requerida`
-                    : 'Productos para donación detectados'}
-                </p>
               </div>
             )}
 
-            {/* Stat cards */}
+            {/* KPI cards — command center */}
             <section aria-label="Resumen de riesgos">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <RiesgoCard
                   titulo="En riesgo"
                   valor={enRiesgo}
@@ -142,7 +157,7 @@ export default function Dashboard() {
                   onClick={() => navigate('/vencimientos')}
                 />
                 <RiesgoCard
-                  titulo="Unidades en riesgo"
+                  titulo="Unidades"
                   valor={unidadesEnRiesgo}
                   nivel={unidadesEnRiesgo > 0 ? 'urgente' : 'seguro'}
                   IconoComponente={Package}
@@ -163,14 +178,14 @@ export default function Dashboard() {
               </div>
             </section>
 
-            {/* Lista de alertas */}
+            {/* Alertas */}
             <section aria-label="Alertas de vencimiento">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                <h2 className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
                   Alertas priorizadas
                 </h2>
                 {alertasOrdenadas.length > 0 && (
-                  <span className="text-xs text-muted-foreground font-medium">
+                  <span className="text-xs text-muted-foreground tabular-nums">
                     {alertasOrdenadas.length} registros
                   </span>
                 )}
@@ -179,7 +194,7 @@ export default function Dashboard() {
               {alertasOrdenadas.length === 0 ? (
                 <div className="rounded-card bg-white shadow-card px-6 py-12 flex flex-col items-center text-center gap-4">
                   <div className="p-4 bg-emerald-50 rounded-full">
-                    <ScanLine className="h-10 w-10 text-emerald-400" />
+                    <ScanLine className="h-10 w-10 text-emerald-400" aria-hidden="true" />
                   </div>
                   <div>
                     <p className="text-foreground font-semibold text-base">Sin productos registrados</p>

@@ -29,15 +29,19 @@ export default function RiesgoCard({
       tabIndex={isInteractive ? 0 : undefined}
       onKeyDown={isInteractive ? (e) => { if (e.key === 'Enter') onClick?.() } : undefined}
       className={[
-        'bg-white rounded-card p-4 flex flex-col gap-3 shadow-card',
+        'relative overflow-hidden rounded-card shadow-card md:shadow-kpi',
+        v.cardGradient,
         isInteractive
-          ? 'cursor-pointer hover:shadow-elevated transition-all duration-150 active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand'
+          ? 'cursor-pointer hover:shadow-elevated hover:-translate-y-px transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand'
           : '',
       ].join(' ')}
     >
-      {/* Header row */}
-      <div className="flex items-start justify-between">
-        <div className={`p-2 rounded-xl ${v.statIconBg}`}>
+      {/* Top accent line */}
+      <div className={`absolute top-0 left-0 right-0 h-0.5 ${v.accentBar}`} />
+
+      {/* Icon row */}
+      <div className="flex items-start justify-between pt-4 px-4">
+        <div className={`p-2.5 rounded-xl ${v.statIconBg}`}>
           {IconoComponente ? (
             <IconoComponente className={`h-4 w-4 ${v.statIconColor}`} />
           ) : icono ? (
@@ -46,6 +50,7 @@ export default function RiesgoCard({
             <Package className={`h-4 w-4 ${v.statIconColor}`} />
           )}
         </div>
+
         {typeof valor === 'number' && valor > 0 && (
           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${v.badge}`}>
             activo
@@ -53,10 +58,12 @@ export default function RiesgoCard({
         )}
       </div>
 
-      {/* Value */}
-      <div>
-        <p className={`text-3xl font-bold leading-none ${v.statValueText}`}>{valor}</p>
-        <p className="text-xs text-muted-foreground font-medium mt-1.5 uppercase tracking-wide leading-tight">
+      {/* Value + label */}
+      <div className="px-4 pt-2.5 pb-4">
+        <p className={`text-4xl font-black tracking-tight leading-none tabular-nums ${v.statValueText}`}>
+          {valor}
+        </p>
+        <p className="text-[11px] text-muted-foreground font-semibold mt-1.5 uppercase tracking-wide leading-tight">
           {titulo}
         </p>
       </div>
