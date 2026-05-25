@@ -1,5 +1,41 @@
 export type RiesgoNivel = 'seguro' | 'radar' | 'urgente' | 'donacion' | 'decomiso'
 
+export type RolUsuario = 'admin' | 'operador' | 'supervisor'
+
+export interface UsuarioPerfil {
+  id: string
+  nombre: string
+  rol: RolUsuario
+  sucursal_id: string | null
+  activo: boolean
+}
+
+export interface UsuarioConEmail extends UsuarioPerfil {
+  email: string
+  familias: FamiliaAsignada[]
+}
+
+export interface Sector {
+  id: string
+  nombre: string
+  codigo: string
+}
+
+export interface Familia {
+  id: string
+  nombre: string
+  codigo: string
+  sector_id: string
+}
+
+export interface FamiliaAsignada {
+  id: string
+  nombre: string
+  codigo: string
+  sector_id: string
+  sector_nombre: string
+}
+
 export interface Sucursal {
   id: string
   nombre: string

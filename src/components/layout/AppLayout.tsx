@@ -1,5 +1,6 @@
 import { Outlet, NavLink } from 'react-router-dom'
-import { LayoutDashboard, ScanLine, Calendar, Package, FileUp } from 'lucide-react'
+import { LayoutDashboard, ScanLine, Calendar, Package, FileUp, Users } from 'lucide-react'
+import { useUsuarioRol } from '@/hooks/useUsuarioRol'
 
 interface NavItem {
   to: string
@@ -8,7 +9,7 @@ interface NavItem {
   isMain?: boolean
 }
 
-const navItems: NavItem[] = [
+const BASE_NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { to: '/scanner', label: 'Scanner', Icon: ScanLine, isMain: true },
   { to: '/vencimientos', label: 'Vencimientos', Icon: Calendar },
@@ -16,7 +17,9 @@ const navItems: NavItem[] = [
   { to: '/importar', label: 'Importar', Icon: FileUp },
 ]
 
-const mobileNavItems: NavItem[] = [
+const ADMIN_NAV_ITEM: NavItem = { to: '/admin', label: 'Admin', Icon: Users }
+
+const BASE_MOBILE_NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { to: '/vencimientos', label: 'Vencimientos', Icon: Calendar },
   { to: '/maestro', label: 'Maestro', Icon: Package },
@@ -24,6 +27,12 @@ const mobileNavItems: NavItem[] = [
 ]
 
 export default function AppLayout() {
+  const { isAdmin } = useUsuarioRol()
+
+  const navItems = isAdmin ? [...BASE_NAV_ITEMS, ADMIN_NAV_ITEM] : BASE_NAV_ITEMS
+  const mobileNavItems = isAdmin
+    ? [...BASE_MOBILE_NAV_ITEMS, ADMIN_NAV_ITEM]
+    : BASE_MOBILE_NAV_ITEMS
   return (
     <div className="flex min-h-screen bg-surface-base">
 
@@ -120,7 +129,7 @@ export default function AppLayout() {
         }}
         aria-label="Navegación principal"
       >
-        <div className="h-full grid grid-cols-4 items-center px-2">
+        <div className={`h-full grid items-center px-2 ${mobileNavItems.length >= 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
           {mobileNavItems.map(({ to, label, Icon }) => (
             <NavLink
               key={to}
