@@ -158,19 +158,12 @@ export default function Importar() {
     <div className="min-h-screen bg-surface-base">
 
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-white/95 backdrop-blur-xl border-b border-border/60 shadow-nav px-4 py-3">
-        <div className="flex items-center gap-3 max-w-4xl mx-auto">
-          <div className="p-2 bg-brand-light rounded-lg">
-            <FileUp className="h-4 w-4 text-brand" />
-          </div>
-          <div>
-            <h1 className="text-sm font-bold text-foreground leading-none tracking-tight">Importar desde Glaciar</h1>
-            <p className="text-[11px] text-muted-foreground mt-0.5 leading-none">Subí el CSV exportado desde el sistema Glaciar</p>
-          </div>
-        </div>
+      <header className="sticky top-0 z-10 bg-white border-b border-border/40 px-4 md:px-8 py-4 md:py-5">
+        <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight leading-none">Importar desde Glaciar</h1>
+        <p className="text-sm text-muted-foreground mt-1 leading-none">Subí el CSV exportado desde el sistema Glaciar</p>
       </header>
 
-      <main className="px-4 py-6 max-w-4xl mx-auto space-y-4">
+      <main className="px-4 md:px-8 py-5 md:py-6 max-w-4xl space-y-4">
 
         {/* Instrucciones */}
         {!archivo && (
@@ -190,10 +183,10 @@ export default function Importar() {
             onDragLeave={() => setDragging(false)}
             onClick={() => inputRef.current?.click()}
             className={[
-              'rounded-card border-2 border-dashed p-10 flex flex-col items-center justify-center gap-4 cursor-pointer transition-all duration-200',
+              'rounded-[24px] p-10 flex flex-col items-center justify-center gap-4 cursor-pointer transition-all duration-200 border',
               dragging
                 ? 'border-brand bg-brand-light shadow-brand'
-                : 'border-border bg-white shadow-card hover:border-brand/40 hover:shadow-elevated',
+                : 'border-border/60 bg-white shadow-card hover:shadow-elevated hover:border-brand/40',
             ].join(' ')}
           >
             <div className={`p-4 rounded-[18px] transition-colors ${dragging ? 'bg-brand/10' : 'bg-muted'}`}>

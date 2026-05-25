@@ -29,44 +29,40 @@ export default function RiesgoCard({
       tabIndex={isInteractive ? 0 : undefined}
       onKeyDown={isInteractive ? (e) => { if (e.key === 'Enter') onClick?.() } : undefined}
       className={[
-        'relative overflow-hidden rounded-card shadow-card md:shadow-kpi',
-        v.cardGradient,
+        'bg-white rounded-[24px] shadow-card p-5 md:p-6 flex flex-col',
         isInteractive
-          ? 'cursor-pointer hover:shadow-elevated hover:-translate-y-px transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand'
+          ? 'cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand'
           : '',
       ].join(' ')}
     >
-      {/* Top accent line */}
-      <div className={`absolute top-0 left-0 right-0 h-0.5 ${v.accentBar}`} />
-
-      {/* Icon row */}
-      <div className="flex items-start justify-between pt-4 px-4">
-        <div className={`p-2.5 rounded-xl ${v.statIconBg}`}>
+      {/* Icon circular + badge */}
+      <div className="flex items-start justify-between mb-4">
+        <div className={`h-11 w-11 rounded-full ${v.statIconBg} flex items-center justify-center shrink-0`}>
           {IconoComponente ? (
-            <IconoComponente className={`h-4 w-4 ${v.statIconColor}`} />
+            <IconoComponente className={`h-5 w-5 ${v.statIconColor}`} />
           ) : icono ? (
-            <span className="text-base leading-none" aria-hidden="true">{icono}</span>
+            <span className="text-lg leading-none" aria-hidden="true">{icono}</span>
           ) : (
-            <Package className={`h-4 w-4 ${v.statIconColor}`} />
+            <Package className={`h-5 w-5 ${v.statIconColor}`} />
           )}
         </div>
 
         {typeof valor === 'number' && valor > 0 && (
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${v.badge}`}>
+          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${v.badge}`}>
             activo
           </span>
         )}
       </div>
 
-      {/* Value + label */}
-      <div className="px-4 pt-2.5 pb-4">
-        <p className={`text-4xl font-black tracking-tight leading-none tabular-nums ${v.statValueText}`}>
-          {valor}
-        </p>
-        <p className="text-[11px] text-muted-foreground font-semibold mt-1.5 uppercase tracking-wide leading-tight">
-          {titulo}
-        </p>
-      </div>
+      {/* Dominant number */}
+      <p className={`text-5xl font-black tracking-tight leading-none tabular-nums ${v.statValueText}`}>
+        {valor}
+      </p>
+
+      {/* Label */}
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mt-2.5 leading-tight">
+        {titulo}
+      </p>
     </div>
   )
 }

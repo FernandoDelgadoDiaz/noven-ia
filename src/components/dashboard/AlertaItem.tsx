@@ -1,3 +1,4 @@
+import { Package, ChevronRight } from 'lucide-react'
 import { RISK_VISUAL } from '@/lib/risk-config'
 import { calcularDiasStock } from '@/lib/riesgo'
 import type { VencimientoConRiesgo } from '@/types/index'
@@ -23,7 +24,7 @@ function formatDiasRestantes(dias: number): string {
 
 function formatDiasStock(cantidadLote: number, ventaMediaDiaria: number): string {
   if (ventaMediaDiaria <= 0) return 'Sin rotación'
-  return `${calcularDiasStock(cantidadLote, ventaMediaDiaria)} días stock`
+  return `${calcularDiasStock(cantidadLote, ventaMediaDiaria)} días de stock`
 }
 
 export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
@@ -38,83 +39,85 @@ export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
   return (
     <div
       className={[
-        'flex items-stretch rounded-card shadow-card overflow-hidden',
+        'bg-white rounded-[24px] shadow-card overflow-hidden',
         'transition-all duration-150',
-        onClick ? 'cursor-pointer hover:shadow-elevated hover:-translate-y-px active:translate-y-0 active:scale-[0.99]' : '',
-        cfg.rowBg,
+        onClick
+          ? 'cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 active:scale-[0.99] active:translate-y-0'
+          : '',
       ].join(' ')}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick() } : undefined}
     >
-      {/* Left accent bar — primary urgency signal */}
-      <div className={`w-1.5 shrink-0 ${cfg.accentBar}`} />
+      <div className="p-4 md:p-5 flex items-start gap-4">
 
-      {/* Content */}
-      <div className="flex-1 px-4 py-3.5 min-w-0">
-        {/* Row 1: title + badge */}
-        <div className="flex items-start justify-between gap-2">
+        {/* Left: product thumbnail placeholder */}
+        <div className={`relative h-14 w-14 rounded-2xl ${cfg.statIconBg} flex items-center justify-center shrink-0`}>
+          <Package className={`h-6 w-6 ${cfg.statIconColor}`} aria-hidden="true" />
+          {cfg.dotPulse && (
+            <span className="absolute -top-1 -right-1">
+              <span className="relative flex h-3 w-3">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${cfg.dot} opacity-60`} />
+                <span className={`relative inline-flex rounded-full h-3 w-3 ${cfg.dot}`} />
+              </span>
+            </span>
+          )}
+        </div>
+
+        {/* Center: product info */}
+        <div className="flex-1 min-w-0">
           <p
             className={[
-              'text-sm leading-snug line-clamp-2 flex-1 min-w-0',
-              isDecomiso ? 'font-bold text-red-900' : 'font-semibold text-foreground',
+              'font-bold text-base leading-snug line-clamp-2',
+              isDecomiso ? 'text-red-900' : 'text-foreground',
             ].join(' ')}
             title={titulo}
           >
             {titulo}
           </p>
-          <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg.badge}`}>
+
+          <p className={`text-sm font-semibold mt-1 ${cfg.daysText}`}>{diasLabel}</p>
+
+          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
+            <span>{stockLabel}</span>
+            {producto.venta_media_diaria > 0 && (
+              <>
+                <span className="text-border">·</span>
+                <span>{producto.venta_media_diaria} u/día</span>
+              </>
+            )}
+            {producto.cod_art && (
+              <>
+                <span className="text-border">·</span>
+                <span className="font-mono text-foreground/50">{producto.cod_art}</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Right: badge + arrow */}
+        <div className="flex flex-col items-end gap-2 shrink-0 pt-0.5">
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cfg.badge}`}>
             {cfg.label.toUpperCase()}
           </span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground mt-1" aria-hidden="true" />
         </div>
-
-        {/* Row 2: indicator + días + stock */}
-        <div className="flex items-center gap-2.5 mt-2">
-          {cfg.dotPulse ? (
-            <span className="relative flex h-2.5 w-2.5 shrink-0">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${cfg.dot} opacity-60`} />
-              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${cfg.dot}`} />
-            </span>
-          ) : (
-            <span className={`shrink-0 inline-flex rounded-full h-2 w-2 ${cfg.dot}`} />
-          )}
-          <span className={`text-sm font-semibold ${cfg.daysText}`}>{diasLabel}</span>
-          <span className="text-border text-xs">·</span>
-          <span className="text-muted-foreground text-xs">{stockLabel}</span>
-        </div>
-
-        {/* Row 3: metadata */}
-        <div className="flex items-center gap-2.5 mt-1.5 text-xs text-muted-foreground">
-          <span>{vencimiento.cantidad} unids</span>
-          {producto.venta_media_diaria > 0 && (
-            <>
-              <span className="text-border">·</span>
-              <span>{producto.venta_media_diaria} u/día</span>
-            </>
-          )}
-          {producto.cod_art && (
-            <>
-              <span className="text-border">·</span>
-              <span className="font-mono text-foreground/50">{producto.cod_art}</span>
-            </>
-          )}
-        </div>
-
-        {/* Row 4: smart action chips */}
-        {vencimiento.acciones_sugeridas.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2.5">
-            {vencimiento.acciones_sugeridas.map((accion) => (
-              <span
-                key={accion}
-                className={`text-[11px] px-2.5 py-1 rounded-full font-semibold border transition-colors ${cfg.actionChipCls}`}
-              >
-                {accion}
-              </span>
-            ))}
-          </div>
-        )}
       </div>
+
+      {/* Bottom: smart action chips */}
+      {vencimiento.acciones_sugeridas.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 px-4 md:px-5 pb-4">
+          {vencimiento.acciones_sugeridas.map((accion) => (
+            <span
+              key={accion}
+              className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition-colors ${cfg.actionChipCls}`}
+            >
+              {accion}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

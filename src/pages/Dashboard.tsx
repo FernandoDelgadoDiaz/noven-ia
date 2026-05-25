@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Package, ScanLine, RefreshCw, AlertTriangle } from 'lucide-react'
+import { Package, ScanLine, RefreshCw, AlertTriangle, Bell } from 'lucide-react'
 import { useVencimientos } from '@/hooks/useVencimientos'
+import { useAuth } from '@/hooks/useAuth'
 import RiesgoCard from '@/components/dashboard/RiesgoCard'
 import AlertaItem from '@/components/dashboard/AlertaItem'
 import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
@@ -29,9 +30,17 @@ function formatFechaHoy(): string {
   }).format(new Date())
 }
 
+function getGreeting(): string {
+  const h = new Date().getHours()
+  if (h < 12) return 'Buenos días'
+  if (h < 18) return 'Buenas tardes'
+  return 'Buenas noches'
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const { data, loading, error, refetch } = useVencimientos(SUCURSAL_ID)
+  const { user } = useAuth()
   const [vencimientoEditando, setVencimientoEditando] = useState<VencimientoConRiesgo | null>(null)
 
   const alertasOrdenadas = [...data].sort(
@@ -50,8 +59,11 @@ export default function Dashboard() {
   const decomisados = data.filter((v) => v.nivel_riesgo === 'decomiso').length
   const hayCriticos = decomisados > 0 || data.some((v) => v.nivel_riesgo === 'donacion')
 
+  const avatarLetter = user?.email?.[0]?.toUpperCase() ?? 'U'
+
   return (
     <div className="min-h-screen bg-surface-base">
+
       {/* Modal */}
       {vencimientoEditando !== null && (
         <EditarVencimientoModal
@@ -76,80 +88,103 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-white/95 backdrop-blur-xl border-b border-border/60 shadow-nav px-4 py-3">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          {/* Brand mark */}
-          <div className="flex items-center gap-2.5">
-            <div className="h-7 w-7 rounded-lg bg-brand shadow-brand flex items-center justify-center shrink-0">
-              <ScanLine className="h-3.5 w-3.5 text-white" aria-hidden="true" />
-            </div>
-            <div>
-              <h1 className="text-sm font-bold text-foreground leading-none tracking-tight">
-                NoVen <span className="text-brand">IA</span>
-              </h1>
-              <p className="text-[11px] text-muted-foreground mt-0.5 capitalize leading-none">
-                {formatFechaHoy()}
-              </p>
-            </div>
+      {/* ── Header premium ──────────────────────────────────────────── */}
+      <header className="sticky top-0 z-10 bg-white border-b border-border/40 px-4 md:px-8 py-4 md:py-5">
+        <div className="flex items-center justify-between">
+
+          {/* Left: greeting + context */}
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight leading-none">
+              {getGreeting()}
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1 capitalize">
+              {formatFechaHoy()} · <span className="font-medium">Sucursal Norte</span>
+            </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            disabled={loading}
-            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors duration-150 disabled:opacity-40 active:scale-[0.94]"
-            aria-label="Actualizar datos"
-          >
-            <RefreshCw className={`h-4 w-4 transition-transform ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          {/* Right: actions + avatar */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              disabled={loading}
+              className="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-muted text-muted-foreground transition-colors duration-150 disabled:opacity-40 active:scale-[0.94]"
+              aria-label="Actualizar"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+
+            <button
+              type="button"
+              className="relative h-9 w-9 flex items-center justify-center rounded-xl hover:bg-muted text-muted-foreground transition-colors duration-150 active:scale-[0.94]"
+              aria-label="Notificaciones"
+            >
+              <Bell className="h-4 w-4" />
+              {hayCriticos && (
+                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 border-2 border-white" />
+              )}
+            </button>
+
+            <div
+              className="h-9 w-9 rounded-full bg-brand flex items-center justify-center text-white font-bold text-sm shadow-brand shrink-0 select-none"
+              aria-label="Perfil"
+            >
+              {avatarLetter}
+            </div>
+          </div>
         </div>
       </header>
 
-      <main className="px-4 py-5 space-y-5 max-w-2xl mx-auto">
+      {/* ── Content ─────────────────────────────────────────────────── */}
+      <main className="px-4 md:px-8 py-5 md:py-6 space-y-5 md:space-y-6">
 
-        {/* Error state */}
+        {/* Error */}
         {error && (
-          <div role="alert" className="rounded-card bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600 animate-fade-in">
+          <div role="alert" className="rounded-[20px] bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600 animate-fade-in">
             No pudimos cargar los datos. Revisá tu conexión e intentá de nuevo.
           </div>
         )}
 
         {/* Skeleton */}
         {loading && data.length === 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="rounded-card bg-white shadow-card h-[108px] animate-pulse" />
+              <div key={i} className="rounded-[24px] bg-white shadow-card h-[136px] animate-pulse" />
             ))}
           </div>
         )}
 
         {!loading && (
           <>
-            {/* Banner crítico */}
+            {/* ── Critical hero banner ── */}
             {hayCriticos && (
-              <div className="rounded-card bg-red-50 border-2 border-red-200 px-4 py-3.5 flex items-center gap-3 animate-fade-in">
-                <div className="shrink-0 p-1.5 bg-red-100 rounded-lg">
-                  <AlertTriangle className="h-4 w-4 text-red-600" aria-hidden="true" />
+              <div className="bg-red-50 border border-red-100 rounded-[24px] shadow-card px-5 py-4 md:py-5 flex items-center gap-4 animate-fade-in">
+                <div className="h-12 w-12 rounded-2xl bg-red-100 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="h-6 w-6 text-red-600" aria-hidden="true" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-red-800 leading-snug">
-                    {decomisados > 0
-                      ? `${decomisados} producto${decomisados > 1 ? 's' : ''} en decomiso`
-                      : 'Productos para donación detectados'}
+                  <p className="font-bold text-red-900 text-base leading-snug">
+                    Atención requerida
                   </p>
-                  <p className="text-xs text-red-600 mt-0.5">Requiere acción inmediata</p>
+                  <p className="text-red-600 text-sm mt-0.5">
+                    {decomisados > 0
+                      ? `${decomisados} producto${decomisados > 1 ? 's' : ''} en decomiso — acción inmediata`
+                      : 'Productos para donación detectados — revisión necesaria'}
+                  </p>
                 </div>
-                <span className="relative flex h-3 w-3 shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-60" />
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
-                </span>
+                <button
+                  type="button"
+                  onClick={() => navigate('/vencimientos')}
+                  className="shrink-0 px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-xl transition-colors duration-150 active:scale-[0.97] whitespace-nowrap"
+                >
+                  Revisar
+                </button>
               </div>
             )}
 
-            {/* KPI cards — command center */}
+            {/* ── KPI command center ── */}
             <section aria-label="Resumen de riesgos">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                 <RiesgoCard
                   titulo="En riesgo"
                   valor={enRiesgo}
@@ -178,9 +213,9 @@ export default function Dashboard() {
               </div>
             </section>
 
-            {/* Alertas */}
+            {/* ── Alertas priorizadas ── */}
             <section aria-label="Alertas de vencimiento">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-3 md:mb-4">
                 <h2 className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
                   Alertas priorizadas
                 </h2>
@@ -192,7 +227,7 @@ export default function Dashboard() {
               </div>
 
               {alertasOrdenadas.length === 0 ? (
-                <div className="rounded-card bg-white shadow-card px-6 py-12 flex flex-col items-center text-center gap-4">
+                <div className="rounded-[24px] bg-white shadow-card px-6 py-12 flex flex-col items-center text-center gap-4">
                   <div className="p-4 bg-emerald-50 rounded-full">
                     <ScanLine className="h-10 w-10 text-emerald-400" aria-hidden="true" />
                   </div>
@@ -205,13 +240,13 @@ export default function Dashboard() {
                   <button
                     type="button"
                     onClick={() => navigate('/scanner')}
-                    className="px-6 py-2.5 rounded-lg bg-brand hover:bg-brand-hover text-white text-sm font-semibold shadow-brand transition-all duration-150 active:scale-[0.97]"
+                    className="px-6 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold shadow-brand transition-all duration-150 active:scale-[0.97]"
                   >
                     Ir al Scanner
                   </button>
                 </div>
               ) : (
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {alertasOrdenadas.map((v) => (
                     <AlertaItem
                       key={v.id}

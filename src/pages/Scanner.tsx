@@ -445,7 +445,7 @@ interface SubHeaderProps {
 
 function SubHeader({ paso, titulo, subtitulo, onBack }: SubHeaderProps) {
   return (
-    <div className="sticky top-0 z-10 px-4 pt-4 pb-3 bg-white/95 backdrop-blur-xl border-b border-border/60 shadow-nav">
+    <div className="sticky top-0 z-10 px-4 md:px-8 pt-4 pb-3 bg-white border-b border-border/40">
       <div className="flex items-center gap-3 mb-2.5">
         <button
           type="button"

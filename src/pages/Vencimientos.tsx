@@ -176,11 +176,11 @@ export default function Vencimientos() {
       )}
 
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-white/95 backdrop-blur-xl border-b border-border/60 shadow-nav px-4 py-3">
-        <div className="flex items-center justify-between max-w-2xl mx-auto">
+      <header className="sticky top-0 z-10 bg-white border-b border-border/40 px-4 md:px-8 py-4 md:py-5">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-sm font-bold text-foreground leading-none tracking-tight">Vencimientos</h1>
-            <p className="text-[11px] text-muted-foreground mt-0.5 leading-none">
+            <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight leading-none">Vencimientos</h1>
+            <p className="text-sm text-muted-foreground mt-1 leading-none">
               {loading ? 'Cargando...' : `${vencimientosTodos.length} registros activos`}
             </p>
           </div>
@@ -209,7 +209,7 @@ export default function Vencimientos() {
         </div>
       </header>
 
-      <main className="px-4 py-4 space-y-3.5 max-w-2xl mx-auto">
+      <main className="px-4 md:px-8 py-5 md:py-6 space-y-4">
 
         {/* Error */}
         {error && (
