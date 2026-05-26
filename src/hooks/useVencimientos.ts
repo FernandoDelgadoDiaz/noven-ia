@@ -82,6 +82,7 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
           stock_actual,
           precio_costo,
           familia_id,
+          imagen_url,
           activo,
           created_at,
           updated_at

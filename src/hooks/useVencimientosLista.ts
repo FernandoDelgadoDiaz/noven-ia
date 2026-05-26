@@ -30,6 +30,7 @@ export interface VencimientoConProducto {
     categoria: string | null
     stock_actual: number
     venta_media_diaria: number
+    imagen_url: string | null
   }
   dias_restantes: number
   nivel_riesgo: NivelRiesgo
@@ -56,6 +57,7 @@ interface RawRow {
     stock_actual: number
     venta_media_diaria: number
     familia_id: string | null
+    imagen_url: string | null
   } | null
 }
 
@@ -97,7 +99,7 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
         fecha_vencimiento, fecha_carga, activo, created_at,
         productos (
           descripcion, cod_art, codigo_barras, gramaje, marca, categoria,
-          stock_actual, venta_media_diaria, familia_id
+          stock_actual, venta_media_diaria, familia_id, imagen_url
         )
       `)
       .eq('activo', true)

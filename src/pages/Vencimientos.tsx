@@ -169,10 +169,12 @@ export default function Vencimientos() {
               marca: vencimientoEditando.productos.marca,
               stock_actual: vencimientoEditando.productos.stock_actual,
               venta_media_diaria: vencimientoEditando.productos.venta_media_diaria,
+              imagen_url: vencimientoEditando.productos.imagen_url,
             },
           }}
           onClose={() => setVencimientoEditando(null)}
           onGuardado={() => { setVencimientoEditando(null); refetch() }}
+          onImagenActualizada={() => refetch()}
         />
       )}
 

@@ -27,9 +27,10 @@ interface Props {
   vencimiento: VencimientoParaEditar
   onClose: () => void
   onGuardado: () => void
+  onImagenActualizada?: (url: string) => void
 }
 
-export default function EditarVencimientoModal({ vencimiento, onClose, onGuardado }: Props) {
+export default function EditarVencimientoModal({ vencimiento, onClose, onGuardado, onImagenActualizada }: Props) {
   const [stockActual, setStockActual] = useState(vencimiento.productos.stock_actual)
   const [fechaVencimiento, setFechaVencimiento] = useState(vencimiento.fecha_vencimiento)
   const [cantidad, setCantidad] = useState(vencimiento.cantidad)
@@ -49,6 +50,7 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
   const [fotoUrl, setFotoUrl] = useState<string | null>(vencimiento.productos.imagen_url ?? null)
   const [subiendoFoto, setSubiendoFoto] = useState(false)
   const [fotoGuardada, setFotoGuardada] = useState(false)
+  const [errorFoto, setErrorFoto] = useState<string | null>(null)
 
   async function handleFotoChange(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
     const file = e.target.files?.[0]
@@ -57,6 +59,7 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
     setFotoUrl(localUrl)
     setSubiendoFoto(true)
     setFotoGuardada(false)
+    setErrorFoto(null)
     try {
       const codArt = vencimiento.productos.cod_art ?? vencimiento.producto_id
       const ext = file.name.split('.').pop() ?? 'jpg'
@@ -67,14 +70,20 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
       if (uploadError) throw uploadError
       const { data: urlData } = supabase.storage.from('productos-imagenes').getPublicUrl(path)
       const publicUrl = urlData.publicUrl
-      await supabase
+      const { error: updateError } = await supabase
         .from('productos')
         .update({ imagen_url: publicUrl, updated_at: new Date().toISOString() })
         .eq('id', vencimiento.producto_id)
+      if (updateError) throw updateError
       setFotoUrl(publicUrl)
       setFotoGuardada(true)
-    } catch {
+      onImagenActualizada?.(publicUrl)
+      // Limpiar input para permitir re-selección del mismo archivo
+      if (fotoInputRef.current) fotoInputRef.current.value = ''
+    } catch (err) {
+      console.error('[EditarVencimientoModal] Error al subir foto:', err)
       setFotoUrl(vencimiento.productos.imagen_url ?? null)
+      setErrorFoto('No se pudo guardar la foto. Intentá de nuevo.')
     } finally {
       setSubiendoFoto(false)
     }
@@ -193,6 +202,9 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
               </div>
               {fotoGuardada && (
                 <p className="text-[10px] text-emerald-600 font-medium text-center mt-1">Foto guardada</p>
+              )}
+              {errorFoto && (
+                <p className="text-[10px] text-red-500 font-medium text-center mt-1">{errorFoto}</p>
               )}
             </div>
             <div className="flex-1 min-w-0">

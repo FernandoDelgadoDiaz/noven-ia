@@ -83,6 +83,7 @@ export default function Dashboard() {
           }}
           onClose={() => setVencimientoEditando(null)}
           onGuardado={() => { setVencimientoEditando(null); void refetch() }}
+          onImagenActualizada={() => void refetch()}
         />
       )}
 
