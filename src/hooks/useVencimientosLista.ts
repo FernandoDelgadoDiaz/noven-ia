@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { calcularDiasRestantes, calcularNivelRiesgo } from '@/lib/riesgo'
 export type { NivelRiesgo } from '@/lib/riesgo'
 import type { NivelRiesgo } from '@/lib/riesgo'
+import { useUsuarioFamilias } from '@/hooks/useUsuarioFamilias'
 
 const SUCURSAL_ID = '00000000-0000-0000-0000-000000000001'
 
@@ -19,6 +20,7 @@ export interface VencimientoConProducto {
   fecha_carga: string
   activo: boolean
   created_at: string
+  familia_id: string | null
   productos: {
     descripcion: string
     cod_art: string | null
@@ -29,12 +31,10 @@ export interface VencimientoConProducto {
     stock_actual: number
     venta_media_diaria: number
   }
-  // calculados
   dias_restantes: number
   nivel_riesgo: NivelRiesgo
 }
 
-// Fila cruda que devuelve Supabase antes de tipar
 interface RawRow {
   id: string
   producto_id: string
@@ -55,6 +55,7 @@ interface RawRow {
     categoria: string | null
     stock_actual: number
     venta_media_diaria: number
+    familia_id: string | null
   } | null
 }
 
@@ -72,11 +73,13 @@ interface UseVencimientosListaReturn {
   busqueda: string
   setBusqueda: (busqueda: string) => void
   categorias: string[]
+  sinFamilias: boolean
 }
 
 export function useVencimientosLista(): UseVencimientosListaReturn {
-  const [vencimientosTodos, setVencimientosTodos] = useState<VencimientoConProducto[]>([])
-  const [loading, setLoading] = useState(true)
+  const { esAdmin, familiaIds, sinFamilias, loading: famLoading } = useUsuarioFamilias()
+  const [rawVencimientos, setRawVencimientos] = useState<VencimientoConProducto[]>([])
+  const [fetchLoading, setFetchLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filtroNivel, setFiltroNivel] = useState<FiltroNivel>('todos')
   const [filtroCategoria, setFiltroCategoria] = useState('')
@@ -84,7 +87,7 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
   const [refreshKey, setRefreshKey] = useState(0)
 
   const fetchData = useCallback(async (): Promise<void> => {
-    setLoading(true)
+    setFetchLoading(true)
     setError(null)
 
     const { data: rows, error: fetchError } = await supabase
@@ -93,7 +96,8 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
         id, producto_id, sucursal_id, usuario_id, cantidad, lote,
         fecha_vencimiento, fecha_carga, activo, created_at,
         productos (
-          descripcion, cod_art, codigo_barras, gramaje, marca, categoria, stock_actual, venta_media_diaria
+          descripcion, cod_art, codigo_barras, gramaje, marca, categoria,
+          stock_actual, venta_media_diaria, familia_id
         )
       `)
       .eq('activo', true)
@@ -102,7 +106,7 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
 
     if (fetchError) {
       setError(fetchError.message)
-      setLoading(false)
+      setFetchLoading(false)
       return
     }
 
@@ -121,6 +125,7 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
         )
         return {
           ...row,
+          familia_id: row.productos.familia_id,
           productos: row.productos,
           dias_restantes: diasRestantes,
           nivel_riesgo: nivelRiesgo,
@@ -128,8 +133,8 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
       })
       .sort((a, b) => a.dias_restantes - b.dias_restantes)
 
-    setVencimientosTodos(procesados)
-    setLoading(false)
+    setRawVencimientos(procesados)
+    setFetchLoading(false)
   }, [])
 
   const refetch = useCallback(() => {
@@ -139,6 +144,15 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
   useEffect(() => {
     void fetchData()
   }, [fetchData, refreshKey])
+
+  const vencimientosTodos = useMemo(() => {
+    if (famLoading) return []
+    if (esAdmin) return rawVencimientos
+    if (familiaIds.length === 0) return []
+    return rawVencimientos.filter((v) => v.familia_id !== null && familiaIds.includes(v.familia_id))
+  }, [rawVencimientos, esAdmin, familiaIds, famLoading])
+
+  const loading = famLoading || fetchLoading
 
   const categorias = useMemo(() => {
     const set = new Set<string>()
@@ -178,5 +192,6 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
     busqueda,
     setBusqueda,
     categorias,
+    sinFamilias,
   }
 }

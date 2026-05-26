@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Package, ScanLine, RefreshCw, AlertTriangle, Bell } from 'lucide-react'
+import { Package, ScanLine, RefreshCw, AlertTriangle, Bell, FolderX } from 'lucide-react'
 import { useVencimientos } from '@/hooks/useVencimientos'
 import { useAuth } from '@/hooks/useAuth'
 import RiesgoCard from '@/components/dashboard/RiesgoCard'
@@ -36,7 +36,7 @@ function getGreeting(): string {
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { data, loading, error, refetch } = useVencimientos(SUCURSAL_ID)
+  const { data, loading, error, refetch, sinFamilias } = useVencimientos(SUCURSAL_ID)
   const { user } = useAuth()
   const [vencimientoEditando, setVencimientoEditando] = useState<VencimientoConRiesgo | null>(null)
 
@@ -140,6 +140,19 @@ export default function Dashboard() {
         {error && (
           <div role="alert" className="rounded-[20px] bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600 animate-fade-in">
             No pudimos cargar los datos. Revisá tu conexión e intentá de nuevo.
+          </div>
+        )}
+
+        {/* Sin familias asignadas */}
+        {!loading && sinFamilias && (
+          <div role="alert" className="rounded-[20px] bg-amber-50 border border-amber-200 px-5 py-4 flex items-center gap-4 animate-fade-in">
+            <div className="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+              <FolderX className="h-5 w-5 text-amber-600" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="font-semibold text-amber-800 text-sm">Sin familias asignadas</p>
+              <p className="text-amber-700 text-xs mt-0.5">No tenés familias asignadas. Contactá al administrador.</p>
+            </div>
           </div>
         )}
 

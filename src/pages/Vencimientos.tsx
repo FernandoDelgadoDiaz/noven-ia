@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, CalendarX, Search, SlidersHorizontal } from 'lucide-react'
+import { Plus, CalendarX, Search, SlidersHorizontal, FolderX } from 'lucide-react'
 import { useVencimientosLista } from '@/hooks/useVencimientosLista'
 import type { VencimientoConProducto, FiltroNivel, NivelRiesgo } from '@/hooks/useVencimientosLista'
 import { RISK_VISUAL } from '@/lib/risk-config'
@@ -136,6 +136,7 @@ export default function Vencimientos() {
     busqueda,
     setBusqueda,
     categorias,
+    sinFamilias,
   } = useVencimientosLista()
 
   const [vencimientoEditando, setVencimientoEditando] = useState<VencimientoConProducto | null>(null)
@@ -222,6 +223,19 @@ export default function Vencimientos() {
             >
               Reintentar
             </button>
+          </div>
+        )}
+
+        {/* Sin familias asignadas */}
+        {!loading && sinFamilias && (
+          <div role="alert" className="rounded-card bg-amber-50 border border-amber-200 px-5 py-4 flex items-center gap-4 animate-fade-in">
+            <div className="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+              <FolderX className="h-5 w-5 text-amber-600" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="font-semibold text-amber-800 text-sm">Sin familias asignadas</p>
+              <p className="text-amber-700 text-xs mt-0.5">No tenés familias asignadas. Contactá al administrador.</p>
+            </div>
           </div>
         )}
 
