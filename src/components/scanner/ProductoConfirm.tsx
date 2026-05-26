@@ -67,14 +67,16 @@ export default function ProductoConfirm({ producto, onConfirm, onCancel }: Produ
 
     try {
       const publicUrl = await subirFotoProducto(file, producto.cod_art)
-      await supabase
+      const { error: updateError } = await supabase
         .from('productos')
         .update({ imagen_url: publicUrl, updated_at: new Date().toISOString() })
         .eq('id', producto.id)
+      if (updateError) throw updateError
       setPreviewUrl(publicUrl)
       setFotoGuardada(true)
     } catch (err) {
-      setErrorFoto('No se pudo subir la foto. Intentá de nuevo.')
+      console.error('[ProductoConfirm] Error al subir foto:', err)
+      setErrorFoto('No se pudo guardar la foto. Intentá de nuevo.')
       setPreviewUrl(producto.imagen_url)
     } finally {
       setSubiendo(false)
