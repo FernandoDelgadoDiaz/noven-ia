@@ -56,6 +56,7 @@ interface FormData {
   password: string
   rol: RolUsuario
   familiasSeleccionadas: Set<string>
+  activo: boolean
 }
 
 interface SectorConFamilias {
@@ -73,6 +74,7 @@ interface ModalProps {
     email: string
     rol: RolUsuario
     familiasIds: string[]
+    activo: boolean
   }
   sectoresConFamilias: SectorConFamilias[]
   onClose: () => void
@@ -93,6 +95,7 @@ function ModalUsuario({
     password: '',
     rol: initialData?.rol ?? 'operador',
     familiasSeleccionadas: new Set(initialData?.familiasIds ?? []),
+    activo: initialData?.activo ?? true,
   })
   const [sectoresExpandidos, setSectoresExpandidos] = useState<Set<string>>(new Set())
   const [guardando, setGuardando] = useState(false)
@@ -195,7 +198,7 @@ function ModalUsuario({
         // Editar: UPDATE public.usuarios
         const { error: errUpdate } = await supabase
           .from('usuarios')
-          .update({ nombre: form.nombre.trim(), rol: form.rol })
+          .update({ nombre: form.nombre.trim(), rol: form.rol, activo: form.activo })
           .eq('id', uid)
         if (errUpdate) {
           setErrores({ global: `Error al actualizar el perfil: ${errUpdate.message}` })
@@ -360,6 +363,25 @@ function ModalUsuario({
             </select>
           </div>
 
+          {/* Activo toggle — solo en edición */}
+          {modo === 'editar' && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-foreground">Estado</p>
+              <button
+                type="button"
+                onClick={() => setForm((p) => ({ ...p, activo: !p.activo }))}
+                className="flex items-center gap-3 w-full py-2.5 px-3.5 rounded-xl border border-border hover:bg-muted/40 transition-colors"
+              >
+                <div className={`relative h-5 w-9 rounded-full transition-colors ${form.activo ? 'bg-brand' : 'bg-muted-foreground/30'}`}>
+                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${form.activo ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </div>
+                <span className={`text-sm font-medium ${form.activo ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                  {form.activo ? 'Activo' : 'Inactivo'}
+                </span>
+              </button>
+            </div>
+          )}
+
           {/* Familias */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -509,6 +531,16 @@ export default function Admin() {
     setLoading(true)
     setError(null)
 
+    // Traer emails desde auth via función admin
+    const emailMap = new Map<string, string>()
+    try {
+      const fnRes = await fetch('/.netlify/functions/listar-usuarios')
+      if (fnRes.ok) {
+        const fnData = await fnRes.json() as { users?: { id: string; email: string }[] }
+        for (const u of fnData.users ?? []) emailMap.set(u.id, u.email)
+      }
+    } catch { /* silencioso — email quedará vacío si falla */ }
+
     // Traer perfiles de public.usuarios
     const { data: perfiles, error: errP } = await supabase
       .from('usuarios')
@@ -577,7 +609,7 @@ export default function Admin() {
 
       return {
         ...p,
-        email: '',
+        email: emailMap.get(p.id) ?? '',
         familias: familiasUsuario,
       }
     })
@@ -636,6 +668,7 @@ export default function Admin() {
                   email: usuarioEditando.email,
                   rol: usuarioEditando.rol,
                   familiasIds: usuarioEditando.familias.map((f) => f.id),
+                  activo: usuarioEditando.activo,
                 }
               : undefined
           }

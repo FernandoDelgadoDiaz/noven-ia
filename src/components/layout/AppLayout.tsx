@@ -1,6 +1,7 @@
-import { Outlet, NavLink } from 'react-router-dom'
-import { LayoutDashboard, ScanLine, Calendar, Package, FileUp, Users } from 'lucide-react'
+import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { LayoutDashboard, ScanLine, Calendar, Package, FileUp, Users, LogOut } from 'lucide-react'
 import { useUsuarioRol } from '@/hooks/useUsuarioRol'
+import { supabase } from '@/lib/supabase'
 
 interface NavItem {
   to: string
@@ -28,6 +29,12 @@ const BASE_MOBILE_NAV_ITEMS: NavItem[] = [
 
 export default function AppLayout() {
   const { isAdmin } = useUsuarioRol()
+  const navigate = useNavigate()
+
+  async function handleSignOut() {
+    await supabase.auth.signOut()
+    navigate('/login')
+  }
 
   const navItems = isAdmin ? [...BASE_NAV_ITEMS, ADMIN_NAV_ITEM] : BASE_NAV_ITEMS
   const mobileNavItems = isAdmin
@@ -85,13 +92,23 @@ export default function AppLayout() {
           ))}
         </nav>
 
-        {/* Bottom status */}
-        <div className="px-5 py-4 border-t border-border/40">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0 animate-pulse-slow" />
-            <span className="text-xs text-muted-foreground">Sincronizado</span>
+        {/* Bottom: cerrar sesión + status */}
+        <div className="px-3 py-4 border-t border-border/40 space-y-3">
+          <button
+            type="button"
+            onClick={() => void handleSignOut()}
+            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-muted-foreground hover:text-red-600 hover:bg-red-50 transition-all duration-150 font-medium"
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            <span className="text-sm">Cerrar sesión</span>
+          </button>
+          <div className="px-2">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0 animate-pulse-slow" />
+              <span className="text-xs text-muted-foreground">Sincronizado</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground/50">NoVen IA · v2.0</p>
           </div>
-          <p className="text-[10px] text-muted-foreground/50">NoVen IA · v2.0</p>
         </div>
       </aside>
 
@@ -129,38 +146,51 @@ export default function AppLayout() {
         }}
         aria-label="Navegación principal"
       >
-        <div className={`h-full grid items-center px-2 ${mobileNavItems.length >= 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
-          {mobileNavItems.map(({ to, label, Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                [
-                  'flex flex-col items-center gap-1 py-2 rounded-xl transition-all duration-150 select-none active:scale-[0.94]',
-                  isActive
-                    ? 'text-brand bg-brand-light'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted',
-                ].join(' ')
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <Icon
-                    className={`h-5 w-5 transition-colors ${
-                      isActive ? 'text-brand' : 'text-muted-foreground'
-                    }`}
-                  />
-                  <span
-                    className={`text-[10px] leading-none transition-colors ${
-                      isActive ? 'text-brand font-semibold' : 'text-muted-foreground font-medium'
-                    }`}
-                  >
-                    {label}
-                  </span>
-                </>
-              )}
-            </NavLink>
-          ))}
+        <div className="h-full flex items-center">
+          <div className={`flex-1 h-full grid items-center px-2 ${mobileNavItems.length >= 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
+            {mobileNavItems.map(({ to, label, Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  [
+                    'flex flex-col items-center gap-1 py-2 rounded-xl transition-all duration-150 select-none active:scale-[0.94]',
+                    isActive
+                      ? 'text-brand bg-brand-light'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+                  ].join(' ')
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon
+                      className={`h-5 w-5 transition-colors ${
+                        isActive ? 'text-brand' : 'text-muted-foreground'
+                      }`}
+                    />
+                    <span
+                      className={`text-[10px] leading-none transition-colors ${
+                        isActive ? 'text-brand font-semibold' : 'text-muted-foreground font-medium'
+                      }`}
+                    >
+                      {label}
+                    </span>
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </div>
+
+          {/* Cerrar sesión — mobile */}
+          <button
+            type="button"
+            onClick={() => void handleSignOut()}
+            className="w-14 shrink-0 h-full flex flex-col items-center justify-center gap-1 border-l border-border/40 text-muted-foreground hover:text-red-500 hover:bg-red-50/60 transition-colors active:scale-[0.94]"
+            aria-label="Cerrar sesión"
+          >
+            <LogOut className="h-5 w-5" />
+            <span className="text-[10px] font-medium leading-none">Salir</span>
+          </button>
         </div>
       </nav>
     </div>
