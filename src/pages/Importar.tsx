@@ -18,6 +18,7 @@ interface FilaPreview extends FilaParseada {
   stockDb: number | null
   ventaMediaDb: number | null
   encontrado: boolean
+  encontradoPor: 'cod_art' | 'codigo_barras' | null
 }
 
 interface ResultadoImportacion {
@@ -126,15 +127,42 @@ export default function Importar() {
       }
 
       const codArts = filasParsed.map((f) => f.cod_art)
+
+      // Primer intento: buscar por cod_art
       const { data: productosDb, error: dbError } = await supabase
         .from('productos')
-        .select('id, cod_art, descripcion, stock_actual, venta_media_diaria')
+        .select('id, cod_art, codigo_barras, descripcion, stock_actual, venta_media_diaria')
         .in('cod_art', codArts)
       if (dbError) { setErrorParseo(`Error al consultar la base de datos: ${dbError.message}`); setParseando(false); return }
+
       const mapaDb = new Map((productosDb ?? []).map((p) => [p.cod_art as string, { id: p.id as string, stockDb: p.stock_actual as number, ventaMediaDb: p.venta_media_diaria as number }]))
+
+      // Identificar filas no encontradas por cod_art para buscar por codigo_barras
+      const codArtsNoEncontrados = codArts.filter((c) => !mapaDb.has(c))
+      const mapaPorEan = new Map<string, { id: string; stockDb: number; ventaMediaDb: number }>()
+
+      if (codArtsNoEncontrados.length > 0) {
+        const { data: productosPorEan } = await supabase
+          .from('productos')
+          .select('id, cod_art, codigo_barras, stock_actual, venta_media_diaria')
+          .in('codigo_barras', codArtsNoEncontrados)
+        for (const p of productosPorEan ?? []) {
+          if (p.codigo_barras) {
+            mapaPorEan.set(p.codigo_barras as string, { id: p.id as string, stockDb: p.stock_actual as number, ventaMediaDb: p.venta_media_diaria as number })
+          }
+        }
+      }
+
       const filasPreview: FilaPreview[] = filasParsed.map((fila) => {
         const dbProd = mapaDb.get(fila.cod_art)
-        return { ...fila, id: dbProd?.id ?? null, stockDb: dbProd?.stockDb ?? null, ventaMediaDb: dbProd?.ventaMediaDb ?? null, encontrado: dbProd !== undefined }
+        if (dbProd) {
+          return { ...fila, id: dbProd.id, stockDb: dbProd.stockDb, ventaMediaDb: dbProd.ventaMediaDb, encontrado: true, encontradoPor: 'cod_art' }
+        }
+        const dbProdEan = mapaPorEan.get(fila.cod_art)
+        if (dbProdEan) {
+          return { ...fila, id: dbProdEan.id, stockDb: dbProdEan.stockDb, ventaMediaDb: dbProdEan.ventaMediaDb, encontrado: true, encontradoPor: 'codigo_barras' }
+        }
+        return { ...fila, id: null, stockDb: null, ventaMediaDb: null, encontrado: false, encontradoPor: null }
       })
       setFilas(filasPreview)
     } catch (err) {
@@ -351,6 +379,7 @@ export default function Importar() {
                       <tr className="border-b border-border">
                         <th className={thCls}>Cod.Art.</th>
                         <th className={thCls}>Descripción</th>
+                        <th className={thCls}>Hallado por</th>
                         <th className={`${thCls} text-right`}>Stock DB</th>
                         <th className={`${thCls} text-right`}>Stock CSV</th>
                         <th className={`${thCls} text-right`}>V.Media DB</th>
@@ -362,6 +391,13 @@ export default function Importar() {
                         <tr key={idx} className="border-b border-border/50 last:border-0 hover:bg-surface-base transition-colors">
                           <td className={`${tdCls} font-mono text-brand font-semibold`}>{fila.cod_art}</td>
                           <td className={`${tdCls} text-foreground max-w-[160px] truncate`}>{fila.descripcion}</td>
+                          <td className={tdCls}>
+                            {fila.encontradoPor === 'codigo_barras' ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-700 text-xs font-semibold rounded">EAN</span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-brand-light text-brand text-xs font-semibold rounded">Cód.</span>
+                            )}
+                          </td>
                           <td className={`${tdCls} text-right text-muted-foreground`}>{fila.stockDb ?? '—'}</td>
                           <td className={`${tdCls} text-right text-foreground font-semibold`}>{fila.stockCsv}</td>
                           <td className={`${tdCls} text-right text-muted-foreground`}>{fila.ventaMediaDb !== null ? fila.ventaMediaDb.toFixed(2) : '—'}</td>

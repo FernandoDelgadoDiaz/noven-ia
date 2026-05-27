@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { ScanLine, Search, CheckCircle, Package, Barcode, ChevronLeft, ShieldAlert } from 'lucide-react'
+import { ScanLine, Search, CheckCircle, Package, Barcode, ChevronLeft, ShieldAlert, AlertCircle } from 'lucide-react'
 import { useScanner } from '@/hooks/useScanner'
 import { useAuth } from '@/hooks/useAuth'
 import { useUsuarioFamilias } from '@/hooks/useUsuarioFamilias'
@@ -35,6 +35,7 @@ export default function Scanner() {
   const [errorEan, setErrorEan] = useState<string | null>(null)
 
   const [nuevoProductoCodArt, setNuevoProductoCodArt] = useState('')
+  const [nuevoProductoEan, setNuevoProductoEan] = useState('')
   const [nuevoProductoDesc, setNuevoProductoDesc] = useState('')
   const [nuevoProductoMarca, setNuevoProductoMarca] = useState('')
   const [nuevoProductoCategoria, setNuevoProductoCategoria] = useState<CategoriaProducto>('OTRO')
@@ -43,6 +44,11 @@ export default function Scanner() {
   const [nuevoProductoFamiliaId, setNuevoProductoFamiliaId] = useState<string>('')
   const [guardandoNuevo, setGuardandoNuevo] = useState(false)
   const [errorNuevo, setErrorNuevo] = useState<string | null>(null)
+  const [modalEanNuevoAbierto, setModalEanNuevoAbierto] = useState(false)
+
+  // Errores inline de validación en tiempo real
+  const [errorCodArt, setErrorCodArt] = useState<string | null>(null)
+  const [errorEanNuevo, setErrorEanNuevo] = useState<string | null>(null)
 
   // Nombres de familias para mostrar en mensajes y selector
   const [familiasUsuario, setFamiliasUsuario] = useState<Familia[]>([])
@@ -113,6 +119,20 @@ export default function Scanner() {
     }
   }
 
+  function resetNuevoProducto(): void {
+    setNuevoProductoCodArt('')
+    setNuevoProductoEan('')
+    setNuevoProductoDesc('')
+    setNuevoProductoMarca('')
+    setNuevoProductoCategoria('OTRO')
+    setNuevoProductoStock(0)
+    setNuevoProductoVenta(0)
+    setNuevoProductoFamiliaId(familiaIds[0] ?? '')
+    setErrorNuevo(null)
+    setErrorCodArt(null)
+    setErrorEanNuevo(null)
+  }
+
   function handleCancelarConfirmacion(): void {
     setProductoEncontrado(null)
     setEncontradoPorCodArt(false)
@@ -121,15 +141,49 @@ export default function Scanner() {
     setCodigoManual('')
     setErrorBusqueda(null)
     setErrorEan(null)
-    setNuevoProductoCodArt('')
-    setNuevoProductoDesc('')
-    setNuevoProductoMarca('')
-    setNuevoProductoCategoria('OTRO')
-    setNuevoProductoStock(0)
-    setNuevoProductoVenta(0)
-    setNuevoProductoFamiliaId(familiaIds[0] ?? '')
-    setErrorNuevo(null)
+    resetNuevoProducto()
   }
+
+  // Validaciones en tiempo real
+  function handleCodArtChange(valor: string): void {
+    // Solo permitir dígitos
+    const soloDigitos = valor.replace(/\D/g, '').slice(0, 7)
+    setNuevoProductoCodArt(soloDigitos)
+    if (soloDigitos.length === 0) {
+      setErrorCodArt(null)
+    } else if (soloDigitos.length !== 7) {
+      setErrorCodArt('El código interno debe tener exactamente 7 dígitos')
+    } else {
+      setErrorCodArt(null)
+    }
+  }
+
+  function handleEanNuevoChange(valor: string): void {
+    // Solo permitir dígitos
+    const soloDigitos = valor.replace(/\D/g, '').slice(0, 13)
+    setNuevoProductoEan(soloDigitos)
+    if (soloDigitos.length === 0) {
+      setErrorEanNuevo(null)
+    } else if (soloDigitos.length !== 13) {
+      setErrorEanNuevo('El EAN debe tener exactamente 13 dígitos')
+    } else {
+      setErrorEanNuevo(null)
+    }
+  }
+
+  function handleEanNuevoCapturado(ean: string): void {
+    setModalEanNuevoAbierto(false)
+    const soloDigitos = ean.replace(/\D/g, '').slice(0, 13)
+    setNuevoProductoEan(soloDigitos)
+    if (soloDigitos.length !== 13) {
+      setErrorEanNuevo('El EAN debe tener exactamente 13 dígitos')
+    } else {
+      setErrorEanNuevo(null)
+    }
+  }
+
+  function codArtValido(): boolean { return /^\d{7}$/.test(nuevoProductoCodArt) }
+  function eanNuevoValido(): boolean { return /^\d{13}$/.test(nuevoProductoEan) }
 
   function handleGuardadoExitoso(): void {
     setGuardadoExitoso(true)
@@ -166,6 +220,17 @@ export default function Scanner() {
   function handleOmitirEan(): void { setErrorEan(null); setPaso('formulario') }
 
   async function handleAgregarNuevoProducto(): Promise<void> {
+    // Validaciones de formato
+    if (!codArtValido()) {
+      setErrorCodArt('El código interno debe tener exactamente 7 dígitos')
+      setErrorNuevo('Corregí los errores antes de continuar.')
+      return
+    }
+    if (!eanNuevoValido()) {
+      setErrorEanNuevo('El EAN debe tener exactamente 13 dígitos')
+      setErrorNuevo('Corregí los errores antes de continuar.')
+      return
+    }
     if (!nuevoProductoDesc.trim()) { setErrorNuevo('La descripción es obligatoria.'); return }
 
     // Validar que se seleccionó familia (solo para no-admin)
@@ -177,10 +242,36 @@ export default function Scanner() {
 
     setErrorNuevo(null)
     setGuardandoNuevo(true)
+
+    // Verificar duplicado cod_art
+    const { data: dupCodArt } = await supabase
+      .from('productos')
+      .select('id')
+      .eq('cod_art', nuevoProductoCodArt.trim())
+      .maybeSingle()
+    if (dupCodArt) {
+      setGuardandoNuevo(false)
+      setErrorNuevo('Este código interno ya existe. Buscalo en el scanner.')
+      return
+    }
+
+    // Verificar duplicado EAN
+    const { data: dupEan } = await supabase
+      .from('productos')
+      .select('id')
+      .eq('codigo_barras', nuevoProductoEan.trim())
+      .maybeSingle()
+    if (dupEan) {
+      setGuardandoNuevo(false)
+      setErrorNuevo('Este EAN ya está registrado en otro producto.')
+      return
+    }
+
     const { data, error } = await supabase
       .from('productos')
       .insert({
         cod_art: nuevoProductoCodArt.trim(),
+        codigo_barras: nuevoProductoEan.trim(),
         descripcion: nuevoProductoDesc.trim(),
         marca: nuevoProductoMarca.trim() || null,
         categoria: nuevoProductoCategoria,
@@ -353,86 +444,178 @@ export default function Scanner() {
     const mostrarSelectorFamilia = !esAdmin && familiasUsuario.length > 1
     const familiaUnica = !esAdmin && familiasUsuario.length === 1 ? familiasUsuario[0] : null
 
-    return (
-      <div className="min-h-screen bg-surface-base flex flex-col">
-        <SubHeader paso={1} titulo="Agregar producto" subtitulo="Completá los datos del nuevo producto" onBack={handleCancelarConfirmacion} />
-        <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4 flex flex-col gap-4">
-          {errorNuevo && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 animate-fade-in">
-              <p className="text-red-600 text-sm">{errorNuevo}</p>
-            </div>
-          )}
-          <div className="bg-white rounded-card shadow-card p-4 flex flex-col gap-4">
-            {[
-              { id: 'np-codart', label: 'Cod. Art.', value: nuevoProductoCodArt, onChange: setNuevoProductoCodArt, placeholder: 'Ej: 1234567', type: 'text' },
-              { id: 'np-desc', label: 'Descripción *', value: nuevoProductoDesc, onChange: setNuevoProductoDesc, placeholder: 'Ej: Chocolate con leche 100g', type: 'text' },
-              { id: 'np-marca', label: 'Marca (opcional)', value: nuevoProductoMarca, onChange: setNuevoProductoMarca, placeholder: 'Ej: Milka', type: 'text' },
-            ].map((f) => (
-              <div key={f.id} className="space-y-1.5">
-                <label htmlFor={f.id} className="block text-xs font-semibold text-foreground uppercase tracking-wide">{f.label}</label>
-                <input id={f.id} type={f.type} value={f.value} onChange={(e) => f.onChange(e.target.value)} placeholder={f.placeholder} className={inputCls} />
-              </div>
-            ))}
-            <div className="space-y-1.5">
-              <label htmlFor="np-cat" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Categoría</label>
-              <select id="np-cat" value={nuevoProductoCategoria} onChange={(e) => setNuevoProductoCategoria(e.target.value as CategoriaProducto)} className={inputCls}>
-                {CATEGORIAS.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
-              </select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label htmlFor="np-stock" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Stock actual</label>
-                <input id="np-stock" type="number" min={0} value={nuevoProductoStock} onChange={(e) => setNuevoProductoStock(Number(e.target.value))} className={inputCls} />
-              </div>
-              <div className="space-y-1.5">
-                <label htmlFor="np-venta" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Venta/día</label>
-                <input id="np-venta" type="number" min={0} step={0.1} value={nuevoProductoVenta} onChange={(e) => setNuevoProductoVenta(parseFloat(e.target.value) || 0)} className={inputCls} />
-              </div>
-            </div>
+    const codArtTocado = nuevoProductoCodArt.length > 0
+    const eanTocado = nuevoProductoEan.length > 0
 
-            {/* Selector de familia — solo si el usuario tiene múltiples familias */}
-            {mostrarSelectorFamilia && (
+    function inputClsValidado(tocado: boolean, valido: boolean, error: string | null): string {
+      if (!tocado) return inputCls
+      if (error) return inputCls.replace('border-border', 'border-red-400').replace('focus:border-brand', 'focus:border-red-500').replace('focus:ring-brand/20', 'focus:ring-red-200') + ' border-red-400'
+      if (valido) return inputCls.replace('border-border', 'border-emerald-400').replace('focus:border-brand', 'focus:border-emerald-500').replace('focus:ring-brand/20', 'focus:ring-emerald-200') + ' border-emerald-400'
+      return inputCls
+    }
+
+    return (
+      <>
+        {modalEanNuevoAbierto && <ScannerModal onScan={handleEanNuevoCapturado} onClose={() => setModalEanNuevoAbierto(false)} />}
+        <div className="min-h-screen bg-surface-base flex flex-col">
+          <SubHeader paso={1} titulo="Agregar producto" subtitulo="Completá los datos del nuevo producto" onBack={handleCancelarConfirmacion} />
+          <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4 flex flex-col gap-4">
+            {errorNuevo && (
+              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-start gap-2 animate-fade-in">
+                <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-red-600 text-sm">{errorNuevo}</p>
+              </div>
+            )}
+            <div className="bg-white rounded-card shadow-card p-4 flex flex-col gap-4">
+
+              {/* Cod. Art. — 7 dígitos exactos */}
               <div className="space-y-1.5">
-                <label htmlFor="np-familia" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Sector / Familia *</label>
-                <select
-                  id="np-familia"
-                  value={nuevoProductoFamiliaId}
-                  onChange={(e) => setNuevoProductoFamiliaId(e.target.value)}
-                  className={inputCls}
-                >
-                  <option value="">Seleccioná una familia</option>
-                  {familiasUsuario.map((f) => (
-                    <option key={f.id} value={f.id}>{f.nombre}</option>
-                  ))}
+                <label htmlFor="np-codart" className="block text-xs font-semibold text-foreground uppercase tracking-wide">
+                  Cod. Art. <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    id="np-codart"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]{7}"
+                    maxLength={7}
+                    value={nuevoProductoCodArt}
+                    onChange={(e) => handleCodArtChange(e.target.value)}
+                    placeholder="Ej: 1234567"
+                    className={inputClsValidado(codArtTocado, codArtValido(), errorCodArt)}
+                    aria-describedby={errorCodArt ? 'error-codart' : undefined}
+                  />
+                  {codArtTocado && (
+                    <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono font-semibold ${codArtValido() ? 'text-emerald-500' : 'text-muted-foreground'}`}>
+                      {nuevoProductoCodArt.length}/7
+                    </span>
+                  )}
+                </div>
+                {errorCodArt && (
+                  <p id="error-codart" className="text-red-500 text-xs flex items-center gap-1 animate-fade-in">
+                    <AlertCircle className="h-3 w-3 shrink-0" />{errorCodArt}
+                  </p>
+                )}
+              </div>
+
+              {/* EAN — 13 dígitos exactos */}
+              <div className="space-y-1.5">
+                <label htmlFor="np-ean" className="block text-xs font-semibold text-foreground uppercase tracking-wide">
+                  Código EAN <span className="text-red-500">*</span>
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      id="np-ean"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]{13}"
+                      maxLength={13}
+                      value={nuevoProductoEan}
+                      onChange={(e) => handleEanNuevoChange(e.target.value)}
+                      placeholder="Ej: 7790580000000"
+                      className={inputClsValidado(eanTocado, eanNuevoValido(), errorEanNuevo)}
+                      aria-describedby={errorEanNuevo ? 'error-ean' : undefined}
+                    />
+                    {eanTocado && (
+                      <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono font-semibold ${eanNuevoValido() ? 'text-emerald-500' : 'text-muted-foreground'}`}>
+                        {nuevoProductoEan.length}/13
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setModalEanNuevoAbierto(true)}
+                    className="h-12 px-3 bg-muted hover:bg-muted/70 rounded-lg text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap shrink-0"
+                    title="Escanear EAN con cámara"
+                  >
+                    <Barcode className="h-4 w-4" />
+                    Escanear
+                  </button>
+                </div>
+                {errorEanNuevo && (
+                  <p id="error-ean" className="text-red-500 text-xs flex items-center gap-1 animate-fade-in">
+                    <AlertCircle className="h-3 w-3 shrink-0" />{errorEanNuevo}
+                  </p>
+                )}
+              </div>
+
+              {/* Descripción */}
+              <div className="space-y-1.5">
+                <label htmlFor="np-desc" className="block text-xs font-semibold text-foreground uppercase tracking-wide">
+                  Descripción <span className="text-red-500">*</span>
+                </label>
+                <input id="np-desc" type="text" value={nuevoProductoDesc} onChange={(e) => setNuevoProductoDesc(e.target.value)} placeholder="Ej: Chocolate con leche 100g" className={inputCls} />
+              </div>
+
+              {/* Marca */}
+              <div className="space-y-1.5">
+                <label htmlFor="np-marca" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Marca (opcional)</label>
+                <input id="np-marca" type="text" value={nuevoProductoMarca} onChange={(e) => setNuevoProductoMarca(e.target.value)} placeholder="Ej: Milka" className={inputCls} />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="np-cat" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Categoría</label>
+                <select id="np-cat" value={nuevoProductoCategoria} onChange={(e) => setNuevoProductoCategoria(e.target.value as CategoriaProducto)} className={inputCls}>
+                  {CATEGORIAS.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
               </div>
-            )}
-
-            {/* Info de familia única — solo lectura */}
-            {familiaUnica && (
-              <div className="bg-brand-light border border-brand-muted rounded-lg px-3 py-2.5 flex items-center gap-2">
-                <Package className="h-4 w-4 text-brand shrink-0" />
-                <p className="text-brand text-sm">
-                  Se va a asignar a tu sector: <span className="font-semibold">{familiaUnica.nombre}</span>
-                </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label htmlFor="np-stock" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Stock actual</label>
+                  <input id="np-stock" type="number" min={0} value={nuevoProductoStock} onChange={(e) => setNuevoProductoStock(Number(e.target.value))} className={inputCls} />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="np-venta" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Venta/día</label>
+                  <input id="np-venta" type="number" min={0} step={0.1} value={nuevoProductoVenta} onChange={(e) => setNuevoProductoVenta(parseFloat(e.target.value) || 0)} className={inputCls} />
+                </div>
               </div>
-            )}
+
+              {/* Selector de familia — solo si el usuario tiene múltiples familias */}
+              {mostrarSelectorFamilia && (
+                <div className="space-y-1.5">
+                  <label htmlFor="np-familia" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Sector / Familia *</label>
+                  <select
+                    id="np-familia"
+                    value={nuevoProductoFamiliaId}
+                    onChange={(e) => setNuevoProductoFamiliaId(e.target.value)}
+                    className={inputCls}
+                  >
+                    <option value="">Seleccioná una familia</option>
+                    {familiasUsuario.map((f) => (
+                      <option key={f.id} value={f.id}>{f.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Info de familia única — solo lectura */}
+              {familiaUnica && (
+                <div className="bg-brand-light border border-brand-muted rounded-lg px-3 py-2.5 flex items-center gap-2">
+                  <Package className="h-4 w-4 text-brand shrink-0" />
+                  <p className="text-brand text-sm">
+                    Se va a asignar a tu sector: <span className="font-semibold">{familiaUnica.nombre}</span>
+                  </p>
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleAgregarNuevoProducto()}
+              disabled={guardandoNuevo || !codArtValido() || !eanNuevoValido()}
+              className="w-full min-h-[56px] flex items-center justify-center gap-3 bg-brand hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-base rounded-card shadow-brand transition-all duration-150 active:scale-[0.98]"
+            >
+              {guardandoNuevo ? (
+                <><span className="h-5 w-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Agregando...</>
+              ) : 'Agregar y continuar'}
+            </button>
+            <button type="button" onClick={handleCancelarConfirmacion} className="w-full py-3 text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
+              Cancelar
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => void handleAgregarNuevoProducto()}
-            disabled={guardandoNuevo}
-            className="w-full min-h-[56px] flex items-center justify-center gap-3 bg-brand hover:bg-brand-hover disabled:opacity-50 text-white font-bold text-base rounded-card shadow-brand transition-all duration-150 active:scale-[0.98]"
-          >
-            {guardandoNuevo ? (
-              <><span className="h-5 w-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Agregando...</>
-            ) : 'Agregar y continuar'}
-          </button>
-          <button type="button" onClick={handleCancelarConfirmacion} className="w-full py-3 text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
-            Cancelar
-          </button>
         </div>
-      </div>
+      </>
     )
   }
 
