@@ -1,16 +1,17 @@
-import { useState, useRef } from 'react'
-import { ScanLine, Search, CheckCircle, Package, Barcode, ChevronLeft } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { ScanLine, Search, CheckCircle, Package, Barcode, ChevronLeft, ShieldAlert } from 'lucide-react'
 import { useScanner } from '@/hooks/useScanner'
 import { useAuth } from '@/hooks/useAuth'
+import { useUsuarioFamilias } from '@/hooks/useUsuarioFamilias'
 import { supabase } from '@/lib/supabase'
 import ScannerModal from '@/components/scanner/ScannerModal'
 import ProductoConfirm from '@/components/scanner/ProductoConfirm'
 import VencimientoForm from '@/components/scanner/VencimientoForm'
-import type { Producto } from '@/types/index'
+import type { Producto, Familia } from '@/types/index'
 
 const SUCURSAL_ID = '00000000-0000-0000-0000-000000000001'
 
-type Paso = 'inicio' | 'confirmando' | 'capturar_ean' | 'formulario' | 'exito' | 'nuevo_producto'
+type Paso = 'inicio' | 'confirmando' | 'capturar_ean' | 'formulario' | 'exito' | 'nuevo_producto' | 'familia_bloqueada'
 type CategoriaProducto = 'CHOCOLATES' | 'CARAMELOS' | 'SNACKS' | 'CHICLES' | 'CEREALES' | 'OTRO'
 const CATEGORIAS: CategoriaProducto[] = ['CHOCOLATES', 'CARAMELOS', 'SNACKS', 'CHICLES', 'CEREALES', 'OTRO']
 
@@ -19,6 +20,7 @@ const inputCls = 'w-full h-12 px-4 bg-surface-base border border-border rounded-
 export default function Scanner() {
   const { scanBarcode, scanning, error: scanError, reset } = useScanner()
   const { user } = useAuth()
+  const { esAdmin, familiaIds, loading: famLoading } = useUsuarioFamilias()
 
   const [paso, setPaso] = useState<Paso>('inicio')
   const [modalAbierto, setModalAbierto] = useState(false)
@@ -38,15 +40,50 @@ export default function Scanner() {
   const [nuevoProductoCategoria, setNuevoProductoCategoria] = useState<CategoriaProducto>('OTRO')
   const [nuevoProductoStock, setNuevoProductoStock] = useState(0)
   const [nuevoProductoVenta, setNuevoProductoVenta] = useState(0)
+  const [nuevoProductoFamiliaId, setNuevoProductoFamiliaId] = useState<string>('')
   const [guardandoNuevo, setGuardandoNuevo] = useState(false)
   const [errorNuevo, setErrorNuevo] = useState<string | null>(null)
 
+  // Nombres de familias para mostrar en mensajes y selector
+  const [familiasUsuario, setFamiliasUsuario] = useState<Familia[]>([])
+
   const inputManualRef = useRef<HTMLInputElement>(null)
+
+  // Cargar datos de las familias del usuario para mostrar nombres
+  useEffect(() => {
+    if (famLoading || familiaIds.length === 0) return
+    supabase
+      .from('familias')
+      .select('id, nombre, codigo, sector_id')
+      .in('id', familiaIds)
+      .then(({ data }) => {
+        if (data) setFamiliasUsuario(data as Familia[])
+      })
+  }, [familiaIds, famLoading])
+
+  // Inicializar familia seleccionada para nuevo producto cuando carguen las familias
+  useEffect(() => {
+    if (familiaIds.length > 0 && !nuevoProductoFamiliaId) {
+      setNuevoProductoFamiliaId(familiaIds[0])
+    }
+  }, [familiaIds, nuevoProductoFamiliaId])
+
+  function verificarFamiliaProducto(producto: Producto): boolean {
+    if (esAdmin) return true
+    if (!producto.familia_id) return false
+    return familiaIds.includes(producto.familia_id)
+  }
 
   async function buscarProducto(codigo: string, esBarcode: boolean): Promise<void> {
     setErrorBusqueda(null)
     const resultado = await scanBarcode(codigo)
     if (resultado) {
+      // Verificar si el producto pertenece a las familias del usuario
+      if (!verificarFamiliaProducto(resultado)) {
+        setProductoEncontrado(resultado)
+        setPaso('familia_bloqueada')
+        return
+      }
       setProductoEncontrado(resultado)
       const fueBarcode = esBarcode || resultado.codigo_barras === codigo.trim()
       setEncontradoPorCodArt(!fueBarcode)
@@ -90,6 +127,7 @@ export default function Scanner() {
     setNuevoProductoCategoria('OTRO')
     setNuevoProductoStock(0)
     setNuevoProductoVenta(0)
+    setNuevoProductoFamiliaId(familiaIds[0] ?? '')
     setErrorNuevo(null)
   }
 
@@ -129,6 +167,14 @@ export default function Scanner() {
 
   async function handleAgregarNuevoProducto(): Promise<void> {
     if (!nuevoProductoDesc.trim()) { setErrorNuevo('La descripción es obligatoria.'); return }
+
+    // Validar que se seleccionó familia (solo para no-admin)
+    const familiaIdParaInsertar = esAdmin ? (nuevoProductoFamiliaId || null) : (nuevoProductoFamiliaId || familiaIds[0] || null)
+    if (!esAdmin && !familiaIdParaInsertar) {
+      setErrorNuevo('No tenés familias asignadas. Contactá al administrador.')
+      return
+    }
+
     setErrorNuevo(null)
     setGuardandoNuevo(true)
     const { data, error } = await supabase
@@ -140,12 +186,62 @@ export default function Scanner() {
         categoria: nuevoProductoCategoria,
         stock_actual: nuevoProductoStock,
         venta_media_diaria: nuevoProductoVenta,
+        familia_id: familiaIdParaInsertar,
         activo: true,
       })
       .select().single()
     setGuardandoNuevo(false)
     if (error) { setErrorNuevo(`Error al agregar: ${error.message}`); return }
     if (data) { setProductoEncontrado(data as Producto); setErrorBusqueda(null); setPaso('formulario') }
+  }
+
+  // ── Pantalla bloqueada por familia ─────────────────────────────────────────
+  if (paso === 'familia_bloqueada' && productoEncontrado) {
+    const nombresFamilias = familiasUsuario.map((f) => f.nombre).join(', ')
+    return (
+      <div className="min-h-screen bg-surface-base flex flex-col">
+        <SubHeader paso={1} titulo="Producto fuera de tu sector" subtitulo="Este producto no pertenece a tu sector" onBack={handleCancelarConfirmacion} />
+        <div className="flex-1 flex flex-col px-4 pb-nav pt-6 gap-5">
+          {/* Icono de advertencia */}
+          <div className="flex flex-col items-center gap-3 text-center py-4">
+            <div className="p-4 bg-amber-50 rounded-full">
+              <ShieldAlert className="h-12 w-12 text-amber-500" />
+            </div>
+          </div>
+
+          {/* Info del producto bloqueado */}
+          <div className="bg-white rounded-card shadow-card px-4 py-3.5">
+            <p className="text-xs text-muted-foreground mb-0.5">Producto escaneado</p>
+            <p className="text-foreground font-bold text-base leading-tight">{productoEncontrado.descripcion}</p>
+            {productoEncontrado.marca && <p className="text-muted-foreground text-sm mt-0.5">{productoEncontrado.marca}</p>}
+          </div>
+
+          {/* Mensaje de restricción */}
+          <div className="bg-amber-50 border border-amber-200 rounded-card p-4 flex gap-3 items-start">
+            <ShieldAlert className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-amber-800 font-semibold text-sm">Este producto no pertenece a tu sector</p>
+              <p className="text-amber-700 text-sm mt-1">
+                Solo podés cargar productos de:{' '}
+                <span className="font-semibold">
+                  {nombresFamilias || 'tus familias asignadas'}
+                </span>
+              </p>
+            </div>
+          </div>
+
+          {/* Botón para volver a escanear */}
+          <button
+            type="button"
+            onClick={handleCancelarConfirmacion}
+            className="w-full min-h-[56px] flex items-center justify-center gap-3 bg-brand hover:bg-brand-hover text-white font-bold text-base rounded-card shadow-brand transition-all duration-150 active:scale-[0.98]"
+          >
+            <ScanLine className="h-5 w-5" />
+            Escanear otro
+          </button>
+        </div>
+      </div>
+    )
   }
 
   // ── Pantalla éxito ──────────────────────────────────────────────────────────
@@ -254,6 +350,9 @@ export default function Scanner() {
 
   // ── Nuevo producto ──────────────────────────────────────────────────────────
   if (paso === 'nuevo_producto') {
+    const mostrarSelectorFamilia = !esAdmin && familiasUsuario.length > 1
+    const familiaUnica = !esAdmin && familiasUsuario.length === 1 ? familiasUsuario[0] : null
+
     return (
       <div className="min-h-screen bg-surface-base flex flex-col">
         <SubHeader paso={1} titulo="Agregar producto" subtitulo="Completá los datos del nuevo producto" onBack={handleCancelarConfirmacion} />
@@ -290,6 +389,34 @@ export default function Scanner() {
                 <input id="np-venta" type="number" min={0} step={0.1} value={nuevoProductoVenta} onChange={(e) => setNuevoProductoVenta(parseFloat(e.target.value) || 0)} className={inputCls} />
               </div>
             </div>
+
+            {/* Selector de familia — solo si el usuario tiene múltiples familias */}
+            {mostrarSelectorFamilia && (
+              <div className="space-y-1.5">
+                <label htmlFor="np-familia" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Sector / Familia *</label>
+                <select
+                  id="np-familia"
+                  value={nuevoProductoFamiliaId}
+                  onChange={(e) => setNuevoProductoFamiliaId(e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="">Seleccioná una familia</option>
+                  {familiasUsuario.map((f) => (
+                    <option key={f.id} value={f.id}>{f.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Info de familia única — solo lectura */}
+            {familiaUnica && (
+              <div className="bg-brand-light border border-brand-muted rounded-lg px-3 py-2.5 flex items-center gap-2">
+                <Package className="h-4 w-4 text-brand shrink-0" />
+                <p className="text-brand text-sm">
+                  Se va a asignar a tu sector: <span className="font-semibold">{familiaUnica.nombre}</span>
+                </p>
+              </div>
+            )}
           </div>
           <button
             type="button"

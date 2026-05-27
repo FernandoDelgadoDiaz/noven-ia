@@ -1,4 +1,4 @@
-import { Package, ChevronRight } from 'lucide-react'
+import { Package, ChevronRight, HandHeart, Trash2 } from 'lucide-react'
 import { RISK_VISUAL } from '@/lib/risk-config'
 import { calcularDiasStock } from '@/lib/riesgo'
 import type { VencimientoConRiesgo } from '@/types/index'
@@ -6,6 +6,7 @@ import type { VencimientoConRiesgo } from '@/types/index'
 interface AlertaItemProps {
   vencimiento: VencimientoConRiesgo
   onClick?: () => void
+  onRegistrarAccion?: (vencimiento: VencimientoConRiesgo, tipo: 'donacion' | 'decomiso') => void
 }
 
 function formatTitulo(descripcion: string, gramaje: string | null, marca: string | null): string {
@@ -27,7 +28,7 @@ function formatDiasStock(cantidadLote: number, ventaMediaDiaria: number): string
   return `${calcularDiasStock(cantidadLote, ventaMediaDiaria)} días stock`
 }
 
-export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
+export default function AlertaItem({ vencimiento, onClick, onRegistrarAccion }: AlertaItemProps) {
   const cfg = RISK_VISUAL[vencimiento.nivel_riesgo]
   const { producto } = vencimiento
 
@@ -35,7 +36,16 @@ export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
   const diasLabel = formatDiasRestantes(vencimiento.dias_restantes)
   const stockLabel = formatDiasStock(vencimiento.cantidad, producto.venta_media_diaria)
   const isDecomiso = vencimiento.nivel_riesgo === 'decomiso'
+  const isDonacion = vencimiento.nivel_riesgo === 'donacion'
   const showPulse = cfg.dotPulse
+  const showAccionBtn = (isDecomiso || isDonacion) && Boolean(onRegistrarAccion)
+
+  function handleAccionClick(e: React.MouseEvent): void {
+    e.stopPropagation()
+    if (!onRegistrarAccion) return
+    const tipo = isDecomiso ? 'decomiso' : 'donacion'
+    onRegistrarAccion(vencimiento, tipo)
+  }
 
   return (
     <div
@@ -119,7 +129,7 @@ export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
 
       {/* Bottom: smart action chips */}
       {vencimiento.acciones_sugeridas.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 px-4 md:px-5 pb-4">
+        <div className="flex flex-wrap gap-1.5 px-4 md:px-5 pb-3">
           {vencimiento.acciones_sugeridas.map((accion) => (
             <span
               key={accion}
@@ -128,6 +138,27 @@ export default function AlertaItem({ vencimiento, onClick }: AlertaItemProps) {
               {accion}
             </span>
           ))}
+        </div>
+      )}
+
+      {/* Accion operativa: donacion o decomiso */}
+      {showAccionBtn && (
+        <div className="px-4 md:px-5 pb-4 pt-0">
+          <button
+            type="button"
+            onClick={handleAccionClick}
+            className={[
+              'w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-150 active:scale-[0.97]',
+              isDonacion
+                ? 'border-orange-500 text-orange-600 hover:bg-orange-50'
+                : 'border-red-600 text-red-600 hover:bg-red-50',
+            ].join(' ')}
+          >
+            {isDonacion
+              ? <><HandHeart className="h-4 w-4" aria-hidden="true" /> Registrar donación</>
+              : <><Trash2 className="h-4 w-4" aria-hidden="true" /> Registrar decomiso</>
+            }
+          </button>
         </div>
       )}
     </div>

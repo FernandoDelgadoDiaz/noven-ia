@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Package, ScanLine, RefreshCw, AlertTriangle, Bell, FolderX } from 'lucide-react'
+import { Package, ScanLine, RefreshCw, AlertTriangle, Bell, FolderX, HandHeart, Trash2 } from 'lucide-react'
 import { useVencimientos } from '@/hooks/useVencimientos'
 import { useAuth } from '@/hooks/useAuth'
+import { useAccionesOperativas } from '@/hooks/useAccionesOperativas'
 import RiesgoCard from '@/components/dashboard/RiesgoCard'
 import AlertaItem from '@/components/dashboard/AlertaItem'
 import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
+import AccionOperativaModal from '@/components/dashboard/AccionOperativaModal'
 import type { VencimientoConRiesgo } from '@/types/index'
 
+// TODO: obtener sucursal_id del perfil del usuario (multi-tenant pendiente)
 const SUCURSAL_ID = '00000000-0000-0000-0000-000000000001'
 
 const ORDEN_RIESGO: Record<string, number> = {
@@ -16,6 +19,11 @@ const ORDEN_RIESGO: Record<string, number> = {
   urgente: 2,
   radar: 3,
   seguro: 4,
+}
+
+interface AccionPendiente {
+  vencimiento: VencimientoConRiesgo
+  tipo: 'donacion' | 'decomiso'
 }
 
 function calcularUnidadesEnRiesgo(items: VencimientoConRiesgo[]): number {
@@ -38,7 +46,16 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const { data, loading, error, refetch, sinFamilias } = useVencimientos(SUCURSAL_ID)
   const { user } = useAuth()
+  const {
+    donaciones,
+    decomisos: decomisosTrimestrales,
+    loading: loadingAcciones,
+    trimestreInfo,
+    refetch: refetchAcciones,
+  } = useAccionesOperativas()
+
   const [vencimientoEditando, setVencimientoEditando] = useState<VencimientoConRiesgo | null>(null)
+  const [accionPendiente, setAccionPendiente] = useState<AccionPendiente | null>(null)
 
   const alertasOrdenadas = [...data].sort(
     (a, b) => ORDEN_RIESGO[a.nivel_riesgo] - ORDEN_RIESGO[b.nivel_riesgo],
@@ -53,15 +70,23 @@ export default function Dashboard() {
   )
 
   const enRadar = data.filter((v) => v.nivel_riesgo === 'radar').length
-  const decomisados = data.filter((v) => v.nivel_riesgo === 'decomiso').length
-  const hayCriticos = decomisados > 0 || data.some((v) => v.nivel_riesgo === 'donacion')
+  const hayCriticos = data.some((v) => v.nivel_riesgo === 'decomiso' || v.nivel_riesgo === 'donacion')
 
   const avatarLetter = user?.email?.[0]?.toUpperCase() ?? 'U'
+
+  function handleRegistrarAccion(vencimiento: VencimientoConRiesgo, tipo: 'donacion' | 'decomiso'): void {
+    setAccionPendiente({ vencimiento, tipo })
+  }
+
+  function handleAccionSuccess(): void {
+    void refetch()
+    void refetchAcciones()
+  }
 
   return (
     <div className="min-h-screen bg-surface-base">
 
-      {/* Modal */}
+      {/* Modal edición */}
       {vencimientoEditando !== null && (
         <EditarVencimientoModal
           vencimiento={{
@@ -87,6 +112,16 @@ export default function Dashboard() {
         />
       )}
 
+      {/* Modal acción operativa */}
+      {accionPendiente !== null && (
+        <AccionOperativaModal
+          vencimiento={accionPendiente.vencimiento}
+          tipo={accionPendiente.tipo}
+          onClose={() => setAccionPendiente(null)}
+          onSuccess={handleAccionSuccess}
+        />
+      )}
+
       {/* ── Header premium ──────────────────────────────────────────── */}
       <header className="sticky top-0 z-10 bg-white border-b border-border/40 px-4 md:px-8 py-4 md:py-5">
         <div className="flex items-center justify-between">
@@ -105,7 +140,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => void refetch()}
+              onClick={() => { void refetch(); void refetchAcciones() }}
               disabled={loading}
               className="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-muted text-muted-foreground transition-colors duration-150 disabled:opacity-40 active:scale-[0.94]"
               aria-label="Actualizar"
@@ -194,20 +229,12 @@ export default function Dashboard() {
             <section aria-label="Resumen de riesgos">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                 <RiesgoCard
-                  titulo="En riesgo"
-                  valor={enRiesgo}
-                  nivel={enRiesgo > 0 ? 'urgente' : 'seguro'}
-                  onClick={() => navigate('/vencimientos')}
-                  subtexto={enRiesgo > 0 ? 'Acción inmediata' : undefined}
-                  subtextoColor="text-red-500"
-                />
-                <RiesgoCard
-                  titulo="Unidades"
+                  titulo="Unidades en riesgo"
                   valor={unidadesEnRiesgo}
                   nivel={unidadesEnRiesgo > 0 ? 'urgente' : 'seguro'}
                   IconoComponente={Package}
                   onClick={() => navigate('/vencimientos')}
-                  subtexto={`En ${enRiesgo} productos`}
+                  subtexto={`En ${enRiesgo} producto${enRiesgo !== 1 ? 's' : ''}`}
                   subtextoColor="text-muted-foreground"
                 />
                 <RiesgoCard
@@ -218,14 +245,66 @@ export default function Dashboard() {
                   subtexto="Próximos 30 días"
                   subtextoColor="text-muted-foreground"
                 />
-                <RiesgoCard
-                  titulo="Decomiso"
-                  valor={decomisados}
-                  nivel={decomisados > 0 ? 'decomiso' : 'seguro'}
+
+                {/* Card DONACION trimestral */}
+                <div
                   onClick={() => navigate('/vencimientos')}
-                  subtexto={decomisados === 0 ? 'Excelente' : `${decomisados} vencidos`}
-                  subtextoColor={decomisados === 0 ? 'text-emerald-600' : 'text-red-500'}
-                />
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/vencimientos') }}
+                  className="bg-white rounded-[24px] shadow-card p-5 md:p-6 flex flex-col cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  aria-label={`Donaciones del trimestre: ${donaciones} unidades`}
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 ${donaciones > 0 ? 'bg-orange-100' : 'bg-emerald-100'}`}>
+                      <HandHeart className={`h-5 w-5 ${donaciones > 0 ? 'text-orange-600' : 'text-emerald-600'}`} aria-hidden="true" />
+                    </div>
+                    {!loadingAcciones && donaciones > 0 && (
+                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
+                        activo
+                      </span>
+                    )}
+                  </div>
+                  <p className={`text-5xl font-black tracking-tight leading-none tabular-nums ${donaciones > 0 ? 'text-orange-600' : 'text-emerald-600'}`}>
+                    {loadingAcciones ? '–' : donaciones}
+                  </p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mt-2.5 leading-tight">
+                    Donación
+                  </p>
+                  <p className={`text-[10px] font-medium mt-0.5 ${donaciones > 0 ? 'text-orange-500' : 'text-emerald-600'}`}>
+                    {loadingAcciones ? '...' : donaciones > 0 ? trimestreInfo.label : `Sin donaciones · ${trimestreInfo.label}`}
+                  </p>
+                </div>
+
+                {/* Card DECOMISO trimestral */}
+                <div
+                  onClick={() => navigate('/vencimientos')}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/vencimientos') }}
+                  className="bg-white rounded-[24px] shadow-card p-5 md:p-6 flex flex-col cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  aria-label={`Decomisos del trimestre: ${decomisosTrimestrales} unidades`}
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 ${decomisosTrimestrales > 0 ? 'bg-red-100' : 'bg-emerald-100'}`}>
+                      <Trash2 className={`h-5 w-5 ${decomisosTrimestrales > 0 ? 'text-red-600' : 'text-emerald-600'}`} aria-hidden="true" />
+                    </div>
+                    {!loadingAcciones && decomisosTrimestrales > 0 && (
+                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200">
+                        activo
+                      </span>
+                    )}
+                  </div>
+                  <p className={`text-5xl font-black tracking-tight leading-none tabular-nums ${decomisosTrimestrales > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                    {loadingAcciones ? '–' : decomisosTrimestrales}
+                  </p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mt-2.5 leading-tight">
+                    Decomiso
+                  </p>
+                  <p className={`text-[10px] font-medium mt-0.5 ${decomisosTrimestrales > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                    {loadingAcciones ? '...' : decomisosTrimestrales === 0 ? `Excelente · ${trimestreInfo.label}` : trimestreInfo.label}
+                  </p>
+                </div>
               </div>
             </section>
 
@@ -268,6 +347,7 @@ export default function Dashboard() {
                       key={v.id}
                       vencimiento={v}
                       onClick={() => setVencimientoEditando(v)}
+                      onRegistrarAccion={handleRegistrarAccion}
                     />
                   ))}
                 </div>
