@@ -167,7 +167,7 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
           <div className="flex items-start gap-3 flex-1 min-w-0">
             {/* Foto del producto o botón agregar foto */}
             <div className="shrink-0">
-              <div>
+              <div className="flex flex-col items-center gap-1.5">
                 {fotoUrl ? (
                   <img
                     src={fotoUrl}
@@ -175,22 +175,25 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
                     className="h-20 w-20 rounded-2xl object-cover"
                   />
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => fotoInputRef.current?.click()}
-                    disabled={subiendoFoto}
-                    className="h-20 w-20 rounded-2xl bg-muted flex flex-col items-center justify-center gap-1 hover:bg-muted/70 transition-colors disabled:opacity-50"
-                  >
-                    {subiendoFoto ? (
-                      <span className="h-5 w-5 border-2 border-brand/40 border-t-brand rounded-full animate-spin" />
-                    ) : (
-                      <>
-                        <span className="text-xl" aria-hidden="true">📷</span>
-                        <span className="text-[9px] text-muted-foreground font-medium leading-none">Agregar foto</span>
-                      </>
-                    )}
-                  </button>
+                  <div className="h-20 w-20 rounded-2xl bg-muted flex flex-col items-center justify-center gap-1">
+                    <span className="text-xl" aria-hidden="true">📷</span>
+                    <span className="text-[9px] text-muted-foreground font-medium leading-none">Sin foto</span>
+                  </div>
                 )}
+                <button
+                  type="button"
+                  onClick={() => fotoInputRef.current?.click()}
+                  disabled={subiendoFoto}
+                  className="w-20 py-1 rounded-lg bg-muted hover:bg-muted/70 text-muted-foreground hover:text-foreground text-[9px] font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                >
+                  {subiendoFoto ? (
+                    <span className="h-3 w-3 border-2 border-brand/40 border-t-brand rounded-full animate-spin" />
+                  ) : fotoUrl ? (
+                    'Cambiar foto'
+                  ) : (
+                    'Agregar foto'
+                  )}
+                </button>
                 <input
                   ref={fotoInputRef}
                   type="file"
@@ -201,10 +204,10 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
                 />
               </div>
               {fotoGuardada && (
-                <p className="text-[10px] text-emerald-600 font-medium text-center mt-1">Foto guardada</p>
+                <p className="text-[10px] text-emerald-600 font-medium text-center mt-0.5">Foto guardada</p>
               )}
               {errorFoto && (
-                <p className="text-[10px] text-red-500 font-medium text-center mt-1">{errorFoto}</p>
+                <p className="text-[10px] text-red-500 font-medium text-center mt-0.5">{errorFoto}</p>
               )}
             </div>
             <div className="flex-1 min-w-0">

@@ -1,4 +1,5 @@
-import { Package, ChevronRight, HandHeart, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { Package, ChevronRight, HandHeart, Trash2, X } from 'lucide-react'
 import { RISK_VISUAL } from '@/lib/risk-config'
 import { calcularDiasStock } from '@/lib/riesgo'
 import type { VencimientoConRiesgo } from '@/types/index'
@@ -31,6 +32,7 @@ function formatDiasStock(cantidadLote: number, ventaMediaDiaria: number): string
 export default function AlertaItem({ vencimiento, onClick, onRegistrarAccion }: AlertaItemProps) {
   const cfg = RISK_VISUAL[vencimiento.nivel_riesgo]
   const { producto } = vencimiento
+  const [lightboxAbierto, setLightboxAbierto] = useState(false)
 
   const titulo = formatTitulo(producto.descripcion, producto.gramaje, producto.marca)
   const diasLabel = formatDiasRestantes(vencimiento.dias_restantes)
@@ -48,6 +50,32 @@ export default function AlertaItem({ vencimiento, onClick, onRegistrarAccion }: 
   }
 
   return (
+    <>
+    {/* Lightbox */}
+    {lightboxAbierto && producto.imagen_url && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+        onClick={() => setLightboxAbierto(false)}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Foto de ${producto.descripcion}`}
+      >
+        <button
+          type="button"
+          onClick={() => setLightboxAbierto(false)}
+          className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+          aria-label="Cerrar foto"
+        >
+          <X className="h-6 w-6" />
+        </button>
+        <img
+          src={producto.imagen_url}
+          alt={producto.descripcion}
+          className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    )}
     <div
       className={[
         'bg-white rounded-[24px] shadow-card overflow-hidden',
@@ -67,11 +95,18 @@ export default function AlertaItem({ vencimiento, onClick, onRegistrarAccion }: 
         {/* Left: product thumbnail 60x60 */}
         <div className="relative shrink-0">
           {producto.imagen_url ? (
-            <img
-              src={producto.imagen_url}
-              alt={producto.descripcion}
-              className="h-[60px] w-[60px] rounded-2xl object-cover"
-            />
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setLightboxAbierto(true) }}
+              className="block h-[60px] w-[60px] rounded-2xl overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              aria-label={`Ver foto de ${producto.descripcion}`}
+            >
+              <img
+                src={producto.imagen_url}
+                alt={producto.descripcion}
+                className="h-full w-full object-cover"
+              />
+            </button>
           ) : (
             <div className={`h-[60px] w-[60px] rounded-2xl ${cfg.statIconBg} flex items-center justify-center`}>
               <Package className={`h-6 w-6 ${cfg.statIconColor}`} aria-hidden="true" />
@@ -162,5 +197,6 @@ export default function AlertaItem({ vencimiento, onClick, onRegistrarAccion }: 
         </div>
       )}
     </div>
+    </>
   )
 }
