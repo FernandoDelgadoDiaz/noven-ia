@@ -184,7 +184,8 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
                   type="button"
                   onClick={() => fotoInputRef.current?.click()}
                   disabled={subiendoFoto}
-                  className="w-20 py-1 rounded-lg bg-muted hover:bg-muted/70 text-muted-foreground hover:text-foreground text-[9px] font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                  className="w-20 py-1 rounded-lg bg-muted hover:bg-muted/70 text-muted-foreground hover:text-foreground text-[9px] font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-1 cursor-pointer touch-manipulation"
+                  style={{ WebkitTapHighlightColor: 'transparent' }}
                 >
                   {subiendoFoto ? (
                     <span className="h-3 w-3 border-2 border-brand/40 border-t-brand rounded-full animate-spin" />

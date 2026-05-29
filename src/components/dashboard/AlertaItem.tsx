@@ -53,28 +53,28 @@ export default function AlertaItem({ vencimiento, onClick, onRegistrarAccion }: 
     <>
     {/* Lightbox */}
     {lightboxAbierto && producto.imagen_url && (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      <button
+        type="button"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 cursor-pointer touch-manipulation w-full"
+        style={{ WebkitTapHighlightColor: 'transparent' }}
         onClick={() => setLightboxAbierto(false)}
         role="dialog"
         aria-modal="true"
         aria-label={`Foto de ${producto.descripcion}`}
       >
-        <button
-          type="button"
-          onClick={() => setLightboxAbierto(false)}
-          className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors"
+        <span
+          className="absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white"
           aria-label="Cerrar foto"
         >
           <X className="h-6 w-6" />
-        </button>
+        </span>
         <img
           src={producto.imagen_url}
           alt={producto.descripcion}
           className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         />
-      </div>
+      </button>
     )}
     <div
       className={[
@@ -98,7 +98,8 @@ export default function AlertaItem({ vencimiento, onClick, onRegistrarAccion }: 
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setLightboxAbierto(true) }}
-              className="block h-[60px] w-[60px] rounded-2xl overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              className="block h-[60px] w-[60px] rounded-2xl overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-brand cursor-pointer touch-manipulation"
+              style={{ WebkitTapHighlightColor: 'transparent' }}
               aria-label={`Ver foto de ${producto.descripcion}`}
             >
               <img
