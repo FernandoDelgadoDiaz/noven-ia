@@ -1,22 +1,25 @@
 import type { Handler, HandlerEvent, HandlerContext } from '@netlify/functions'
-
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-}
+import { verificarAdmin, getCorsHeaders } from './_auth'
 
 const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) => {
+  const corsHeaders = getCorsHeaders(event)
+
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: CORS_HEADERS, body: '' }
+    return { statusCode: 204, headers: corsHeaders, body: '' }
   }
 
   if (event.httpMethod !== 'GET') {
     return {
       statusCode: 405,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       body: JSON.stringify({ success: false, error: 'Método no permitido' }),
     }
+  }
+
+  // Verificar autenticación y rol admin
+  const auth = await verificarAdmin(event)
+  if (auth.error !== null) {
+    return auth.error
   }
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL
@@ -26,7 +29,7 @@ const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) =
     console.error('[listar-usuarios] Faltan variables de entorno')
     return {
       statusCode: 500,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       body: JSON.stringify({ success: false, error: 'Variables de entorno del servidor no configuradas' }),
     }
   }
@@ -44,7 +47,7 @@ const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) =
     console.error('[listar-usuarios] Error de red:', msg)
     return {
       statusCode: 502,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       body: JSON.stringify({ success: false, error: `Error de red: ${msg}` }),
     }
   }
@@ -54,7 +57,7 @@ const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) =
     console.error('[listar-usuarios] Supabase error:', adminResponse.status, errData)
     return {
       statusCode: 502,
-      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       body: JSON.stringify({ success: false, error: errData.message ?? `Error HTTP ${adminResponse.status}` }),
     }
   }
@@ -64,7 +67,7 @@ const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) =
 
   return {
     statusCode: 200,
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     body: JSON.stringify({ success: true, users }),
   }
 }

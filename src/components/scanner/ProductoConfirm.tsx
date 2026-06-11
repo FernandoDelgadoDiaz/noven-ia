@@ -162,7 +162,7 @@ export default function ProductoConfirm({ producto, onConfirm, onCancel }: Produ
             ref={inputRef}
             type="file"
             accept="image/*"
-            capture="environment"
+            {...(previewUrl ? {} : { capture: 'environment' as const })}
             className="hidden"
             onChange={(e) => void handleFileChange(e)}
           />

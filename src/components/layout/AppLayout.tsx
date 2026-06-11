@@ -20,9 +20,14 @@ const BASE_NAV_ITEMS: NavItem[] = [
 
 const ADMIN_NAV_ITEM: NavItem = { to: '/admin', label: 'Admin', Icon: Users }
 
-const BASE_MOBILE_NAV_ITEMS: NavItem[] = [
+// Mobile: izquierda del FAB central
+const MOBILE_NAV_LEFT: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { to: '/vencimientos', label: 'Vencimientos', Icon: Calendar },
+]
+
+// Mobile: derecha del FAB central (Admin se añade aquí si es admin)
+const MOBILE_NAV_RIGHT_BASE: NavItem[] = [
   { to: '/maestro', label: 'Maestro', Icon: Package },
   { to: '/importar', label: 'Importar', Icon: FileUp },
 ]
@@ -37,9 +42,9 @@ export default function AppLayout() {
   }
 
   const navItems = isAdmin ? [...BASE_NAV_ITEMS, ADMIN_NAV_ITEM] : BASE_NAV_ITEMS
-  const mobileNavItems = isAdmin
-    ? [...BASE_MOBILE_NAV_ITEMS, ADMIN_NAV_ITEM]
-    : BASE_MOBILE_NAV_ITEMS
+  const mobileNavRight = isAdmin
+    ? [...MOBILE_NAV_RIGHT_BASE, ADMIN_NAV_ITEM]
+    : MOBILE_NAV_RIGHT_BASE
   return (
     <div className="flex min-h-screen bg-surface-base">
 
@@ -119,25 +124,13 @@ export default function AppLayout() {
         </main>
       </div>
 
-      {/* ── Scanner flotante — mobile only ──────────────────────────── */}
-      <div className="md:hidden fixed bottom-[calc(32px+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-30">
-        <NavLink to="/scanner">
-          {({ isActive }) => (
-            <div
-              className={[
-                'h-16 w-16 rounded-full flex items-center justify-center active:scale-[0.95] transition-transform duration-150',
-                isActive
-                  ? 'bg-brand-hover shadow-brand-lg'
-                  : 'bg-brand shadow-brand-lg',
-              ].join(' ')}
-            >
-              <ScanLine className="h-7 w-7 text-white" aria-hidden="true" />
-            </div>
-          )}
-        </NavLink>
-      </div>
-
-      {/* ── Mobile bottom nav — hidden on desktop ───────────────────── */}
+      {/* ── Mobile bottom nav con FAB central — hidden on desktop ─────── */}
+      {/*
+        Patrón Material Design: el FAB se eleva sobre el navbar. La nav se
+        divide en dos mitades (izquierda | hueco central | derecha) y el FAB
+        flota con bottom posicionado para que su centro quede en el borde
+        superior del navbar, creando el efecto "apoyo".
+      */}
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-border/40 shadow-nav"
         style={{
@@ -147,14 +140,16 @@ export default function AppLayout() {
         aria-label="Navegación principal"
       >
         <div className="h-full flex items-center">
-          <div className={`flex-1 h-full grid items-center px-2 ${mobileNavItems.length >= 5 ? 'grid-cols-5' : 'grid-cols-4'}`}>
-            {mobileNavItems.map(({ to, label, Icon }) => (
+
+          {/* Mitad izquierda */}
+          <div className="flex flex-1 items-center justify-around h-full">
+            {MOBILE_NAV_LEFT.map(({ to, label, Icon }) => (
               <NavLink
                 key={to}
                 to={to}
                 className={({ isActive }) =>
                   [
-                    'flex flex-col items-center gap-1 py-2 rounded-xl transition-all duration-150 select-none active:scale-[0.94]',
+                    'flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-all duration-150 select-none active:scale-[0.94]',
                     isActive
                       ? 'text-brand bg-brand-light'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted',
@@ -163,16 +158,8 @@ export default function AppLayout() {
               >
                 {({ isActive }) => (
                   <>
-                    <Icon
-                      className={`h-5 w-5 transition-colors ${
-                        isActive ? 'text-brand' : 'text-muted-foreground'
-                      }`}
-                    />
-                    <span
-                      className={`text-[10px] leading-none transition-colors ${
-                        isActive ? 'text-brand font-semibold' : 'text-muted-foreground font-medium'
-                      }`}
-                    >
+                    <Icon className={`h-5 w-5 transition-colors ${isActive ? 'text-brand' : 'text-muted-foreground'}`} />
+                    <span className={`text-[10px] leading-none transition-colors ${isActive ? 'text-brand font-semibold' : 'text-muted-foreground font-medium'}`}>
                       {label}
                     </span>
                   </>
@@ -181,18 +168,69 @@ export default function AppLayout() {
             ))}
           </div>
 
-          {/* Cerrar sesión — mobile */}
-          <button
-            type="button"
-            onClick={() => void handleSignOut()}
-            className="w-14 shrink-0 h-full flex flex-col items-center justify-center gap-1 border-l border-border/40 text-muted-foreground hover:text-red-500 hover:bg-red-50/60 transition-colors active:scale-[0.94]"
-            aria-label="Cerrar sesión"
-          >
-            <LogOut className="h-5 w-5" />
-            <span className="text-[10px] font-medium leading-none">Salir</span>
-          </button>
+          {/* Hueco central para el FAB (64px ancho) */}
+          <div className="w-16 shrink-0" aria-hidden="true" />
+
+          {/* Mitad derecha */}
+          <div className="flex flex-1 items-center justify-around h-full">
+            {mobileNavRight.map(({ to, label, Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  [
+                    'flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-all duration-150 select-none active:scale-[0.94]',
+                    isActive
+                      ? 'text-brand bg-brand-light'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+                  ].join(' ')
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon className={`h-5 w-5 transition-colors ${isActive ? 'text-brand' : 'text-muted-foreground'}`} />
+                    <span className={`text-[10px] leading-none transition-colors ${isActive ? 'text-brand font-semibold' : 'text-muted-foreground font-medium'}`}>
+                      {label}
+                    </span>
+                  </>
+                )}
+              </NavLink>
+            ))}
+
+            {/* Cerrar sesión — mobile */}
+            <button
+              type="button"
+              onClick={() => void handleSignOut()}
+              className="flex flex-col items-center gap-1 px-2 py-2 rounded-xl text-muted-foreground hover:text-red-500 hover:bg-red-50/60 transition-colors active:scale-[0.94]"
+              aria-label="Cerrar sesión"
+            >
+              <LogOut className="h-5 w-5" />
+              <span className="text-[10px] font-medium leading-none">Salir</span>
+            </button>
+          </div>
         </div>
       </nav>
+
+      {/* ── FAB Scanner — encima del navbar, centrado ────────────────── */}
+      {/*
+        bottom = altura navbar (64px) - mitad FAB (32px) + 4px de margen visual
+        = 36px sobre el borde inferior de la pantalla
+        El FAB queda con su mitad sobre el navbar (patrón Material).
+      */}
+      <div className="md:hidden fixed bottom-[calc(36px+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-30">
+        <NavLink to="/scanner" aria-label="Ir al Scanner">
+          {({ isActive }) => (
+            <div
+              className={[
+                'h-16 w-16 rounded-full flex items-center justify-center active:scale-[0.95] transition-transform duration-150 shadow-brand-lg ring-4 ring-white',
+                isActive ? 'bg-brand-hover' : 'bg-brand',
+              ].join(' ')}
+            >
+              <ScanLine className="h-7 w-7 text-white" aria-hidden="true" />
+            </div>
+          )}
+        </NavLink>
+      </div>
     </div>
   )
 }

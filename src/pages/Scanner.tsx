@@ -3,13 +3,12 @@ import { ScanLine, Search, CheckCircle, Package, Barcode, ChevronLeft, ShieldAle
 import { useScanner } from '@/hooks/useScanner'
 import { useAuth } from '@/hooks/useAuth'
 import { useUsuarioFamilias } from '@/hooks/useUsuarioFamilias'
+import { useSucursalActual } from '@/hooks/useSucursalActual'
 import { supabase } from '@/lib/supabase'
 import ScannerModal from '@/components/scanner/ScannerModal'
 import ProductoConfirm from '@/components/scanner/ProductoConfirm'
 import VencimientoForm from '@/components/scanner/VencimientoForm'
 import type { Producto, Familia } from '@/types/index'
-
-const SUCURSAL_ID = '00000000-0000-0000-0000-000000000001'
 
 type Paso = 'inicio' | 'confirmando' | 'capturar_ean' | 'formulario' | 'exito' | 'nuevo_producto' | 'familia_bloqueada'
 type CategoriaProducto = 'CHOCOLATES' | 'CARAMELOS' | 'SNACKS' | 'CHICLES' | 'CEREALES' | 'OTRO'
@@ -21,6 +20,7 @@ export default function Scanner() {
   const { scanBarcode, scanning, error: scanError, reset } = useScanner()
   const { user } = useAuth()
   const { esAdmin, familiaIds, loading: famLoading } = useUsuarioFamilias()
+  const { sucursalId } = useSucursalActual()
 
   const [paso, setPaso] = useState<Paso>('inicio')
   const [modalAbierto, setModalAbierto] = useState(false)
@@ -99,7 +99,20 @@ export default function Scanner() {
       setEncontradoPorCodArt(!fueBarcode)
       setPaso('confirmando')
     } else if (!scanError) {
-      setNuevoProductoCodArt(codigo.trim())
+      const codigoTrim = codigo.trim()
+      if (/^\d{13}$/.test(codigoTrim)) {
+        // Es un EAN de 13 dígitos → precargar campo EAN, no cod_art
+        setNuevoProductoEan(codigoTrim)
+        setNuevoProductoCodArt('')
+      } else if (/^\d{7}$/.test(codigoTrim)) {
+        // Es un código interno de 7 dígitos → precargar cod_art
+        setNuevoProductoCodArt(codigoTrim)
+        setNuevoProductoEan('')
+      } else {
+        // Formato desconocido → dejar ambos vacíos
+        setNuevoProductoCodArt('')
+        setNuevoProductoEan('')
+      }
       setErrorBusqueda('no_encontrado')
     }
   }
@@ -361,7 +374,7 @@ export default function Scanner() {
         <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4">
           <VencimientoForm
             producto={productoEncontrado}
-            sucursalId={SUCURSAL_ID}
+            sucursalId={sucursalId}
             usuarioId={user?.id ?? ''}
             onSuccess={handleGuardadoExitoso}
           />

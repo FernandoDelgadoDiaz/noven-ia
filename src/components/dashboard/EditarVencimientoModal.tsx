@@ -199,7 +199,7 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
                   ref={fotoInputRef}
                   type="file"
                   accept="image/*"
-                  capture="environment"
+                  {...(fotoUrl ? {} : { capture: 'environment' as const })}
                   className="hidden"
                   onChange={(e) => { void handleFotoChange(e) }}
                 />

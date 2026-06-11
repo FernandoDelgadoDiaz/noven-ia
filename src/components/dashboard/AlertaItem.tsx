@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Package, ChevronRight, HandHeart, Trash2, X } from 'lucide-react'
 import { RISK_VISUAL } from '@/lib/risk-config'
 import { calcularDiasStock } from '@/lib/riesgo'
@@ -34,6 +34,12 @@ export default function AlertaItem({ vencimiento, onClick, onRegistrarAccion }: 
   const { producto } = vencimiento
   const [lightboxAbierto, setLightboxAbierto] = useState(false)
 
+  // Bloquear scroll del body mientras el lightbox está abierto
+  useEffect(() => {
+    document.body.style.overflow = lightboxAbierto ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [lightboxAbierto])
+
   const titulo = formatTitulo(producto.descripcion, producto.gramaje, producto.marca)
   const diasLabel = formatDiasRestantes(vencimiento.dias_restantes)
   const stockLabel = formatDiasStock(vencimiento.cantidad, producto.venta_media_diaria)
@@ -51,30 +57,32 @@ export default function AlertaItem({ vencimiento, onClick, onRegistrarAccion }: 
 
   return (
     <>
-    {/* Lightbox */}
+    {/* Lightbox — div en lugar de button para HTML válido en iOS Safari */}
     {lightboxAbierto && producto.imagen_url && (
-      <button
-        type="button"
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 cursor-pointer touch-manipulation w-full"
-        style={{ WebkitTapHighlightColor: 'transparent' }}
-        onClick={() => setLightboxAbierto(false)}
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 cursor-pointer"
         role="dialog"
         aria-modal="true"
         aria-label={`Foto de ${producto.descripcion}`}
+        onClick={() => setLightboxAbierto(false)}
+        onKeyDown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') setLightboxAbierto(false) }}
+        tabIndex={0}
       >
-        <span
+        <button
+          type="button"
           className="absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white"
           aria-label="Cerrar foto"
+          onClick={(e) => { e.stopPropagation(); setLightboxAbierto(false) }}
         >
           <X className="h-6 w-6" />
-        </span>
+        </button>
         <img
           src={producto.imagen_url}
           alt={producto.descripcion}
           className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         />
-      </button>
+      </div>
     )}
     <div
       className={[

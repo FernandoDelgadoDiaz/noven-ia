@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-
-// TODO: obtener sucursal_id del perfil del usuario (multi-tenant pendiente)
-const SUCURSAL_ID = '00000000-0000-0000-0000-000000000001'
+import { useSucursalActual } from '@/hooks/useSucursalActual'
 
 export interface TrimestreInfo {
   trimestre: number
@@ -48,6 +46,7 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
   const [decomisos, setDecomisos] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { sucursalId } = useSucursalActual()
 
   // useMemo garantiza referencia estable mientras trimestre/anio no cambien
   const trimestreInfo = useMemo(() => getTrimestreActual(), [])
@@ -63,7 +62,7 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
       .select('tipo, cantidad')
       .eq('trimestre', trimestre)
       .eq('anio', anio)
-      .eq('sucursal_id', SUCURSAL_ID)
+      .eq('sucursal_id', sucursalId)
 
     if (fetchError) {
       setError(fetchError.message)
@@ -82,7 +81,7 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
     setDonaciones(totalDonaciones)
     setDecomisos(totalDecomisos)
     setLoading(false)
-  }, [trimestreInfo])
+  }, [trimestreInfo, sucursalId])
 
   const refetch = useCallback((): Promise<void> => {
     return fetchData()

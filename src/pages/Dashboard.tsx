@@ -4,14 +4,12 @@ import { Package, ScanLine, RefreshCw, AlertTriangle, Bell, FolderX, HandHeart, 
 import { useVencimientos } from '@/hooks/useVencimientos'
 import { useAuth } from '@/hooks/useAuth'
 import { useAccionesOperativas } from '@/hooks/useAccionesOperativas'
+import { useSucursalActual } from '@/hooks/useSucursalActual'
 import RiesgoCard from '@/components/dashboard/RiesgoCard'
 import AlertaItem from '@/components/dashboard/AlertaItem'
 import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
 import AccionOperativaModal from '@/components/dashboard/AccionOperativaModal'
 import type { VencimientoConRiesgo } from '@/types/index'
-
-// TODO: obtener sucursal_id del perfil del usuario (multi-tenant pendiente)
-const SUCURSAL_ID = '00000000-0000-0000-0000-000000000001'
 
 const ORDEN_RIESGO: Record<string, number> = {
   decomiso: 0,
@@ -44,7 +42,8 @@ function getGreeting(): string {
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { data, loading, error, refetch, sinFamilias } = useVencimientos(SUCURSAL_ID)
+  const { sucursalId } = useSucursalActual()
+  const { data, loading, error, refetch, sinFamilias } = useVencimientos(sucursalId)
   const { user } = useAuth()
   const {
     donaciones,
@@ -192,8 +191,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Skeleton */}
-        {loading && data.length === 0 && (
+        {/* Skeleton — se muestra mientras loading sin importar si hay data o no */}
+        {loading && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             {[0, 1, 2, 3].map((i) => (
               <div key={i} className="rounded-[24px] bg-white shadow-card h-[136px] animate-pulse" />

@@ -4,8 +4,7 @@ import { calcularDiasRestantes, calcularNivelRiesgo } from '@/lib/riesgo'
 export type { NivelRiesgo } from '@/lib/riesgo'
 import type { NivelRiesgo } from '@/lib/riesgo'
 import { useUsuarioFamilias } from '@/hooks/useUsuarioFamilias'
-
-const SUCURSAL_ID = '00000000-0000-0000-0000-000000000001'
+import { useSucursalActual } from '@/hooks/useSucursalActual'
 
 export type FiltroNivel = 'todos' | NivelRiesgo
 
@@ -80,6 +79,7 @@ interface UseVencimientosListaReturn {
 
 export function useVencimientosLista(): UseVencimientosListaReturn {
   const { esAdmin, familiaIds, sinFamilias, loading: famLoading } = useUsuarioFamilias()
+  const { sucursalId } = useSucursalActual()
   const [rawVencimientos, setRawVencimientos] = useState<VencimientoConProducto[]>([])
   const [fetchLoading, setFetchLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -103,7 +103,7 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
         )
       `)
       .eq('activo', true)
-      .eq('sucursal_id', SUCURSAL_ID)
+      .eq('sucursal_id', sucursalId)
       .order('fecha_vencimiento', { ascending: true })
 
     if (fetchError) {
@@ -137,7 +137,7 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
 
     setRawVencimientos(procesados)
     setFetchLoading(false)
-  }, [])
+  }, [sucursalId])
 
   const refetch = useCallback(() => {
     setRefreshKey((k) => k + 1)

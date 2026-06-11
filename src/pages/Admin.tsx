@@ -16,6 +16,11 @@ import {
   Briefcase,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+
+async function getAccessToken(): Promise<string> {
+  const { data } = await supabase.auth.getSession()
+  return data.session?.access_token ?? ''
+}
 import type {
   UsuarioConEmail,
   Sector,
@@ -164,9 +169,13 @@ function ModalUsuario({
       if (modo === 'crear') {
         // 1. Crear usuario en auth via Netlify Function
         const fnUrl = '/.netlify/functions/crear-usuario'
+        const accessToken = await getAccessToken()
         const res = await fetch(fnUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
           body: JSON.stringify({
             nombre: form.nombre.trim(),
             email: form.email.trim(),
@@ -534,7 +543,12 @@ export default function Admin() {
     // Traer emails desde auth via función admin
     const emailMap = new Map<string, string>()
     try {
-      const fnRes = await fetch('/.netlify/functions/listar-usuarios')
+      const accessToken = await getAccessToken()
+      const fnRes = await fetch('/.netlify/functions/listar-usuarios', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+      })
       if (fnRes.ok) {
         const fnData = await fnRes.json() as { users?: { id: string; email: string }[] }
         for (const u of fnData.users ?? []) emailMap.set(u.id, u.email)

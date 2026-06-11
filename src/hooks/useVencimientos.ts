@@ -16,18 +16,6 @@ interface UseVencimientosReturn extends VencimientosState {
 }
 
 /**
- * Devuelve la fecha de hoy en formato YYYY-MM-DD (sin conversión de zona horaria)
- * para comparar directamente con columnas `date` de Postgres.
- */
-function todayIso(): string {
-  const d = new Date()
-  const yyyy = d.getFullYear()
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const dd = String(d.getDate()).padStart(2, '0')
-  return `${yyyy}-${mm}-${dd}`
-}
-
-/**
  * Narrowing helper: valida que una fila de Supabase incluye el join de producto.
  */
 function hasProducto(
@@ -51,8 +39,6 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
 
     setFetchLoading(true)
     setFetchError(null)
-
-    const hoy = todayIso()
 
     const { data: rows, error } = await supabase
       .from('vencimientos')
@@ -91,7 +77,6 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
       )
       .eq('sucursal_id', sucursalId)
       .eq('activo', true)
-      .gte('fecha_vencimiento', hoy)
       .order('fecha_vencimiento', { ascending: true })
 
     if (error) {

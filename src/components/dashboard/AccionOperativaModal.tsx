@@ -3,10 +3,8 @@ import { X, HandHeart, Trash2, AlertTriangle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { getTrimestreActual } from '@/hooks/useAccionesOperativas'
+import { useSucursalActual } from '@/hooks/useSucursalActual'
 import type { VencimientoConRiesgo } from '@/types/index'
-
-// TODO: obtener sucursal_id del perfil del usuario (multi-tenant pendiente)
-const SUCURSAL_ID = '00000000-0000-0000-0000-000000000001'
 
 type TipoAccion = 'donacion' | 'decomiso'
 
@@ -29,6 +27,7 @@ export default function AccionOperativaModal({
   onSuccess,
 }: AccionOperativaModalProps) {
   const { user } = useAuth()
+  const { sucursalId } = useSucursalActual()
   const [observaciones, setObservaciones] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -80,7 +79,7 @@ export default function AccionOperativaModal({
       cantidad: vencimiento.cantidad,
       producto_id: vencimiento.producto_id,
       vencimiento_id: vencimiento.id,
-      sucursal_id: SUCURSAL_ID,
+      sucursal_id: sucursalId,
       usuario_id: user.id,
       trimestre,
       anio,
