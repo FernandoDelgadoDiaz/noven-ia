@@ -262,7 +262,7 @@
 
 ## MEDIO — optimizaciones técnicas
 
-### M1 — N+1 implícito en Admin.tsx al cargar usuarios
+### [x] M1 — N+1 implícito en Admin.tsx al cargar usuarios
 - **Archivos:** `src/pages/Admin.tsx:534-619`
 - **Problema:** Hace 5 queries secuenciales (Netlify Function listar-usuarios, usuarios, usuario_familias, familias, sectores) y mapea en memoria. Para 50 usuarios funciona, para 500 empieza a ser lento. Además, las 4 últimas queries a Supabase son secuenciales — se podrían paralelizar con `Promise.all`.
 - **Causa raíz:** Implementación straightforward sin pensar en escala.
@@ -272,7 +272,7 @@
 - **Agente:** backend-dev
 - **Criterio medible:** La página Admin carga en menos de 500ms para 100 usuarios. `cargarUsuarios()` hace máximo 2 fetches (Netlify Function + 1 query Supabase).
 
-### M2 — useProductos.fetchAll trae todo sin paginación
+### [x] M2 — useProductos.fetchAll trae todo sin paginación
 - **Archivos:** `src/hooks/useProductos.ts:24-39`
 - **Problema:** Hace `SELECT * FROM productos WHERE activo = true` sin LIMIT. Hoy con ~500-2000 productos del surtido del super está bien, pero el hook se monta en cada uso del Scanner y descarga toda la tabla aunque solo se busque uno. `searchByBarcode` no usa `state.data`, hace queries directas. Entonces el `fetchAll` es trabajo desperdiciado.
 - **Causa raíz:** Hook diseñado para listar pero solo se usa para buscar.
@@ -280,7 +280,7 @@
 - **Agente:** frontend-dev
 - **Criterio medible:** Al abrir Scanner no se dispara un `SELECT * FROM productos`. La página Vencimientos también, no descarga el catalog completo si solo lo lista.
 
-### M3 — Trigger updated_at en productos pero NO en vencimientos ni acciones_operativas
+### [x] M3 — Trigger updated_at en productos pero NO en vencimientos ni acciones_operativas
 - **Archivos:** `supabase/migrations/001_initial_schema.sql:101-104`
 - **Problema:** Solo `productos` tiene trigger `set_updated_at`. `vencimientos` no tiene columna `updated_at` y `acciones_operativas` no tampoco. Cuando un operador hace soft-delete con `update activo=false`, no queda registro de cuándo. Si dos personas editan el mismo vencimiento, no se puede auditar.
 - **Causa raíz:** Solo se replicó el patrón en una tabla.
@@ -288,7 +288,7 @@
 - **Agente:** backend-dev
 - **Criterio medible:** `SELECT updated_at FROM vencimientos LIMIT 1` devuelve un timestamp en lugar de error.
 
-### M4 — Filtro de fecha en useVencimientosLista no excluye muy viejos
+### [x] M4 — Filtro de fecha en useVencimientosLista no excluye muy viejos
 - **Archivos:** `src/hooks/useVencimientosLista.ts:95-107`
 - **Problema:** Trae TODOS los vencimientos activos sin filtro de fecha. Un vencimiento de hace 3 años que nadie cerró sigue cargándose y procesándose en el cliente. Eventualmente el dataset crece sin freno.
 - **Causa raíz:** Falta filtro temporal.

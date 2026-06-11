@@ -535,96 +535,59 @@ export default function Admin() {
     setSectoresConFamilias(grupos)
   }, [])
 
-  // Cargar usuarios
+  // Cargar usuarios — 2 fetches máximo: Netlify Function + 1 query a la vista
   const cargarUsuarios = useCallback(async () => {
     setLoading(true)
     setError(null)
 
-    // Traer emails desde auth via función admin
-    const emailMap = new Map<string, string>()
-    try {
-      const accessToken = await getAccessToken()
-      const fnRes = await fetch('/.netlify/functions/listar-usuarios', {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      })
-      if (fnRes.ok) {
-        const fnData = await fnRes.json() as { users?: { id: string; email: string }[] }
-        for (const u of fnData.users ?? []) emailMap.set(u.id, u.email)
-      }
-    } catch { /* silencioso — email quedará vacío si falla */ }
+    // Fetch 1: emails desde auth via función admin (paralelo con fetch 2)
+    const emailPromise = (async () => {
+      const emailMap = new Map<string, string>()
+      try {
+        const accessToken = await getAccessToken()
+        const fnRes = await fetch('/.netlify/functions/listar-usuarios', {
+          headers: { 'Authorization': `Bearer ${accessToken}` },
+        })
+        if (fnRes.ok) {
+          const fnData = await fnRes.json() as { users?: { id: string; email: string }[] }
+          for (const u of fnData.users ?? []) emailMap.set(u.id, u.email)
+        }
+      } catch { /* silencioso — email quedará vacío si falla */ }
+      return emailMap
+    })()
 
-    // Traer perfiles de public.usuarios
-    const { data: perfiles, error: errP } = await supabase
-      .from('usuarios')
-      .select('id, nombre, rol, sucursal_id, activo')
+    // Fetch 2: una sola query a la vista que ya trae usuario + familias + sectores
+    interface ViewRow {
+      id: string
+      nombre: string
+      rol: RolUsuario
+      sucursal_id: string | null
+      activo: boolean
+      familias: { id: string; nombre: string; codigo: string; sector_id: string; sector_nombre: string }[]
+    }
+    const viewPromise = supabase
+      .from('vw_usuarios_completos')
+      .select('id, nombre, rol, sucursal_id, activo, familias')
       .order('nombre')
 
-    if (errP) {
+    const [emailMap, { data: viewRows, error: viewError }] = await Promise.all([emailPromise, viewPromise])
+
+    if (viewError) {
       setError('No pudimos cargar la lista de usuarios. Revisá tu conexión e intentá de nuevo.')
       setLoading(false)
       return
     }
 
-    // Traer relaciones usuario_familias
-    const { data: uf, error: errUF } = await supabase
-      .from('usuario_familias')
-      .select('usuario_id, familia_id')
-
-    if (errUF) {
-      setError('Error al cargar familias asignadas.')
-      setLoading(false)
-      return
-    }
-
-    // Traer todas las familias con sus sectores
-    const { data: todasFamilias, error: errF } = await supabase
-      .from('familias')
-      .select('id, nombre, codigo, sector_id')
-
-    const { data: todosSectores } = await supabase
-      .from('sectores')
-      .select('id, nombre, codigo')
-
-    const sectorMap = new Map<string, { nombre: string; codigo: string }>(
-      (todosSectores ?? []).map((s: { id: string; nombre: string; codigo: string }) => [s.id, { nombre: s.nombre, codigo: s.codigo }]),
-    )
-
-    const familiaMap = new Map<string, { id: string; nombre: string; codigo: string; sector_id: string }>(
-      (todasFamilias ?? []).map((f: { id: string; nombre: string; codigo: string; sector_id: string }) => [f.id, f]),
-    )
-
-    if (errF) {
-      setError('Error al cargar datos de familias.')
-      setLoading(false)
-      return
-    }
-
-    // Mapear
-    const usuariosConEmail: UsuarioConEmail[] = (perfiles ?? []).map((p: {
-      id: string; nombre: string; rol: RolUsuario; sucursal_id: string | null; activo: boolean
-    }) => {
-      const familiasUsuario = (uf ?? [])
-        .filter((row: { usuario_id: string; familia_id: string }) => row.usuario_id === p.id)
-        .map((row: { usuario_id: string; familia_id: string }) => {
-          const f = familiaMap.get(row.familia_id)
-          if (!f) return null
-          const sector = sectorMap.get(f.sector_id)
-          return {
-            id: f.id,
-            nombre: f.nombre,
-            codigo: f.codigo,
-            sector_id: f.sector_id,
-            sector_nombre: sector?.nombre ?? '',
-          }
-        })
-        .filter((x): x is NonNullable<typeof x> => x !== null)
-
+    const usuariosConEmail: UsuarioConEmail[] = (viewRows ?? []).map((row: unknown) => {
+      const r = row as ViewRow
       return {
-        ...p,
-        email: emailMap.get(p.id) ?? '',
-        familias: familiasUsuario,
+        id: r.id,
+        nombre: r.nombre,
+        rol: r.rol,
+        sucursal_id: r.sucursal_id,
+        activo: r.activo,
+        email: emailMap.get(r.id) ?? '',
+        familias: Array.isArray(r.familias) ? r.familias : [],
       }
     })
 

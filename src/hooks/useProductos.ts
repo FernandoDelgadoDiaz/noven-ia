@@ -1,47 +1,19 @@
-import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { Producto } from '@/types/index'
 
-interface ProductosState {
-  data: Producto[]
-  loading: boolean
-  error: string | null
-}
-
-interface UseProductosReturn extends ProductosState {
+interface UseProductosReturn {
   searchByBarcode: (barcode: string) => Promise<Producto | null>
   upsertProducto: (p: Partial<Producto>) => Promise<void>
-  refetch: () => Promise<void>
 }
 
+/**
+ * Hook de acceso al catálogo de productos.
+ *
+ * NO descarga la tabla completa al montar. Cada operación hace una query
+ * puntual contra Supabase. Si en el futuro se necesita listar el catálogo
+ * completo (ej. página Maestro), crear un hook dedicado con paginación.
+ */
 export function useProductos(): UseProductosReturn {
-  const [state, setState] = useState<ProductosState>({
-    data: [],
-    loading: true,
-    error: null,
-  })
-
-  const fetchAll = useCallback(async (): Promise<void> => {
-    setState((prev) => ({ ...prev, loading: true, error: null }))
-
-    const { data, error } = await supabase
-      .from('productos')
-      .select('*')
-      .eq('activo', true)
-      .order('descripcion', { ascending: true })
-
-    if (error) {
-      setState({ data: [], loading: false, error: error.message })
-      return
-    }
-
-    setState({ data: (data as Producto[]) ?? [], loading: false, error: null })
-  }, [])
-
-  useEffect(() => {
-    void fetchAll()
-  }, [fetchAll])
-
   /**
    * Busca un producto por código de barras. Si no encuentra resultado,
    * intenta con cod_art como fallback (útil cuando el barcode coincide
@@ -86,7 +58,6 @@ export function useProductos(): UseProductosReturn {
    */
   async function upsertProducto(p: Partial<Producto>): Promise<void> {
     if (p.id) {
-      // Update: solo campos que llegan en `p`
       const { id, created_at: _created, ...fields } = p as Partial<Producto> & { id: string }
       void _created
       const { error } = await supabase
@@ -99,17 +70,10 @@ export function useProductos(): UseProductosReturn {
       const { error } = await supabase.from('productos').insert(p)
       if (error) throw new Error(error.message)
     }
-
-    // Refrescar la lista en memoria
-    await fetchAll()
   }
 
   return {
-    data: state.data,
-    loading: state.loading,
-    error: state.error,
     searchByBarcode,
     upsertProducto,
-    refetch: fetchAll,
   }
 }

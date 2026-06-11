@@ -92,6 +92,11 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
     setFetchLoading(true)
     setError(null)
 
+    // Filtro temporal: no traer vencimientos con fecha anterior a hoy - 90 días
+    const desde = new Date()
+    desde.setDate(desde.getDate() - 90)
+    const desdeIso = desde.toISOString().slice(0, 10) // YYYY-MM-DD
+
     const { data: rows, error: fetchError } = await supabase
       .from('vencimientos')
       .select(`
@@ -104,6 +109,7 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
       `)
       .eq('activo', true)
       .eq('sucursal_id', sucursalId)
+      .gte('fecha_vencimiento', desdeIso)
       .order('fecha_vencimiento', { ascending: true })
 
     if (fetchError) {
