@@ -8,9 +8,12 @@ import { supabase } from '@/lib/supabase'
 import ScannerModal from '@/components/scanner/ScannerModal'
 import ProductoConfirm from '@/components/scanner/ProductoConfirm'
 import VencimientoForm from '@/components/scanner/VencimientoForm'
+import type { VencimientoExistente } from '@/components/scanner/VencimientoForm'
+import { calcularDiasRestantes, calcularNivelRiesgo } from '@/lib/riesgo'
+import { RISK_VISUAL } from '@/lib/risk-config'
 import type { Producto, Familia } from '@/types/index'
 
-type Paso = 'inicio' | 'confirmando' | 'capturar_ean' | 'completar_cod_art' | 'formulario' | 'exito' | 'nuevo_producto' | 'familia_bloqueada'
+type Paso = 'inicio' | 'confirmando' | 'capturar_ean' | 'completar_cod_art' | 'vencimiento_existente' | 'formulario' | 'exito' | 'nuevo_producto' | 'familia_bloqueada'
 type CategoriaProducto = 'CHOCOLATES' | 'CARAMELOS' | 'SNACKS' | 'CHICLES' | 'CEREALES' | 'OTRO'
 const CATEGORIAS: CategoriaProducto[] = ['CHOCOLATES', 'CARAMELOS', 'SNACKS', 'CHICLES', 'CEREALES', 'OTRO']
 
@@ -30,6 +33,9 @@ export default function Scanner() {
   const [productoEncontrado, setProductoEncontrado] = useState<Producto | null>(null)
   const [, setEncontradoPorCodArt] = useState(false)
   const [, setGuardadoExitoso] = useState(false)
+
+  // Vencimiento activo existente del producto (regla: máximo 1 por producto/sucursal)
+  const [vencimientoExistente, setVencimientoExistente] = useState<VencimientoExistente | null>(null)
 
   const [guardandoEan, setGuardandoEan] = useState(false)
   const [errorEan, setErrorEan] = useState<string | null>(null)
@@ -98,6 +104,20 @@ export default function Scanner() {
       setProductoEncontrado(resultado)
       const fueBarcode = esBarcode || resultado.codigo_barras === codigo.trim()
       setEncontradoPorCodArt(!fueBarcode)
+
+      // Regla de negocio: máximo 1 vencimiento activo por producto/sucursal.
+      // Si ya existe, el flujo será actualizar ese registro en lugar de crear un duplicado.
+      // Usamos limit(1) (no maybeSingle) para tolerar duplicados legacy y tomar el más reciente.
+      const { data: vencData } = await supabase
+        .from('vencimientos')
+        .select('id, cantidad, fecha_vencimiento, lote')
+        .eq('producto_id', resultado.id)
+        .eq('sucursal_id', sucursalId)
+        .eq('activo', true)
+        .order('fecha_carga', { ascending: false })
+        .limit(1)
+      setVencimientoExistente((vencData?.[0] as VencimientoExistente | undefined) ?? null)
+
       setPaso('confirmando')
     } else if (!scanError) {
       const codigoTrim = codigo.trim()
@@ -134,6 +154,8 @@ export default function Scanner() {
   function continuarDesdeProducto(p: Producto): void {
     if (!p.codigo_barras) { setPaso('capturar_ean'); return }
     if (!p.cod_art || p.cod_art.trim() === '') { setPaso('completar_cod_art'); return }
+    // Si el producto ya tiene un vencimiento activo, mostrar ese registro (actualizar, no duplicar)
+    if (vencimientoExistente) { setPaso('vencimiento_existente'); return }
     setPaso('formulario')
   }
 
@@ -159,6 +181,7 @@ export default function Scanner() {
   function handleCancelarConfirmacion(): void {
     setProductoEncontrado(null)
     setEncontradoPorCodArt(false)
+    setVencimientoExistente(null)
     reset()
     setPaso('inicio')
     setCodigoManual('')
@@ -206,6 +229,7 @@ export default function Scanner() {
       setErrorBusqueda(null)
       setGuardadoExitoso(false)
       setEncontradoPorCodArt(false)
+      setVencimientoExistente(null)
       setErrorEan(null)
       reset()
       setPaso('inicio')
@@ -362,17 +386,89 @@ export default function Scanner() {
     )
   }
 
+  // ── Registro existente (actualizar, no duplicar) ────────────────────────────
+  if (paso === 'vencimiento_existente' && productoEncontrado && vencimientoExistente) {
+    const diasRestantes = calcularDiasRestantes(vencimientoExistente.fecha_vencimiento)
+    const nivel = calcularNivelRiesgo(diasRestantes, vencimientoExistente.cantidad, productoEncontrado.venta_media_diaria)
+    const viz = RISK_VISUAL[nivel]
+    const [y, m, d] = vencimientoExistente.fecha_vencimiento.slice(0, 10).split('-')
+    const fechaFmt = `${d}/${m}/${y}`
+    return (
+      <div className="min-h-screen bg-surface-base flex flex-col">
+        <SubHeader paso={2} titulo="Registro existente" subtitulo="Este producto ya tiene un vencimiento cargado" onBack={handleCancelarConfirmacion} />
+        <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4 flex flex-col gap-4">
+          {/* Producto */}
+          <div className="bg-white rounded-card shadow-card p-4 flex gap-3 items-center">
+            <div className="h-16 w-16 rounded-xl bg-muted overflow-hidden shrink-0 flex items-center justify-center">
+              {productoEncontrado.imagen_url ? (
+                <img src={productoEncontrado.imagen_url} alt={productoEncontrado.descripcion} className="h-full w-full object-cover" />
+              ) : (
+                <Package className="h-7 w-7 text-muted-foreground" aria-hidden="true" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="text-foreground font-bold text-base leading-tight">{productoEncontrado.descripcion}</p>
+              {productoEncontrado.marca && <p className="text-muted-foreground text-sm mt-0.5">{productoEncontrado.marca}</p>}
+            </div>
+          </div>
+
+          {/* Datos actuales del vencimiento */}
+          <div className="bg-white rounded-card shadow-card p-4 flex flex-col gap-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Vencimiento actual</p>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Fecha de vencimiento</span>
+              <span className="text-sm font-semibold text-foreground tabular-nums">{fechaFmt}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Cantidad</span>
+              <span className="text-sm font-semibold text-foreground tabular-nums">{vencimientoExistente.cantidad}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Nivel de riesgo</span>
+              <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full leading-tight ${viz.badge}`}>{viz.label.toUpperCase()}</span>
+            </div>
+          </div>
+
+          {/* Mensaje */}
+          <div className="bg-brand-light border border-brand-muted rounded-card p-4 flex gap-3 items-start">
+            <AlertCircle className="h-5 w-5 text-brand shrink-0 mt-0.5" />
+            <p className="text-brand text-sm">Este producto ya tiene un vencimiento registrado. ¿Querés actualizarlo?</p>
+          </div>
+
+          {/* Acciones */}
+          <button
+            type="button"
+            onClick={() => setPaso('formulario')}
+            className="w-full min-h-[56px] flex items-center justify-center gap-3 bg-brand hover:bg-brand-hover text-white font-bold text-base rounded-card shadow-brand transition-all duration-150 active:scale-[0.98]"
+          >
+            <CheckCircle className="h-5 w-5" />
+            Actualizar registro
+          </button>
+          <button type="button" onClick={handleCancelarConfirmacion} className="w-full py-3 text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   // ── Formulario (paso 3) ─────────────────────────────────────────────────────
   if (paso === 'formulario' && productoEncontrado) {
     return (
       <div className="min-h-screen bg-surface-base flex flex-col">
-        <SubHeader paso={3} titulo="Cargar vencimiento" subtitulo="Completá los datos del vencimiento" onBack={handleCancelarConfirmacion} />
+        <SubHeader
+          paso={3}
+          titulo={vencimientoExistente ? 'Actualizar vencimiento' : 'Cargar vencimiento'}
+          subtitulo={vencimientoExistente ? 'Editá los datos del vencimiento existente' : 'Completá los datos del vencimiento'}
+          onBack={handleCancelarConfirmacion}
+        />
         <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4">
           <VencimientoForm
             producto={productoEncontrado}
             sucursalId={sucursalId}
             usuarioId={user?.id ?? ''}
             onSuccess={handleGuardadoExitoso}
+            vencimientoExistente={vencimientoExistente}
           />
           <button type="button" onClick={handleCancelarConfirmacion} className="w-full mt-3 py-3 text-muted-foreground hover:text-foreground text-sm font-medium transition-colors">
             Cancelar y empezar de nuevo

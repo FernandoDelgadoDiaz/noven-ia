@@ -5,11 +5,20 @@ import { RISK_VISUAL } from '@/lib/risk-config'
 import type { Producto, RiesgoNivel, Vencimiento } from '@/types/index'
 import { AlertTriangle, CheckCircle, ShieldCheck, AlertCircle } from 'lucide-react'
 
+export interface VencimientoExistente {
+  id: string
+  cantidad: number
+  fecha_vencimiento: string
+  lote: string | null
+}
+
 interface VencimientoFormProps {
   producto: Producto
   sucursalId: string
   usuarioId: string
   onSuccess: () => void
+  /** Si se provee, el formulario opera en modo edición (UPDATE) sobre este vencimiento en lugar de crear uno nuevo. */
+  vencimientoExistente?: VencimientoExistente | null
 }
 
 interface FormData {
@@ -62,11 +71,12 @@ function todayIso(): string {
 
 const inputCls = 'w-full h-14 px-4 bg-surface-base border border-border rounded-lg text-foreground text-base font-medium placeholder:text-muted-foreground focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150'
 
-export default function VencimientoForm({ producto, sucursalId, usuarioId, onSuccess }: VencimientoFormProps) {
+export default function VencimientoForm({ producto, sucursalId, usuarioId, onSuccess, vencimientoExistente }: VencimientoFormProps) {
+  const esEdicion = Boolean(vencimientoExistente)
   const [form, setForm] = useState<FormData>({
-    cantidad: '',
-    fechaVencimiento: '',
-    lote: '',
+    cantidad: vencimientoExistente ? String(vencimientoExistente.cantidad) : '',
+    fechaVencimiento: vencimientoExistente ? vencimientoExistente.fecha_vencimiento.slice(0, 10) : '',
+    lote: vencimientoExistente?.lote ?? '',
     stockActual: String(producto.stock_actual),
   })
   const [guardando, setGuardando] = useState(false)
@@ -95,12 +105,23 @@ export default function VencimientoForm({ producto, sucursalId, usuarioId, onSuc
     if (validationError) { setError(validationError); return }
     setGuardando(true)
     setError(null)
-    const { error: supabaseError } = await supabase.from('vencimientos').insert({
-      producto_id: producto.id, sucursal_id: sucursalId, usuario_id: usuarioId,
-      cantidad: parseInt(form.cantidad, 10), lote: form.lote.trim() || null,
-      fecha_vencimiento: form.fechaVencimiento, fecha_carga: todayIso(), activo: true,
-    })
-    if (supabaseError) { setGuardando(false); setError(`Error al guardar: ${supabaseError.message}`); return }
+    if (vencimientoExistente) {
+      // Modo edición: actualizar el vencimiento activo existente (regla: 1 vencimiento activo por producto)
+      const { error: updateError } = await supabase.from('vencimientos').update({
+        cantidad: parseInt(form.cantidad, 10),
+        fecha_vencimiento: form.fechaVencimiento,
+        lote: form.lote.trim() || null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', vencimientoExistente.id)
+      if (updateError) { setGuardando(false); setError(`Error al actualizar: ${updateError.message}`); return }
+    } else {
+      const { error: supabaseError } = await supabase.from('vencimientos').insert({
+        producto_id: producto.id, sucursal_id: sucursalId, usuario_id: usuarioId,
+        cantidad: parseInt(form.cantidad, 10), lote: form.lote.trim() || null,
+        fecha_vencimiento: form.fechaVencimiento, fecha_carga: todayIso(), activo: true,
+      })
+      if (supabaseError) { setGuardando(false); setError(`Error al guardar: ${supabaseError.message}`); return }
+    }
     const nuevoStock = parseInt(form.stockActual, 10)
     if (!isNaN(nuevoStock) && nuevoStock !== producto.stock_actual) {
       const { error: stockError } = await supabase
@@ -117,7 +138,7 @@ export default function VencimientoForm({ producto, sucursalId, usuarioId, onSuc
     <div className="flex flex-col gap-4">
       {/* Producto header */}
       <div className="bg-white rounded-card shadow-card px-4 py-3.5">
-        <p className="text-xs text-muted-foreground mb-0.5">Cargando vencimiento para</p>
+        <p className="text-xs text-muted-foreground mb-0.5">{esEdicion ? 'Actualizando vencimiento de' : 'Cargando vencimiento para'}</p>
         <p className="text-foreground font-bold text-base leading-tight">{producto.descripcion}</p>
         {producto.marca && <p className="text-muted-foreground text-sm mt-0.5">{producto.marca}</p>}
       </div>
@@ -183,7 +204,7 @@ export default function VencimientoForm({ producto, sucursalId, usuarioId, onSuc
         {guardando ? (
           <><span className="h-5 w-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Guardando...</>
         ) : (
-          <><CheckCircle className="h-5 w-5" />Guardar vencimiento</>
+          <><CheckCircle className="h-5 w-5" />{esEdicion ? 'Actualizar vencimiento' : 'Guardar vencimiento'}</>
         )}
       </button>
     </div>

@@ -111,7 +111,7 @@
 - **Agente:** frontend-dev
 - **Criterio medible:** En iOS Safari real, abrir la foto del producto y tocar fuera de la imagen cierra el lightbox. Tocar sobre la imagen no cierra. El botón X cierra. Funciona también en Chrome desktop.
 
-### C5 — Scanner: pre-llenado de cod_art con EAN de 13 dígitos rompe validación
+### C5 — Scanner: pre-llenado de cod_art con EAN de 13 dígitos rompe validación [x]
 - **Archivos:** `src/pages/Scanner.tsx:101-104`
 - **Problema:** Cuando el usuario busca por EAN y el producto no existe, `setNuevoProductoCodArt(codigo.trim())` (línea 102) mete el código de 13 dígitos en el campo `cod_art` del formulario nuevo producto, que valida estrictamente 7 dígitos (`handleCodArtChange` línea 152-163). El usuario pasa a "nuevo producto" con el campo cod_art ya inválido y truncado a 7 dígitos arbitrarios (los primeros 7 del EAN), generando un código interno falso. Si lo guarda, queda en producción un producto con cod_art incorrecto.
 - **Causa raíz:** El pre-llenado no distingue entre código interno (7 dígitos) y EAN (13 dígitos).
@@ -390,3 +390,26 @@
 - **Fase 5 — Deuda menor (BAJO):** B1-B7.
 
 Total: 5 críticos, 8 altos, 8 medios, 7 bajos. **28 ítems**.
+
+---
+
+## Funcionalidades nuevas (post-auditoría) — 2026-06-24
+
+Trabajo de producto sobre la base auditada. No forma parte de los 28 ítems originales.
+
+### F1 — Scanner: circuito completo de captura de códigos [x] (deployado, commit `02038a4`)
+- Caso 1: producto sin `codigo_barras` → paso intermedio, escaneo de EAN **solo por cámara**, UPDATE.
+- Caso 2: producto sin `cod_art` → paso intermedio, tipeo manual 7 dígitos, UPDATE.
+- Caso 3/4: alta de producto nuevo exige EAN (cámara) + cod_art (tipeo), ambos obligatorios.
+- Invariante: el EAN **nunca** se ingresa por tipeo manual, siempre por cámara. Satisface y refuerza **C5**.
+
+### F2 — Navegación desde cards del Dashboard + página Historial [x] (deployado, commit `e342e68`)
+- Cards del Dashboard navegan al destino esperado: Unidades en riesgo → `/vencimientos?filtro=riesgo`, En radar → `?filtro=radar`, Donación → `/historial?tipo=donacion`, Decomiso → `/historial?tipo=decomiso`.
+- Vencimientos lee `?filtro=` (riesgo → urgente/donacion/decomiso, radar → radar) combinándose con chips/búsqueda; banner "Mostrando…" + "Ver todos".
+- Nueva página `Historial` (`/historial?tipo=`): header trimestral, total acumulado, lista de `acciones_operativas` del trimestre (foto, producto, cantidad, fecha/hora, usuario, observaciones) y empty state. Ruta lazy protegida por PrivateRoute.
+- Gotcha resuelto: `acciones_operativas` tiene `created_at` (no `fecha`) y `usuario_id` referencia `auth.users` (sin FK a `public.usuarios` → el embed PostgREST `usuarios(nombre)` no funciona; se resuelve con query separada a `usuarios`).
+
+### F3 — Scanner: vencimiento único por producto [x] (deployado)
+- Regla: máximo 1 vencimiento activo por producto/sucursal. Al escanear un producto con vencimiento activo → pantalla "Registro existente" (datos actuales + nivel de riesgo) y **actualizar (UPDATE)** en vez de duplicar.
+- `VencimientoForm` gana modo edición vía prop `vencimientoExistente` (UPDATE sobre `id`; INSERT solo cuando no existe).
+- **Limitación conocida:** la regla se aplica **solo en el frontend**. No hay constraint UNIQUE en DB sobre `(producto_id, sucursal_id) WHERE activo` — duplicados legacy o escrituras fuera del Scanner pueden romper el invariante. Pendiente: índice único parcial en una migración futura.
