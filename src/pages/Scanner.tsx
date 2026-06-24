@@ -10,7 +10,7 @@ import ProductoConfirm from '@/components/scanner/ProductoConfirm'
 import VencimientoForm from '@/components/scanner/VencimientoForm'
 import type { Producto, Familia } from '@/types/index'
 
-type Paso = 'inicio' | 'confirmando' | 'capturar_ean' | 'formulario' | 'exito' | 'nuevo_producto' | 'familia_bloqueada'
+type Paso = 'inicio' | 'confirmando' | 'capturar_ean' | 'completar_cod_art' | 'formulario' | 'exito' | 'nuevo_producto' | 'familia_bloqueada'
 type CategoriaProducto = 'CHOCOLATES' | 'CARAMELOS' | 'SNACKS' | 'CHICLES' | 'CEREALES' | 'OTRO'
 const CATEGORIAS: CategoriaProducto[] = ['CHOCOLATES', 'CARAMELOS', 'SNACKS', 'CHICLES', 'CEREALES', 'OTRO']
 
@@ -28,7 +28,7 @@ export default function Scanner() {
   const [codigoManual, setCodigoManual] = useState('')
   const [errorBusqueda, setErrorBusqueda] = useState<string | null>(null)
   const [productoEncontrado, setProductoEncontrado] = useState<Producto | null>(null)
-  const [encontradoPorCodArt, setEncontradoPorCodArt] = useState(false)
+  const [, setEncontradoPorCodArt] = useState(false)
   const [, setGuardadoExitoso] = useState(false)
 
   const [guardandoEan, setGuardandoEan] = useState(false)
@@ -50,9 +50,10 @@ export default function Scanner() {
   const [errorCodArt, setErrorCodArt] = useState<string | null>(null)
   const [errorEanNuevo, setErrorEanNuevo] = useState<string | null>(null)
 
-  // Estado para ingreso manual de EAN en paso capturar_ean
-  const [eanManualCaptura, setEanManualCaptura] = useState('')
-  const [errorEanManualCaptura, setErrorEanManualCaptura] = useState<string | null>(null)
+  // Estado para completar cod_art faltante (Caso 2 — tipeo manual de 7 dígitos)
+  const [codArtCompletando, setCodArtCompletando] = useState('')
+  const [guardandoCodArt, setGuardandoCodArt] = useState(false)
+  const [errorCodArtCompletando, setErrorCodArtCompletando] = useState<string | null>(null)
 
   // Nombres de familias para mostrar en mensajes y selector
   const [familiasUsuario, setFamiliasUsuario] = useState<Familia[]>([])
@@ -128,12 +129,17 @@ export default function Scanner() {
     void buscarProducto(codigo, false)
   }
 
+  // Decide el siguiente paso según qué datos le falten al producto.
+  // Encadena: EAN faltante (Caso 1) → cod_art faltante (Caso 2) → formulario.
+  function continuarDesdeProducto(p: Producto): void {
+    if (!p.codigo_barras) { setPaso('capturar_ean'); return }
+    if (!p.cod_art || p.cod_art.trim() === '') { setPaso('completar_cod_art'); return }
+    setPaso('formulario')
+  }
+
   function handleConfirmarProducto(): void {
-    if (encontradoPorCodArt && !productoEncontrado?.codigo_barras) {
-      setPaso('capturar_ean')
-    } else {
-      setPaso('formulario')
-    }
+    if (!productoEncontrado) return
+    continuarDesdeProducto(productoEncontrado)
   }
 
   function resetNuevoProducto(): void {
@@ -158,6 +164,8 @@ export default function Scanner() {
     setCodigoManual('')
     setErrorBusqueda(null)
     setErrorEan(null)
+    setCodArtCompletando('')
+    setErrorCodArtCompletando(null)
     resetNuevoProducto()
   }
 
@@ -172,19 +180,6 @@ export default function Scanner() {
       setErrorCodArt('El código interno debe tener exactamente 7 dígitos')
     } else {
       setErrorCodArt(null)
-    }
-  }
-
-  function handleEanNuevoChange(valor: string): void {
-    // Solo permitir dígitos
-    const soloDigitos = valor.replace(/\D/g, '').slice(0, 13)
-    setNuevoProductoEan(soloDigitos)
-    if (soloDigitos.length === 0) {
-      setErrorEanNuevo(null)
-    } else if (soloDigitos.length !== 13) {
-      setErrorEanNuevo('El EAN debe tener exactamente 13 dígitos')
-    } else {
-      setErrorEanNuevo(null)
     }
   }
 
@@ -230,8 +225,9 @@ export default function Scanner() {
       .from('productos').update({ codigo_barras: ean.trim(), updated_at: new Date().toISOString() }).eq('id', productoEncontrado.id)
     setGuardandoEan(false)
     if (errUpdate) { setErrorEan(`Error al guardar: ${errUpdate.message}`); return }
-    setProductoEncontrado((prev) => prev ? { ...prev, codigo_barras: ean.trim() } : prev)
-    setPaso('formulario')
+    const actualizado: Producto = { ...productoEncontrado, codigo_barras: ean.trim() }
+    setProductoEncontrado(actualizado)
+    continuarDesdeProducto(actualizado)
   }
 
   async function handleAgregarNuevoProducto(): Promise<void> {
@@ -386,22 +382,36 @@ export default function Scanner() {
     )
   }
 
-  function handleEanManualCapturaChange(valor: string): void {
-    const soloDigitos = valor.replace(/\D/g, '').slice(0, 13)
-    setEanManualCaptura(soloDigitos)
-    if (soloDigitos.length > 0 && soloDigitos.length !== 13) {
-      setErrorEanManualCaptura('El EAN debe tener exactamente 13 dígitos')
+  function handleCodArtCompletandoChange(valor: string): void {
+    const soloDigitos = valor.replace(/\D/g, '').slice(0, 7)
+    setCodArtCompletando(soloDigitos)
+    if (soloDigitos.length > 0 && soloDigitos.length !== 7) {
+      setErrorCodArtCompletando('El código interno debe tener exactamente 7 dígitos')
     } else {
-      setErrorEanManualCaptura(null)
+      setErrorCodArtCompletando(null)
     }
   }
 
-  function handleConfirmarEanManualCaptura(): void {
-    if (!/^\d{13}$/.test(eanManualCaptura)) {
-      setErrorEanManualCaptura('Ingresá los 13 dígitos del código EAN')
+  async function handleGuardarCodArt(): Promise<void> {
+    if (!productoEncontrado) return
+    const codigo = codArtCompletando.trim()
+    if (!/^\d{7}$/.test(codigo)) {
+      setErrorCodArtCompletando('El código interno debe tener exactamente 7 dígitos')
       return
     }
-    void handleEanCapturado(eanManualCaptura)
+    setGuardandoCodArt(true)
+    setErrorCodArtCompletando(null)
+    const { data: duplicado, error: errCheck } = await supabase
+      .from('productos').select('id').eq('cod_art', codigo).neq('id', productoEncontrado.id).maybeSingle()
+    if (errCheck) { setGuardandoCodArt(false); setErrorCodArtCompletando(`Error al verificar: ${errCheck.message}`); return }
+    if (duplicado) { setGuardandoCodArt(false); setErrorCodArtCompletando('Este código interno ya está registrado en otro producto.'); return }
+    const { error: errUpdate } = await supabase
+      .from('productos').update({ cod_art: codigo, updated_at: new Date().toISOString() }).eq('id', productoEncontrado.id)
+    setGuardandoCodArt(false)
+    if (errUpdate) { setErrorCodArtCompletando(`Error al guardar: ${errUpdate.message}`); return }
+    const actualizado: Producto = { ...productoEncontrado, cod_art: codigo }
+    setProductoEncontrado(actualizado)
+    continuarDesdeProducto(actualizado)
   }
 
   // ── Capturar EAN (paso 2.5) ─────────────────────────────────────────────────
@@ -420,8 +430,8 @@ export default function Scanner() {
             <div className="bg-brand-light border border-brand-muted rounded-card p-4 flex gap-3 items-start">
               <Barcode className="h-5 w-5 text-brand shrink-0 mt-0.5" />
               <div>
-                <p className="text-brand font-semibold text-sm">El EAN es obligatorio</p>
-                <p className="text-brand/70 text-xs mt-1">El EAN es necesario para identificar el producto en futuras lecturas. Escanealo o ingresalo manualmente.</p>
+                <p className="text-brand font-semibold text-sm">Este producto no tiene código de barras registrado</p>
+                <p className="text-brand/70 text-xs mt-1">Escaneá el EAN para completar los datos. Es necesario para identificar el producto en futuras lecturas.</p>
               </div>
             </div>
             {errorEan && (
@@ -440,62 +450,80 @@ export default function Scanner() {
               {guardandoEan ? (
                 <><span className="h-5 w-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Guardando...</>
               ) : (
-                <><ScanLine className="h-5 w-5" />Escanear EAN con cámara</>
+                <><ScanLine className="h-5 w-5" />Escanear EAN</>
               )}
             </button>
-            {/* Divider */}
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-px bg-border" />
-              <span className="text-muted-foreground text-xs font-medium">o ingresalo manualmente</span>
-              <div className="flex-1 h-px bg-border" />
-            </div>
-            {/* Opción 2: Ingreso manual */}
-            <div className="flex flex-col gap-2">
-              <div className="relative">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]{13}"
-                  maxLength={13}
-                  value={eanManualCaptura}
-                  onChange={(e) => handleEanManualCapturaChange(e.target.value)}
-                  placeholder="Ingresá los 13 dígitos del EAN"
-                  disabled={guardandoEan}
-                  className={`w-full h-12 px-4 bg-surface-base border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all duration-150 text-sm disabled:opacity-50 ${
-                    errorEanManualCaptura
-                      ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
-                      : eanManualCaptura.length === 13
-                        ? 'border-emerald-400 focus:border-emerald-500 focus:ring-emerald-200'
-                        : 'border-border focus:border-brand focus:ring-brand/20'
-                  }`}
-                />
-                {eanManualCaptura.length > 0 && (
-                  <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono font-semibold ${eanManualCaptura.length === 13 ? 'text-emerald-500' : 'text-muted-foreground'}`}>
-                    {eanManualCaptura.length}/13
-                  </span>
-                )}
-              </div>
-              {errorEanManualCaptura && (
-                <p className="text-red-500 text-xs flex items-center gap-1 animate-fade-in">
-                  <AlertCircle className="h-3 w-3 shrink-0" />{errorEanManualCaptura}
-                </p>
-              )}
-              <button
-                type="button"
-                onClick={handleConfirmarEanManualCaptura}
-                disabled={guardandoEan || eanManualCaptura.length !== 13}
-                className="w-full min-h-[48px] flex items-center justify-center gap-2 bg-surface-base border border-brand text-brand hover:bg-brand-light disabled:opacity-40 disabled:cursor-not-allowed font-semibold text-sm rounded-card transition-all duration-150 active:scale-[0.98]"
-              >
-                {guardandoEan ? (
-                  <><span className="h-4 w-4 border-2 border-brand/40 border-t-brand rounded-full animate-spin" />Guardando...</>
-                ) : (
-                  <><Barcode className="h-4 w-4" />Confirmar EAN ingresado</>
-                )}
-              </button>
-            </div>
           </div>
         </div>
       </>
+    )
+  }
+
+  // ── Completar cod_art faltante (Caso 2) ─────────────────────────────────────
+  if (paso === 'completar_cod_art' && productoEncontrado) {
+    const codArtListo = /^\d{7}$/.test(codArtCompletando)
+    return (
+      <div className="min-h-screen bg-surface-base flex flex-col">
+        <SubHeader paso={2} titulo="Registrar código interno" subtitulo="El código de Glaciar es necesario para identificar el producto" onBack={handleCancelarConfirmacion} />
+        <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4 flex flex-col gap-4">
+          <div className="bg-white rounded-card shadow-card px-4 py-3.5">
+            <p className="text-xs text-muted-foreground mb-0.5">Producto seleccionado</p>
+            <p className="text-foreground font-bold text-base leading-tight">{productoEncontrado.descripcion}</p>
+            {productoEncontrado.marca && <p className="text-muted-foreground text-sm mt-0.5">{productoEncontrado.marca}</p>}
+          </div>
+          <div className="bg-brand-light border border-brand-muted rounded-card p-4 flex gap-3 items-start">
+            <Package className="h-5 w-5 text-brand shrink-0 mt-0.5" />
+            <div>
+              <p className="text-brand font-semibold text-sm">Este producto no tiene código interno registrado</p>
+              <p className="text-brand/70 text-xs mt-1">Ingresá el código de 7 dígitos de Glaciar para completar los datos.</p>
+            </div>
+          </div>
+          {errorCodArtCompletando && (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-start gap-2 animate-fade-in">
+              <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+              <p className="text-red-600 text-sm">{errorCodArtCompletando}</p>
+            </div>
+          )}
+          <div className="flex flex-col gap-2">
+            <div className="relative">
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]{7}"
+                maxLength={7}
+                value={codArtCompletando}
+                onChange={(e) => handleCodArtCompletandoChange(e.target.value)}
+                placeholder="Ingresá los 7 dígitos del código interno"
+                disabled={guardandoCodArt}
+                className={`w-full h-12 px-4 bg-surface-base border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all duration-150 text-sm disabled:opacity-50 ${
+                  errorCodArtCompletando
+                    ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
+                    : codArtListo
+                      ? 'border-emerald-400 focus:border-emerald-500 focus:ring-emerald-200'
+                      : 'border-border focus:border-brand focus:ring-brand/20'
+                }`}
+              />
+              {codArtCompletando.length > 0 && (
+                <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono font-semibold ${codArtListo ? 'text-emerald-500' : 'text-muted-foreground'}`}>
+                  {codArtCompletando.length}/7
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleGuardarCodArt()}
+              disabled={guardandoCodArt || !codArtListo}
+              className="w-full min-h-[56px] flex items-center justify-center gap-3 bg-brand hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-base rounded-card shadow-brand transition-all duration-150 active:scale-[0.98]"
+            >
+              {guardandoCodArt ? (
+                <><span className="h-5 w-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Guardando...</>
+              ) : (
+                <><CheckCircle className="h-5 w-5" />Guardar y continuar</>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
     )
   }
 
@@ -521,7 +549,6 @@ export default function Scanner() {
     const familiaUnica = !esAdmin && familiasUsuario.length === 1 ? familiasUsuario[0] : null
 
     const codArtTocado = nuevoProductoCodArt.length > 0
-    const eanTocado = nuevoProductoEan.length > 0
 
     function inputClsValidado(tocado: boolean, valido: boolean, error: string | null): string {
       if (!tocado) return inputCls
@@ -575,46 +602,43 @@ export default function Scanner() {
                 )}
               </div>
 
-              {/* EAN — 13 dígitos exactos */}
+              {/* EAN — captura SOLO por cámara (13 dígitos) */}
               <div className="space-y-1.5">
-                <label htmlFor="np-ean" className="block text-xs font-semibold text-foreground uppercase tracking-wide">
+                <label className="block text-xs font-semibold text-foreground uppercase tracking-wide">
                   Código EAN <span className="text-red-500">*</span>
                 </label>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <input
-                      id="np-ean"
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]{13}"
-                      maxLength={13}
-                      value={nuevoProductoEan}
-                      onChange={(e) => handleEanNuevoChange(e.target.value)}
-                      placeholder="Ej: 7790580000000"
-                      className={inputClsValidado(eanTocado, eanNuevoValido(), errorEanNuevo)}
-                      aria-describedby={errorEanNuevo ? 'error-ean' : undefined}
-                    />
-                    {eanTocado && (
-                      <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono font-semibold ${eanNuevoValido() ? 'text-emerald-500' : 'text-muted-foreground'}`}>
-                        {nuevoProductoEan.length}/13
-                      </span>
-                    )}
+                {nuevoProductoEan ? (
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-12 px-4 flex items-center justify-between bg-emerald-50 border border-emerald-400 rounded-lg">
+                      <span className="font-mono text-sm text-foreground tracking-wide">{nuevoProductoEan}</span>
+                      <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setModalEanNuevoAbierto(true)}
+                      className="h-12 px-3 bg-muted hover:bg-muted/70 rounded-lg text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap shrink-0"
+                      title="Volver a escanear"
+                    >
+                      <Barcode className="h-4 w-4" />
+                      Reescanear
+                    </button>
                   </div>
+                ) : (
                   <button
                     type="button"
                     onClick={() => setModalEanNuevoAbierto(true)}
-                    className="h-12 px-3 bg-muted hover:bg-muted/70 rounded-lg text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap shrink-0"
-                    title="Escanear EAN con cámara"
+                    className="w-full min-h-[48px] flex items-center justify-center gap-2 bg-brand hover:bg-brand-hover text-white font-semibold text-sm rounded-lg transition-all duration-150 active:scale-[0.98]"
                   >
-                    <Barcode className="h-4 w-4" />
-                    Escanear
+                    <ScanLine className="h-4 w-4" />
+                    Escanear EAN con cámara
                   </button>
-                </div>
+                )}
                 {errorEanNuevo && (
                   <p id="error-ean" className="text-red-500 text-xs flex items-center gap-1 animate-fade-in">
                     <AlertCircle className="h-3 w-3 shrink-0" />{errorEanNuevo}
                   </p>
                 )}
+                <p className="text-muted-foreground text-xs">El EAN se captura únicamente con la cámara para garantizar lecturas exactas.</p>
               </div>
 
               {/* Descripción */}
