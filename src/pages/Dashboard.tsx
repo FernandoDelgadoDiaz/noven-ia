@@ -232,7 +232,7 @@ export default function Dashboard() {
                   valor={unidadesEnRiesgo}
                   nivel={unidadesEnRiesgo > 0 ? 'urgente' : 'seguro'}
                   IconoComponente={Package}
-                  onClick={() => navigate('/vencimientos')}
+                  onClick={() => navigate('/vencimientos?filtro=riesgo')}
                   subtexto={`En ${enRiesgo} producto${enRiesgo !== 1 ? 's' : ''}`}
                   subtextoColor="text-muted-foreground"
                 />
@@ -240,17 +240,17 @@ export default function Dashboard() {
                   titulo="En radar"
                   valor={enRadar}
                   nivel={enRadar > 0 ? 'radar' : 'seguro'}
-                  onClick={() => navigate('/vencimientos')}
+                  onClick={() => navigate('/vencimientos?filtro=radar')}
                   subtexto="Próximos 30 días"
                   subtextoColor="text-muted-foreground"
                 />
 
                 {/* Card DONACION trimestral */}
                 <div
-                  onClick={() => navigate('/vencimientos')}
+                  onClick={() => navigate('/historial?tipo=donacion')}
                   role="button"
                   tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/vencimientos') }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/historial?tipo=donacion') }}
                   className="bg-white rounded-[24px] shadow-card p-5 md:p-6 flex flex-col cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                   aria-label={`Donaciones del trimestre: ${donaciones} unidades`}
                 >
@@ -277,10 +277,10 @@ export default function Dashboard() {
 
                 {/* Card DECOMISO trimestral */}
                 <div
-                  onClick={() => navigate('/vencimientos')}
+                  onClick={() => navigate('/historial?tipo=decomiso')}
                   role="button"
                   tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/vencimientos') }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/historial?tipo=decomiso') }}
                   className="bg-white rounded-[24px] shadow-card p-5 md:p-6 flex flex-col cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                   aria-label={`Decomisos del trimestre: ${decomisosTrimestrales} unidades`}
                 >

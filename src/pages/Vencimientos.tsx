@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Plus, CalendarX, Search, SlidersHorizontal, FolderX } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Plus, CalendarX, Search, SlidersHorizontal, FolderX, X } from 'lucide-react'
 import { useVencimientosLista } from '@/hooks/useVencimientosLista'
 import type { VencimientoConProducto, FiltroNivel, NivelRiesgo } from '@/hooks/useVencimientosLista'
 import { RISK_VISUAL } from '@/lib/risk-config'
@@ -119,6 +119,14 @@ function ChipFiltro({ activo, onClick, children, claseInactivo, claseActivo }: C
 
 const NIVELES_FILTRO: NivelRiesgo[] = ['decomiso', 'donacion', 'urgente', 'radar', 'seguro']
 
+// Filtro vía query param desde las cards del Dashboard
+const NIVELES_RIESGO_CRITICO: NivelRiesgo[] = ['urgente', 'donacion', 'decomiso']
+type FiltroUrl = 'riesgo' | 'radar'
+const FILTRO_URL_LABEL: Record<FiltroUrl, string> = {
+  riesgo: 'productos en riesgo crítico',
+  radar: 'productos en radar',
+}
+
 // ── Página principal ──────────────────────────────────────────────────────────
 
 export default function Vencimientos() {
@@ -139,15 +147,32 @@ export default function Vencimientos() {
     sinFamilias,
   } = useVencimientosLista()
 
+  const [searchParams, setSearchParams] = useSearchParams()
+  const filtroUrlRaw = searchParams.get('filtro')
+  const filtroUrl: FiltroUrl | null =
+    filtroUrlRaw === 'riesgo' || filtroUrlRaw === 'radar' ? filtroUrlRaw : null
+
   const [vencimientoEditando, setVencimientoEditando] = useState<VencimientoConProducto | null>(null)
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
 
   const hayFiltrosActivos = filtroNivel !== 'todos' || filtroCategoria !== '' || busqueda.trim() !== ''
 
+  // Aplica el filtro de la URL (cards del Dashboard) sobre el resultado ya filtrado por chips/búsqueda
+  const vencimientosMostrados = useMemo(() => {
+    if (filtroUrl === 'riesgo') return vencimientos.filter((v) => NIVELES_RIESGO_CRITICO.includes(v.nivel_riesgo))
+    if (filtroUrl === 'radar') return vencimientos.filter((v) => v.nivel_riesgo === 'radar')
+    return vencimientos
+  }, [vencimientos, filtroUrl])
+
   function limpiarFiltros() {
     setFiltroNivel('todos')
     setFiltroCategoria('')
     setBusqueda('')
+  }
+
+  function limpiarFiltroUrl() {
+    searchParams.delete('filtro')
+    setSearchParams(searchParams, { replace: true })
   }
 
   return (
@@ -299,13 +324,30 @@ export default function Vencimientos() {
         {/* Filtros activos: limpiar */}
         {hayFiltrosActivos && (
           <div className="flex items-center justify-between animate-fade-in">
-            <span className="text-xs text-muted-foreground">{vencimientos.length} resultado{vencimientos.length !== 1 ? 's' : ''}</span>
+            <span className="text-xs text-muted-foreground">{vencimientosMostrados.length} resultado{vencimientosMostrados.length !== 1 ? 's' : ''}</span>
             <button
               type="button"
               onClick={limpiarFiltros}
               className="text-xs font-semibold text-brand hover:text-brand-hover transition-colors"
             >
               Limpiar filtros
+            </button>
+          </div>
+        )}
+
+        {/* Banner de filtro desde Dashboard */}
+        {filtroUrl && (
+          <div className="flex items-center justify-between gap-3 rounded-card bg-brand-light border border-brand-muted px-4 py-3 animate-fade-in">
+            <p className="text-sm text-brand font-medium min-w-0">
+              Mostrando: <span className="font-semibold">{FILTRO_URL_LABEL[filtroUrl]}</span>
+            </p>
+            <button
+              type="button"
+              onClick={limpiarFiltroUrl}
+              className="shrink-0 flex items-center gap-1 text-xs font-semibold text-brand hover:text-brand-hover border border-brand/30 hover:border-brand/50 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+              Ver todos
             </button>
           </div>
         )}
@@ -318,29 +360,37 @@ export default function Vencimientos() {
         )}
 
         {/* Lista */}
-        {!loading && !error && vencimientos.length > 0 && (
+        {!loading && !error && vencimientosMostrados.length > 0 && (
           <div className="space-y-2.5">
-            {vencimientos.map((v) => (
+            {vencimientosMostrados.map((v) => (
               <VencimientoCard key={v.id} vencimiento={v} onClick={() => setVencimientoEditando(v)} />
             ))}
           </div>
         )}
 
         {/* Vacío */}
-        {!loading && !error && vencimientos.length === 0 && (
+        {!loading && !error && vencimientosMostrados.length === 0 && (
           <div className="rounded-card bg-white shadow-card px-6 py-12 flex flex-col items-center text-center gap-4">
             <div className="p-4 bg-muted rounded-full">
               <CalendarX className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
             </div>
             <div>
               <p className="text-foreground font-semibold text-base">
-                {hayFiltrosActivos ? 'Sin resultados' : 'Sin vencimientos registrados'}
+                {hayFiltrosActivos || filtroUrl ? 'Sin resultados' : 'Sin vencimientos registrados'}
               </p>
               <p className="text-muted-foreground text-sm mt-1">
-                {hayFiltrosActivos ? 'Probá con otros filtros.' : 'Empezá escaneando un producto.'}
+                {hayFiltrosActivos || filtroUrl ? 'Probá con otros filtros.' : 'Empezá escaneando un producto.'}
               </p>
             </div>
-            {hayFiltrosActivos ? (
+            {filtroUrl ? (
+              <button
+                type="button"
+                onClick={limpiarFiltroUrl}
+                className="px-5 py-2.5 rounded-lg bg-muted hover:bg-muted/70 text-foreground text-sm font-semibold transition-all active:scale-[0.97]"
+              >
+                Ver todos
+              </button>
+            ) : hayFiltrosActivos ? (
               <button
                 type="button"
                 onClick={limpiarFiltros}
