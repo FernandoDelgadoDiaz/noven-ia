@@ -409,7 +409,26 @@ Trabajo de producto sobre la base auditada. No forma parte de los 28 ítems orig
 - Nueva página `Historial` (`/historial?tipo=`): header trimestral, total acumulado, lista de `acciones_operativas` del trimestre (foto, producto, cantidad, fecha/hora, usuario, observaciones) y empty state. Ruta lazy protegida por PrivateRoute.
 - Gotcha resuelto: `acciones_operativas` tiene `created_at` (no `fecha`) y `usuario_id` referencia `auth.users` (sin FK a `public.usuarios` → el embed PostgREST `usuarios(nombre)` no funciona; se resuelve con query separada a `usuarios`).
 
-### F3 — Scanner: vencimiento único por producto [x] (deployado)
+### F3 — Scanner: vencimiento único por producto [x] (deployado, commit `8d57c16`)
 - Regla: máximo 1 vencimiento activo por producto/sucursal. Al escanear un producto con vencimiento activo → pantalla "Registro existente" (datos actuales + nivel de riesgo) y **actualizar (UPDATE)** en vez de duplicar.
 - `VencimientoForm` gana modo edición vía prop `vencimientoExistente` (UPDATE sobre `id`; INSERT solo cuando no existe).
-- **Limitación conocida:** la regla se aplica **solo en el frontend**. No hay constraint UNIQUE en DB sobre `(producto_id, sucursal_id) WHERE activo` — duplicados legacy o escrituras fuera del Scanner pueden romper el invariante. Pendiente: índice único parcial en una migración futura.
+- **Enforcement en DB (commit `4dedf3b`):** migración `20260624000000_uq_vencimiento_activo_por_producto.sql` aplicada a producción — dedup no destructivo + índice único parcial `uq_vencimiento_activo_por_producto_sucursal ON vencimientos (producto_id, sucursal_id) WHERE activo = true`. Cierra la condición de carrera multi-cliente. Al aplicarla había 0 duplicados (22 activos intactos).
+- **UX del conflicto (commit `dc19e5c`):** `VencimientoForm` traduce el error `23505` (unique_violation) a un mensaje amigable en vez del error técnico crudo.
+
+### F4 — Dashboard operativo: KPIs compactos + alertas con jerarquía [x] (deployado, commit `a588650`)
+- Solo UI/UX (sin tocar rutas, lógica, Supabase ni auth). 4 archivos: `RiesgoCard.tsx`, `AlertaItem.tsx`, `Dashboard.tsx`, `AppLayout.tsx`.
+- Cards KPI compactas (`p-3.5`, número `2rem`, icono 36px) sin badge "activo"; grid 2×2 mobile intacto.
+- `AlertaItem` con jerarquía operativa: línea de motivo (Sin rotación / Rotación baja / Rotación suficiente) + fila SKU · Familia · Cantidad · Estado + chips de acción compactos naranja claro.
+- Nombre de familia vía **lookup display-only** (`familias.nombre`) en el Dashboard; el hook de vencimientos solo trae `familia_id` y no se modificó.
+- Padding bottom (`pb-28`) en el listado; bottom nav "Maestro" → "Productos" (ruta `/maestro` intacta).
+- **Pendiente (necesita backend):** el bloque "Estado" está hardcodeado a "Sin gestionar". Mostrar "Gestionado" cuando exista una `acciones_operativas` para ese `vencimiento_id` requiere ampliar la query del hook (fuera de alcance de este cambio solo-UI).
+
+### F5 — Notificaciones Web Push [x] (deployado, commit `089fe07`)
+- Regla de negocio: notificar SOLO cuando un vencimiento transiciona a `'urgente'`; destinatarios = operadores de la familia del producto + admins.
+- Migración `20260625000000_push_notifications.sql` (aplicada a prod): columna `vencimientos.nivel_actual` (CHECK 5 niveles) + tabla `push_subscriptions` (RLS ownership + índice único `(usuario_id, subscription->>'endpoint')`).
+- `netlify/functions/enviar-push.ts`: gate por `x-webhook-secret`, resuelve destinatarios (`usuario_familias` + admins), envía con `web-push`/VAPID, limpia suscripciones `410/404`. Smoke test prod: 401 sin secret / 200 con secret.
+- `public/sw.js` (service worker push + notificationclick) · `usePushNotifications` (registro SW, permiso, subscribe, upsert) · banner de activación en `AppLayout` · detección de transición en `useVencimientos` (UPDATE `nivel_actual='urgente'`).
+- Webhook DB: `pg_net` + trigger `trg_notify_push_urgente AFTER UPDATE OF nivel_actual` → `net.http_post` a la function. Doble defensa de la regla (frontend escribe literal `'urgente'` + trigger `IS DISTINCT FROM OLD`).
+- **Secretos** (VAPID private, `WEBHOOK_SECRET`) solo en Netlify env + trigger de DB; nunca en el repo.
+- **Limitación conocida (PASO 7 client-triggered):** el push solo se dispara cuando alguien abre la app y recalcula niveles. Versión robusta = job `pg_cron` que recalcula niveles server-side a diario. **Follow-up recomendado.**
+- **Pendiente de verificación manual:** recepción real en dispositivo con app cerrada, registro de SW, banner y guardado de suscripción (requieren teléfono real con permiso concedido).
