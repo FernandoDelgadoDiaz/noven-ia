@@ -120,7 +120,17 @@ export default function VencimientoForm({ producto, sucursalId, usuarioId, onSuc
         cantidad: parseInt(form.cantidad, 10), lote: form.lote.trim() || null,
         fecha_vencimiento: form.fechaVencimiento, fecha_carga: todayIso(), activo: true,
       })
-      if (supabaseError) { setGuardando(false); setError(`Error al guardar: ${supabaseError.message}`); return }
+      if (supabaseError) {
+        setGuardando(false)
+        // 23505 = unique_violation: el índice único parcial detectó otro vencimiento activo
+        // para este producto/sucursal (carrera entre clientes). Mensaje amigable.
+        if (supabaseError.code === '23505') {
+          setError('Este producto ya tiene un vencimiento activo. Volvé a escanearlo para actualizarlo.')
+        } else {
+          setError(`Error al guardar: ${supabaseError.message}`)
+        }
+        return
+      }
     }
     const nuevoStock = parseInt(form.stockActual, 10)
     if (!isNaN(nuevoStock) && nuevoStock !== producto.stock_actual) {
