@@ -54,6 +54,7 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
         fecha_carga,
         activo,
         created_at,
+        nivel_actual,
         producto:productos (
           id,
           cod_art,
@@ -87,11 +88,29 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
 
     const hoyDate = new Date()
 
-    const typed = (rows ?? []) as unknown as (Vencimiento & { producto: Producto | null })[]
+    const typed = (rows ?? []) as unknown as (Vencimiento & {
+      producto: Producto | null
+      nivel_actual: string | null
+    })[]
+
+    // Detección de transición a 'urgente': si el nivel calculado es 'urgente' y la
+    // columna nivel_actual aún no lo refleja, persistimos el cambio. El webhook de DB
+    // sobre ese UPDATE dispara la notificación push. Solo se escribe en el cambio real.
+    const transiciones: string[] = []
     const conRiesgo: VencimientoConRiesgo[] = typed
       .filter(hasProducto)
-      .map((row) => calcularRiesgo(row, row.producto, hoyDate))
+      .map((row) => {
+        const resultado = calcularRiesgo(row, row.producto, hoyDate)
+        if (resultado.nivel_riesgo === 'urgente' && row.nivel_actual !== 'urgente') {
+          transiciones.push(row.id)
+        }
+        return resultado
+      })
       .sort((a, b) => a.dias_restantes - b.dias_restantes)
+
+    if (transiciones.length > 0) {
+      void supabase.from('vencimientos').update({ nivel_actual: 'urgente' }).in('id', transiciones)
+    }
 
     setRawData(conRiesgo)
     setFetchLoading(false)

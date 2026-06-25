@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, ScanLine, Calendar, Package, FileUp, Users, LogOut } from 'lucide-react'
+import { LayoutDashboard, ScanLine, Calendar, Package, FileUp, Users, LogOut, Bell, X } from 'lucide-react'
 import { useUsuarioRol } from '@/hooks/useUsuarioRol'
+import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { supabase } from '@/lib/supabase'
 
 interface NavItem {
@@ -35,6 +37,17 @@ const MOBILE_NAV_RIGHT_BASE: NavItem[] = [
 export default function AppLayout() {
   const { isAdmin } = useUsuarioRol()
   const navigate = useNavigate()
+
+  // Notificaciones push — banner de activación no intrusivo
+  const { soportado, permiso, activar } = usePushNotifications()
+  const [pushDismissed, setPushDismissed] = useState(
+    () => typeof localStorage !== 'undefined' && localStorage.getItem('push_dismissed') === 'true',
+  )
+  const mostrarBannerPush = soportado && permiso === 'default' && !pushDismissed
+  function descartarBannerPush() {
+    localStorage.setItem('push_dismissed', 'true')
+    setPushDismissed(true)
+  }
 
   async function handleSignOut() {
     await supabase.auth.signOut()
@@ -123,6 +136,38 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* ── Banner de activación de notificaciones push ───────────────── */}
+      {mostrarBannerPush && (
+        <div
+          className="fixed left-3 right-3 z-30 md:left-auto md:right-6 md:max-w-sm bg-white border border-border shadow-elevated rounded-2xl p-3.5 flex items-center gap-3 animate-fade-in"
+          style={{ bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))' }}
+          role="region"
+          aria-label="Activar notificaciones"
+        >
+          <div className="h-9 w-9 rounded-full bg-brand-light flex items-center justify-center shrink-0">
+            <Bell className="h-4 w-4 text-brand" aria-hidden="true" />
+          </div>
+          <p className="flex-1 text-xs text-foreground leading-snug">
+            🔔 Activá las notificaciones para recibir alertas de vencimientos urgentes
+          </p>
+          <button
+            type="button"
+            onClick={() => void activar()}
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-brand hover:bg-brand-hover text-white text-xs font-semibold transition-colors active:scale-[0.97]"
+          >
+            Activar
+          </button>
+          <button
+            type="button"
+            onClick={descartarBannerPush}
+            className="shrink-0 p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            aria-label="Cerrar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* ── Mobile bottom nav con FAB central — hidden on desktop ─────── */}
       {/*
