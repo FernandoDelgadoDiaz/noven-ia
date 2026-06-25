@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Package, ScanLine, RefreshCw, AlertTriangle, Bell, FolderX, HandHeart, Trash2 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 import { useVencimientos } from '@/hooks/useVencimientos'
 import { useAuth } from '@/hooks/useAuth'
 import { useAccionesOperativas } from '@/hooks/useAccionesOperativas'
@@ -55,6 +56,32 @@ export default function Dashboard() {
 
   const [vencimientoEditando, setVencimientoEditando] = useState<VencimientoConRiesgo | null>(null)
   const [accionPendiente, setAccionPendiente] = useState<AccionPendiente | null>(null)
+
+  // Lookup de nombres de familia (solo para mostrar en las cards de alerta).
+  // El producto ya trae familia_id; resolvemos el nombre sin tocar la lógica del hook.
+  const [familiaNombres, setFamiliaNombres] = useState<Record<string, string>>({})
+  const familiaIdsEnData = useMemo(() => {
+    const set = new Set<string>()
+    data.forEach((v) => { if (v.producto.familia_id) set.add(v.producto.familia_id) })
+    return Array.from(set)
+  }, [data])
+
+  useEffect(() => {
+    const faltantes = familiaIdsEnData.filter((id) => !(id in familiaNombres))
+    if (faltantes.length === 0) return
+    void supabase
+      .from('familias')
+      .select('id, nombre')
+      .in('id', faltantes)
+      .then(({ data: rows }) => {
+        if (!rows) return
+        setFamiliaNombres((prev) => {
+          const next = { ...prev }
+          for (const r of rows) next[r.id as string] = r.nombre as string
+          return next
+        })
+      })
+  }, [familiaIdsEnData, familiaNombres])
 
   const alertasOrdenadas = [...data].sort(
     (a, b) => ORDEN_RIESGO[a.nivel_riesgo] - ORDEN_RIESGO[b.nivel_riesgo],
@@ -251,23 +278,16 @@ export default function Dashboard() {
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/historial?tipo=donacion') }}
-                  className="bg-white rounded-[24px] shadow-card p-5 md:p-6 flex flex-col cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  className="bg-white rounded-[20px] shadow-card p-3.5 flex flex-col cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                   aria-label={`Donaciones del trimestre: ${donaciones} unidades`}
                 >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 ${donaciones > 0 ? 'bg-orange-100' : 'bg-emerald-100'}`}>
-                      <HandHeart className={`h-5 w-5 ${donaciones > 0 ? 'text-orange-600' : 'text-emerald-600'}`} aria-hidden="true" />
-                    </div>
-                    {!loadingAcciones && donaciones > 0 && (
-                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200">
-                        activo
-                      </span>
-                    )}
+                  <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 mb-2.5 ${donaciones > 0 ? 'bg-orange-100' : 'bg-emerald-100'}`}>
+                    <HandHeart className={`h-4 w-4 ${donaciones > 0 ? 'text-orange-600' : 'text-emerald-600'}`} aria-hidden="true" />
                   </div>
-                  <p className={`text-5xl font-black tracking-tight leading-none tabular-nums ${donaciones > 0 ? 'text-orange-600' : 'text-emerald-600'}`}>
+                  <p className={`text-[2rem] font-black tracking-tight leading-none tabular-nums ${donaciones > 0 ? 'text-orange-600' : 'text-emerald-600'}`}>
                     {loadingAcciones ? '–' : donaciones}
                   </p>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mt-2.5 leading-tight">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5 leading-tight">
                     Donación
                   </p>
                   <p className={`text-[10px] font-medium mt-0.5 ${donaciones > 0 ? 'text-orange-500' : 'text-emerald-600'}`}>
@@ -281,23 +301,16 @@ export default function Dashboard() {
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/historial?tipo=decomiso') }}
-                  className="bg-white rounded-[24px] shadow-card p-5 md:p-6 flex flex-col cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  className="bg-white rounded-[20px] shadow-card p-3.5 flex flex-col cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                   aria-label={`Decomisos del trimestre: ${decomisosTrimestrales} unidades`}
                 >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 ${decomisosTrimestrales > 0 ? 'bg-red-100' : 'bg-emerald-100'}`}>
-                      <Trash2 className={`h-5 w-5 ${decomisosTrimestrales > 0 ? 'text-red-600' : 'text-emerald-600'}`} aria-hidden="true" />
-                    </div>
-                    {!loadingAcciones && decomisosTrimestrales > 0 && (
-                      <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-red-50 text-red-700 border border-red-200">
-                        activo
-                      </span>
-                    )}
+                  <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 mb-2.5 ${decomisosTrimestrales > 0 ? 'bg-red-100' : 'bg-emerald-100'}`}>
+                    <Trash2 className={`h-4 w-4 ${decomisosTrimestrales > 0 ? 'text-red-600' : 'text-emerald-600'}`} aria-hidden="true" />
                   </div>
-                  <p className={`text-5xl font-black tracking-tight leading-none tabular-nums ${decomisosTrimestrales > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                  <p className={`text-[2rem] font-black tracking-tight leading-none tabular-nums ${decomisosTrimestrales > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                     {loadingAcciones ? '–' : decomisosTrimestrales}
                   </p>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mt-2.5 leading-tight">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5 leading-tight">
                     Decomiso
                   </p>
                   <p className={`text-[10px] font-medium mt-0.5 ${decomisosTrimestrales > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
@@ -340,11 +353,12 @@ export default function Dashboard() {
                   </button>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-3 pb-28 md:pb-10">
                   {alertasOrdenadas.map((v) => (
                     <AlertaItem
                       key={v.id}
                       vencimiento={v}
+                      familiaNombre={v.producto.familia_id ? (familiaNombres[v.producto.familia_id] ?? null) : null}
                       onClick={() => setVencimientoEditando(v)}
                       onRegistrarAccion={handleRegistrarAccion}
                     />

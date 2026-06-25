@@ -33,38 +33,30 @@ export default function RiesgoCard({
       tabIndex={isInteractive ? 0 : undefined}
       onKeyDown={isInteractive ? (e) => { if (e.key === 'Enter') onClick?.() } : undefined}
       className={[
-        'bg-white rounded-[24px] shadow-card p-5 md:p-6 flex flex-col',
+        'bg-white rounded-[20px] shadow-card p-3.5 flex flex-col',
         isInteractive
           ? 'cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand'
           : '',
       ].join(' ')}
     >
-      {/* Icon circular + badge */}
-      <div className="flex items-start justify-between mb-4">
-        <div className={`h-11 w-11 rounded-full ${v.statIconBg} flex items-center justify-center shrink-0`}>
-          {IconoComponente ? (
-            <IconoComponente className={`h-5 w-5 ${v.statIconColor}`} />
-          ) : icono ? (
-            <span className="text-lg leading-none" aria-hidden="true">{icono}</span>
-          ) : (
-            <Package className={`h-5 w-5 ${v.statIconColor}`} />
-          )}
-        </div>
-
-        {typeof valor === 'number' && valor > 0 && (
-          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-            activo
-          </span>
+      {/* Icon circular */}
+      <div className={`h-9 w-9 rounded-full ${v.statIconBg} flex items-center justify-center shrink-0 mb-2.5`}>
+        {IconoComponente ? (
+          <IconoComponente className={`h-4 w-4 ${v.statIconColor}`} />
+        ) : icono ? (
+          <span className="text-base leading-none" aria-hidden="true">{icono}</span>
+        ) : (
+          <Package className={`h-4 w-4 ${v.statIconColor}`} />
         )}
       </div>
 
       {/* Dominant number */}
-      <p className={`text-5xl font-black tracking-tight leading-none tabular-nums ${v.statValueText}`}>
+      <p className={`text-[2rem] font-black tracking-tight leading-none tabular-nums ${v.statValueText}`}>
         {valor}
       </p>
 
       {/* Label */}
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mt-2.5 leading-tight">
+      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5 leading-tight">
         {titulo}
       </p>
 

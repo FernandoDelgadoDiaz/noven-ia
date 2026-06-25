@@ -6,6 +6,8 @@ import type { VencimientoConRiesgo } from '@/types/index'
 
 interface AlertaItemProps {
   vencimiento: VencimientoConRiesgo
+  /** Nombre de la familia del producto (display-only). Si es null/undefined no se muestra el bloque. */
+  familiaNombre?: string | null
   onClick?: () => void
   onRegistrarAccion?: (vencimiento: VencimientoConRiesgo, tipo: 'donacion' | 'decomiso') => void
 }
@@ -24,12 +26,14 @@ function formatDiasRestantes(dias: number): string {
   return `Vence en ${dias} días`
 }
 
-function formatDiasStock(cantidadLote: number, ventaMediaDiaria: number): string {
+function formatMotivo(cantidadLote: number, ventaMediaDiaria: number, diasRestantes: number): string {
   if (ventaMediaDiaria <= 0) return 'Sin rotación'
-  return `${calcularDiasStock(cantidadLote, ventaMediaDiaria)} días stock`
+  const diasStock = calcularDiasStock(cantidadLote, ventaMediaDiaria)
+  if (diasStock > diasRestantes) return 'Rotación baja'
+  return 'Rotación suficiente'
 }
 
-export default function AlertaItem({ vencimiento, onClick, onRegistrarAccion }: AlertaItemProps) {
+export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegistrarAccion }: AlertaItemProps) {
   const cfg = RISK_VISUAL[vencimiento.nivel_riesgo]
   const { producto } = vencimiento
   const [lightboxAbierto, setLightboxAbierto] = useState(false)
@@ -42,7 +46,7 @@ export default function AlertaItem({ vencimiento, onClick, onRegistrarAccion }: 
 
   const titulo = formatTitulo(producto.descripcion, producto.gramaje, producto.marca)
   const diasLabel = formatDiasRestantes(vencimiento.dias_restantes)
-  const stockLabel = formatDiasStock(vencimiento.cantidad, producto.venta_media_diaria)
+  const motivo = formatMotivo(vencimiento.cantidad, producto.venta_media_diaria, vencimiento.dias_restantes)
   const isDecomiso = vencimiento.nivel_riesgo === 'decomiso'
   const isDonacion = vencimiento.nivel_riesgo === 'donacion'
   const showPulse = cfg.dotPulse
@@ -145,21 +149,7 @@ export default function AlertaItem({ vencimiento, onClick, onRegistrarAccion }: 
 
           <p className={`text-sm font-semibold mt-1 ${cfg.daysText}`}>{diasLabel}</p>
 
-          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
-            <span>{stockLabel}</span>
-            {producto.venta_media_diaria > 0 && (
-              <>
-                <span className="text-border">·</span>
-                <span>{producto.venta_media_diaria} u/día</span>
-              </>
-            )}
-            {producto.cod_art && (
-              <>
-                <span className="text-border">·</span>
-                <span className="font-mono text-foreground/50">{producto.cod_art}</span>
-              </>
-            )}
-          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">{motivo}</p>
         </div>
 
         {/* Right: badge + arrow */}
@@ -171,13 +161,25 @@ export default function AlertaItem({ vencimiento, onClick, onRegistrarAccion }: 
         </div>
       </div>
 
-      {/* Bottom: smart action chips */}
+      {/* Operative row: SKU · Familia · Cantidad · Estado */}
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 px-4 md:px-5 pb-3 pt-1">
+        {producto.cod_art && (
+          <DatoOperativo label="SKU" valor={producto.cod_art} mono />
+        )}
+        {familiaNombre && (
+          <DatoOperativo label="Familia" valor={familiaNombre} />
+        )}
+        <DatoOperativo label="Cantidad" valor={`${vencimiento.cantidad} un`} />
+        <DatoOperativo label="Estado" valor="Sin gestionar" />
+      </div>
+
+      {/* Bottom: smart action chips — compactos */}
       {vencimiento.acciones_sugeridas.length > 0 && (
         <div className="flex flex-wrap gap-1.5 px-4 md:px-5 pb-3">
           {vencimiento.acciones_sugeridas.map((accion) => (
             <span
               key={accion}
-              className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition-colors ${cfg.actionChipCls}`}
+              className="text-[11px] px-2 py-0.5 rounded-full font-semibold border bg-orange-50 text-orange-700 border-orange-200"
             >
               {accion}
             </span>
@@ -207,5 +209,20 @@ export default function AlertaItem({ vencimiento, onClick, onRegistrarAccion }: 
       )}
     </div>
     </>
+  )
+}
+
+interface DatoOperativoProps {
+  label: string
+  valor: string
+  mono?: boolean
+}
+
+function DatoOperativo({ label, valor, mono }: DatoOperativoProps) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60 leading-none">{label}</p>
+      <p className={`text-xs font-semibold text-foreground/80 truncate mt-0.5 ${mono ? 'font-mono' : ''}`}>{valor}</p>
+    </div>
   )
 }

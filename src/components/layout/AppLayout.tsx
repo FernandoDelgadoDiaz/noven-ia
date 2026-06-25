@@ -14,7 +14,7 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { to: '/scanner', label: 'Scanner', Icon: ScanLine, isMain: true },
   { to: '/vencimientos', label: 'Vencimientos', Icon: Calendar },
-  { to: '/maestro', label: 'Maestro', Icon: Package },
+  { to: '/maestro', label: 'Productos', Icon: Package },
   { to: '/importar', label: 'Importar', Icon: FileUp },
 ]
 
@@ -28,7 +28,7 @@ const MOBILE_NAV_LEFT: NavItem[] = [
 
 // Mobile: derecha del FAB central (Admin se añade aquí si es admin)
 const MOBILE_NAV_RIGHT_BASE: NavItem[] = [
-  { to: '/maestro', label: 'Maestro', Icon: Package },
+  { to: '/maestro', label: 'Productos', Icon: Package },
   { to: '/importar', label: 'Importar', Icon: FileUp },
 ]
 
