@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, ScanLine, Calendar, Package, FileUp, Users, LogOut, Bell, X } from 'lucide-react'
+import { LayoutDashboard, ScanLine, Calendar, BrainCircuit, FileUp, Users, LogOut, Bell, X } from 'lucide-react'
 import { useUsuarioRol } from '@/hooks/useUsuarioRol'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { supabase } from '@/lib/supabase'
@@ -16,7 +16,7 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { to: '/scanner', label: 'Scanner', Icon: ScanLine, isMain: true },
   { to: '/vencimientos', label: 'Vencimientos', Icon: Calendar },
-  { to: '/maestro', label: 'Productos', Icon: Package },
+  { to: '/analisis', label: 'Análisis', Icon: BrainCircuit },
   { to: '/importar', label: 'Importar', Icon: FileUp },
 ]
 
@@ -30,7 +30,7 @@ const MOBILE_NAV_LEFT: NavItem[] = [
 
 // Mobile: derecha del FAB central (Admin se añade aquí si es admin)
 const MOBILE_NAV_RIGHT_BASE: NavItem[] = [
-  { to: '/maestro', label: 'Productos', Icon: Package },
+  { to: '/analisis', label: 'Análisis', Icon: BrainCircuit },
   { to: '/importar', label: 'Importar', Icon: FileUp },
 ]
 

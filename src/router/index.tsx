@@ -14,7 +14,7 @@ const Dashboard = lazy(() => import('../pages/Dashboard'))
 const Scanner = lazy(() => import('../pages/Scanner'))
 const Vencimientos = lazy(() => import('../pages/Vencimientos'))
 const Historial = lazy(() => import('../pages/Historial'))
-const Maestro = lazy(() => import('../pages/Maestro'))
+const Analisis = lazy(() => import('../pages/Analisis'))
 const Importar = lazy(() => import('../pages/Importar'))
 const Admin = lazy(() => import('../pages/Admin'))
 
@@ -63,10 +63,10 @@ export const router = createBrowserRouter([
             ),
           },
           {
-            path: 'maestro',
+            path: 'analisis',
             element: (
               <ErrorBoundary>
-                <Suspense {...suspenseProps}><Maestro /></Suspense>
+                <Suspense {...suspenseProps}><Analisis /></Suspense>
               </ErrorBoundary>
             ),
           },
