@@ -432,3 +432,11 @@ Trabajo de producto sobre la base auditada. No forma parte de los 28 ítems orig
 - **Secretos** (VAPID private, `WEBHOOK_SECRET`) solo en Netlify env + trigger de DB; nunca en el repo.
 - **Limitación conocida (PASO 7 client-triggered):** el push solo se dispara cuando alguien abre la app y recalcula niveles. Versión robusta = job `pg_cron` que recalcula niveles server-side a diario. **Follow-up recomendado.**
 - **Pendiente de verificación manual:** recepción real en dispositivo con app cerrada, registro de SW, banner y guardado de suscripción (requieren teléfono real con permiso concedido).
+
+### F6 — Análisis inteligente con DeepSeek [x] (deployado, commit `4182c7d`)
+- Reemplaza la página `/maestro` (stub) por `/analisis`. Nav: "Análisis" + icono `BrainCircuit` (sidebar + mobile). Se eliminó `src/pages/Maestro.tsx` (huérfano).
+- `netlify/functions/analisis.ts`: valida JWT → uid; **deriva rol/sucursal/familias server-side desde la DB e IGNORA el body del cliente** (aislamiento por rol más estricto que la spec). Arma prompt con vencimientos reales (producto/nivel/días/cantidad/venta/familia) + totales donación/decomiso del trimestre + fecha. Llama DeepSeek (`deepseek-chat`, temp 0.3, system prompt distinto operador/admin). 502 ante fallo del modelo.
+- `useAnalisis` (token JWT, POST, estados, cache en localStorage) · `Analisis.tsx` (header, subtítulo por rol, generar/loading "Analizando tus datos…"/resultado/actualizar).
+- **Secreto** `DEEPSEEK_API_KEY` solo en Netlify env; nunca en el repo. Smoke prod: gate 401 sin/con JWT inválido; key DeepSeek validada (200).
+- **Pendiente de verificación manual:** path 200 end-to-end con login real (operador vs admin) — comparar el reporte devuelto contra los vencimientos reales.
+- **Limitación:** el motor de riesgo está duplicado inline en la function (espejo de `src/lib/riesgo.ts`) porque la function no comparte el bundle del frontend. Si cambian los umbrales, actualizar ambos lugares.
