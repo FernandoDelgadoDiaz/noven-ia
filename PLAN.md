@@ -430,7 +430,7 @@ Trabajo de producto sobre la base auditada. No forma parte de los 28 ítems orig
 - `public/sw.js` (service worker push + notificationclick) · `usePushNotifications` (registro SW, permiso, subscribe, upsert) · banner de activación en `AppLayout` · detección de transición en `useVencimientos` (UPDATE `nivel_actual='urgente'`).
 - Webhook DB: `pg_net` + trigger `trg_notify_push_urgente AFTER UPDATE OF nivel_actual` → `net.http_post` a la function. Doble defensa de la regla (frontend escribe literal `'urgente'` + trigger `IS DISTINCT FROM OLD`).
 - **Secretos** (VAPID private, `WEBHOOK_SECRET`) solo en Netlify env + trigger de DB; nunca en el repo.
-- **Limitación conocida (PASO 7 client-triggered):** el push solo se dispara cuando alguien abre la app y recalcula niveles. Versión robusta = job `pg_cron` que recalcula niveles server-side a diario. **Follow-up recomendado.**
+- **~~Limitación PASO 7 client-triggered~~ RESUELTO (commit `f3fc04d`):** se agregó la función `recalcular_niveles_vencimientos()` + job `pg_cron` `recalcular-niveles-vencimientos` (diario `0 12 * * *` UTC = 09:00 ART, `pg_net`/trigger ya existentes) que recalcula `nivel_actual` server-side; las transiciones a `'urgente'` disparan el push aunque nadie abra la app. La lógica de riesgo queda **duplicada** (frontend `src/lib/riesgo.ts` + SQL) — actualizar ambos si cambian umbrales.
 - **Pendiente de verificación manual:** recepción real en dispositivo con app cerrada, registro de SW, banner y guardado de suscripción (requieren teléfono real con permiso concedido).
 
 ### F6 — Análisis inteligente con DeepSeek [x] (deployado, commit `4182c7d`)
