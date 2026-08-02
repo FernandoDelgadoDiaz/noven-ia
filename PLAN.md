@@ -440,3 +440,11 @@ Trabajo de producto sobre la base auditada. No forma parte de los 28 ítems orig
 - **Secreto** `DEEPSEEK_API_KEY` solo en Netlify env; nunca en el repo. Smoke prod: gate 401 sin/con JWT inválido; key DeepSeek validada (200).
 - **Pendiente de verificación manual:** path 200 end-to-end con login real (operador vs admin) — comparar el reporte devuelto contra los vencimientos reales.
 - **Limitación:** el motor de riesgo está duplicado inline en la function (espejo de `src/lib/riesgo.ts`) porque la function no comparte el bundle del frontend. Si cambian los umbrales, actualizar ambos lugares.
+
+#### F6.1 — Recomendaciones basadas en merma inevitable [x] (deployado, deploy ID `6a4196b734f4b619f578e47d`)
+- `calcularMerma(cantidad, ventaMedia, dias)` en `analisis.ts`: `unidadesVenderANormal = ventaMedia * max(0, dias)`, `mermaUnidades = max(0, cantidad - unidadesVenderANormal)`, `mermaPorcentaje = cantidad>0 ? (m/c)*100 : 100`. Asigna `accion` en 4 niveles por umbral: MONITOREAR (≤20%) / OFERTA LEVE (≤50%) / PROMOCIÓN AGRESIVA (≤80%) / DONACIÓN INEVITABLE (>80%). Interfaz `MermaCalc` con tipado estricto (sin `any`).
+- El prompt por producto ahora emite 8 campos: stock actual, venta media, unidades vendibles a precio normal, merma estimada (unidades y %) y acción calculada.
+- `SYSTEM_OPERADOR`/`SYSTEM_ADMIN` reescritos: basarse SIEMPRE en la "Acción calculada", **no inventar % de descuento**, explicar en unidades concretas. Para DONACIÓN INEVITABLE → coordinar donación; para PROMOCIÓN AGRESIVA → urgencia sin % específico.
+- Edge cases validados por QA (PASS): días negativos truncados con `Math.max(0, dias)` → 100% merma (vencido); ventaMedia=0 → 100%; cantidad=0 → 100% (defensivo, no se da en la práctica por el schema). Sin regresión de rol/familias/RLS. `tsc` + `build` limpios.
+- Cosmético: se eliminó la redundancia "vencido hace X días" duplicada en la línea de "Días restantes" del prompt.
+- **Nota:** `calcularMerma` se sumó a la copia inline del motor de riesgo (no se pudo importar `src/lib/riesgo.ts`, módulo frontend-only). Sigue pendiente extraer la lógica compartida a `shared/`.

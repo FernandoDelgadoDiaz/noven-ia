@@ -11,25 +11,42 @@ import { getCorsHeaders } from './_auth'
 const SUCURSAL_LEGACY = '00000000-0000-0000-0000-000000000001'
 
 const SYSTEM_OPERADOR = `Sos un asistente experto en gestión de vencimientos para supermercados argentinos.
-Analizás los datos de vencimientos y dás recomendaciones concretas y operativas.
-Hablás en español rioplatense, de forma directa y clara.
-Tu respuesta debe tener estas secciones:
-1. Resumen de situación (2-3 oraciones)
-2. Productos críticos (lista con acción específica para cada uno)
-3. Recomendación principal del día
-Sé conciso — máximo 300 palabras.`
+Recibís datos de productos con cálculos de merma estimada ya realizados.
+Tu trabajo es explicar la situación en lenguaje claro y operativo.
+
+REGLAS:
+- Basate SIEMPRE en la "Acción calculada" — no la contradecís
+- No inventés porcentajes de descuento — si el cálculo dice donación, es donación
+- Explicá en términos simples: "A esta velocidad de venta, van a quedar X unidades sin vender"
+- Hablás en español rioplatense, directo y sin tecnicismos
+- Máximo 300 palabras
+
+Estructura:
+- Resumen (2-3 oraciones con los números reales)
+- Productos críticos (con la acción calculada y el porqué)
+- Recomendación del día`
 
 const SYSTEM_ADMIN = `Sos un asistente experto en gestión de merma para supermercados argentinos.
-Analizás datos de toda la sucursal y dás insights estratégicos al gerente.
-Hablás en español rioplatense, de forma directa y profesional.
-Tu respuesta debe tener estas secciones:
-1. Estado general de la sucursal (2-3 oraciones)
-2. Familias/sectores con mayor riesgo
-3. Comparativa con trimestre (si hay datos de acciones_operativas)
-4. Recomendación estratégica
-Sé conciso — máximo 400 palabras.`
+Recibís datos de toda la sucursal con cálculos de merma estimada ya realizados.
 
-// ── Motor de riesgo (inline, espejo de src/lib/riesgo.ts) ─────────────
+REGLAS:
+- Basate SIEMPRE en las acciones calculadas — no las contradecís
+- No inventés porcentajes de descuento sin respaldo en datos
+- Mostrá la merma en unidades y en % — son los números que importan al gerente
+- Hablás en español rioplatense, directo y profesional
+- Máximo 400 palabras
+
+Estructura:
+- Estado general (merma total estimada en unidades y $)
+- Familias con mayor riesgo
+- Productos que requieren acción inmediata (con merma calculada)
+- Recomendación estratégica basada en los datos`
+
+// ── Motor de riesgo (inline) ───────────────────────────────────────────
+// NOTA: src/lib/riesgo.ts es exclusivamente frontend y no puede importarse
+// aquí en build time de Netlify Functions. Esta copia inline se extiende
+// (no se agrega una cuarta copia) para incluir el cálculo de merma estimada.
+// Si en el futuro se extrae a shared/, borrar estas funciones y redirigir.
 const UMBRAL_RADAR = 45
 const UMBRAL_URGENTE = 20
 const UMBRAL_DONACION = 10
@@ -48,6 +65,32 @@ function calcularNivel(dias: number, cantidad: number, venta: number): string {
   if (dias <= UMBRAL_URGENTE && hayRiesgo) return 'urgente'
   if (dias <= UMBRAL_RADAR && hayRiesgo) return 'radar'
   return 'seguro'
+}
+
+interface MermaCalc {
+  unidadesVenderANormal: number
+  mermaUnidades: number
+  mermaPorcentaje: number
+  accion: string
+}
+
+function calcularMerma(cantidad: number, ventaMedia: number, dias: number): MermaCalc {
+  const unidadesVenderANormal = ventaMedia * Math.max(0, dias)
+  const mermaUnidades = Math.max(0, cantidad - unidadesVenderANormal)
+  const mermaPorcentaje = cantidad > 0 ? (mermaUnidades / cantidad) * 100 : 100
+
+  let accion: string
+  if (mermaPorcentaje <= 20) {
+    accion = 'MONITOREAR — merma estimada baja, precio normal'
+  } else if (mermaPorcentaje <= 50) {
+    accion = 'OFERTA LEVE — merma estimada media, reubicación + descuento leve'
+  } else if (mermaPorcentaje <= 80) {
+    accion = 'PROMOCIÓN AGRESIVA — merma estimada alta, descuento fuerte + punta de góndola'
+  } else {
+    accion = 'DONACIÓN INEVITABLE — merma >80%, no hay rebaja que lo salve'
+  }
+
+  return { unidadesVenderANormal, mermaUnidades, mermaPorcentaje, accion }
 }
 
 interface VencRow {
@@ -169,12 +212,13 @@ const handler: Handler = async (event: HandlerEvent) => {
   const totalDonacion = (acc ?? []).filter((a) => a.tipo === 'donacion').reduce((s, a) => s + (a.cantidad as number), 0)
   const totalDecomiso = (acc ?? []).filter((a) => a.tipo === 'decomiso').reduce((s, a) => s + (a.cantidad as number), 0)
 
-  // 4. Construir prompt con datos reales
+  // 4. Construir prompt con datos reales + cálculo de merma estimada
   const procesados = vencs
     .map((r) => {
       const dias = diasRestantes(r.fecha_vencimiento)
       const nivel = calcularNivel(dias, r.cantidad, r.productos!.venta_media_diaria)
-      return { ...r, dias, nivel }
+      const merma = calcularMerma(r.cantidad, r.productos!.venta_media_diaria, dias)
+      return { ...r, dias, nivel, merma }
     })
     .sort((a, b) => (ORDEN[a.nivel] - ORDEN[b.nivel]) || (a.dias - b.dias))
     .slice(0, 60)
@@ -183,9 +227,19 @@ const handler: Handler = async (event: HandlerEvent) => {
   const lineas = procesados.map((r) => {
     const p = r.productos!
     const fam = p.familia_id ? (famNombre.get(p.familia_id) ?? '—') : '—'
-    const venta = p.venta_media_diaria > 0 ? `${p.venta_media_diaria} u/día` : 'sin rotación'
+    const ventaStr = p.venta_media_diaria > 0 ? `${p.venta_media_diaria} u/día` : 'sin rotación'
     const vence = r.dias < 0 ? `vencido hace ${Math.abs(r.dias)} días` : r.dias === 0 ? 'vence hoy' : `vence en ${r.dias} días`
-    return `- ${p.descripcion}${p.marca ? ` (${p.marca})` : ''} | familia: ${fam} | nivel: ${r.nivel} | ${vence} | cantidad: ${r.cantidad} | ${venta}`
+    const m = r.merma
+    return [
+      `Producto: ${p.descripcion}${p.marca ? ` (${p.marca})` : ''}`,
+      `  Familia: ${fam} | Nivel de riesgo: ${r.nivel}`,
+      `  Días restantes: ${vence}`,
+      `  Stock actual: ${r.cantidad} unidades`,
+      `  Venta media: ${ventaStr}`,
+      `  Unidades que se venderían a precio normal: ${Math.round(m.unidadesVenderANormal)}`,
+      `  Merma estimada: ${Math.round(m.mermaUnidades)} unidades (${m.mermaPorcentaje.toFixed(1)}%)`,
+      `  Acción calculada: ${m.accion}`,
+    ].join('\n')
   })
 
   const datosFormateados = [
@@ -193,7 +247,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     `Ámbito: ${esAdmin ? 'toda la sucursal' : 'familias asignadas del operador'}`,
     '',
     `Vencimientos activos (${procesados.length}${vencs.length > procesados.length ? ` de ${vencs.length}` : ''}):`,
-    lineas.length > 0 ? lineas.join('\n') : '(sin vencimientos activos)',
+    lineas.length > 0 ? lineas.join('\n\n') : '(sin vencimientos activos)',
     '',
     `Acciones del trimestre Q${trimestre} ${anio}:`,
     `- Donación: ${totalDonacion} unidades`,

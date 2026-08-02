@@ -17,7 +17,29 @@
       "Bash(/c/Users/ferna/scoop/shims/gh.exe *)",
       "Bash(Select-Object Name)",
       "Bash(findstr lucide *)",
-      "Bash(dir *)"
+      "Bash(dir *)",
+      "Bash(netlify *)",
+      "Bash(cmd *)",
+      "Bash(node *)",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "Bash(echo \"EXIT_CODE=$?\")",
+      "Bash(npm uninstall *)",
+      "Bash(curl *)",
+      "Bash(npx supabase *)",
+      "Bash(npx tsc *)",
+      "Bash(powershell *)",
+      "Bash(Test-Path *)",
+      "Bash(xargs grep -l \"storage\\\\|imagen_url\\\\|productos-imagenes\")",
+      "Bash(supabase --version)",
+      "Bash(supabase --help)",
+      "Bash(supabase db *)",
+      "Bash(npx netlify *)",
+      "PowerShell(npm run *)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "mcp__claude_ai_Supabase__list_extensions",
+      "Bash(npx web-push *)",
+      "PowerShell(npx netlify deploy --prod --build 2>&1 | Select-Object -Last 45)"
     ]
   }
 }
