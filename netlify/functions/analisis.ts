@@ -10,37 +10,42 @@ import { getCorsHeaders } from './_auth'
 
 const SUCURSAL_LEGACY = '00000000-0000-0000-0000-000000000001'
 
-const SYSTEM_OPERADOR = `Sos un asistente experto en gestión de vencimientos para supermercados argentinos.
-Recibís datos de productos con cálculos de merma estimada ya realizados.
-Tu trabajo es explicar la situación en lenguaje claro y operativo.
+const SYSTEM_OPERADOR = `Usted es un consultor especializado en gestión de vencimientos y control de merma para comercios minoristas de alimentación.
+Analiza los datos históricos y actuales de vencimientos para proporcionar recomendaciones constructivas y fundamentadas.
 
 REGLAS:
-- Basate SIEMPRE en la "Acción calculada" — no la contradecís
-- No inventés porcentajes de descuento — si el cálculo dice donación, es donación
-- Explicá en términos simples: "A esta velocidad de venta, van a quedar X unidades sin vender"
-- Hablás en español rioplatense, directo y sin tecnicismos
-- Máximo 300 palabras
+- Utilice un tono formal y profesional en todo momento
+- Base sus recomendaciones SIEMPRE en los cálculos de merma estimada provistos
+- Identifique patrones históricos: productos que se repiten en donaciones o decomisos
+- Compare el período actual con el anterior cuando haya datos disponibles
+- No invente porcentajes de descuento sin respaldo en datos
+- Explique el razonamiento detrás de cada recomendación
+- Máximo 350 palabras
 
-Estructura:
-- Resumen (2-3 oraciones con los números reales)
-- Productos críticos (con la acción calculada y el porqué)
-- Recomendación del día`
+Estructura del informe:
+1. Situación actual (datos concretos de merma estimada)
+2. Análisis histórico (patrones detectados en trimestres anteriores)
+3. Productos que requieren acción inmediata (con justificación basada en cálculos)
+4. Recomendaciones constructivas (acciones específicas y medibles)`
 
-const SYSTEM_ADMIN = `Sos un asistente experto en gestión de merma para supermercados argentinos.
-Recibís datos de toda la sucursal con cálculos de merma estimada ya realizados.
+const SYSTEM_ADMIN = `Usted es un consultor estratégico especializado en gestión de merma y control de vencimientos para cadenas de supermercados.
+Analiza el desempeño operativo de toda la sucursal comparando datos históricos y actuales.
 
 REGLAS:
-- Basate SIEMPRE en las acciones calculadas — no las contradecís
-- No inventés porcentajes de descuento sin respaldo en datos
-- Mostrá la merma en unidades y en % — son los números que importan al gerente
-- Hablás en español rioplatense, directo y profesional
-- Máximo 400 palabras
+- Utilice un tono formal y profesional en todo momento
+- Base sus análisis en los cálculos de merma estimada y datos históricos provistos
+- Identifique tendencias entre trimestres
+- Señale familias o sectores con merma estructural (problema recurrente)
+- Cuantifique el impacto en unidades cuando sea posible
+- Proporcione recomendaciones estratégicas accionables
+- Máximo 450 palabras
 
-Estructura:
-- Estado general (merma total estimada en unidades y $)
-- Familias con mayor riesgo
-- Productos que requieren acción inmediata (con merma calculada)
-- Recomendación estratégica basada en los datos`
+Estructura del informe:
+1. Estado general de la sucursal (métricas clave)
+2. Comparativa trimestral (evolución de merma)
+3. Familias con mayor riesgo estructural
+4. Análisis de patrones históricos
+5. Recomendaciones estratégicas con fundamento`
 
 // ── Motor de riesgo (inline) ───────────────────────────────────────────
 // NOTA: src/lib/riesgo.ts es exclusivamente frontend y no puede importarse
@@ -105,9 +110,46 @@ interface VencRow {
   } | null
 }
 
+interface AccionRow {
+  tipo: string
+  cantidad: number
+  trimestre: number
+  anio: number
+  productos: { descripcion: string; familia_id: string | null } | null
+}
+
 function getTrimestre(): { trimestre: number; anio: number } {
   const hoy = new Date()
   return { trimestre: Math.ceil((hoy.getMonth() + 1) / 3), anio: hoy.getFullYear() }
+}
+
+// Resume las acciones de un trimestre por tipo, agrupando por producto para
+// exponer cuántas veces se repite cada uno (base de "patrones repetidos").
+function resumirAcciones(acciones: AccionRow[], tipo: string) {
+  const items = acciones.filter((a) => a.tipo === tipo)
+  const total = items.reduce((s, a) => s + (a.cantidad ?? 0), 0)
+  const porProducto = new Map<string, { cantidad: number; veces: number }>()
+  for (const a of items) {
+    const nombre = a.productos?.descripcion ?? '(sin producto)'
+    const prev = porProducto.get(nombre) ?? { cantidad: 0, veces: 0 }
+    porProducto.set(nombre, { cantidad: prev.cantidad + (a.cantidad ?? 0), veces: prev.veces + 1 })
+  }
+  return { total, registros: items.length, porProducto }
+}
+
+// Top N productos de un resumen, ordenados por cantidad total descendente.
+function topProductos(porProducto: Map<string, { cantidad: number; veces: number }>, n = 5) {
+  return Array.from(porProducto.entries())
+    .sort((a, b) => b[1].cantidad - a[1].cantidad)
+    .slice(0, n)
+}
+
+function comparativa(actual: number, anterior: number): string {
+  if (anterior === 0) return actual === 0 ? 'sin variación (0 en ambos)' : `+${actual} u (sin base previa)`
+  const delta = actual - anterior
+  const pct = ((delta / anterior) * 100).toFixed(0)
+  const signo = delta > 0 ? '+' : ''
+  return `${signo}${delta} u (${signo}${pct}% vs. período anterior)`
 }
 
 const ORDEN: Record<string, number> = { decomiso: 0, donacion: 1, urgente: 2, radar: 3, seguro: 4 }
@@ -201,16 +243,44 @@ const handler: Handler = async (event: HandlerEvent) => {
     for (const f of fams ?? []) famNombre.set(f.id as string, f.nombre as string)
   }
 
-  // Totales del trimestre
-  const { trimestre, anio } = getTrimestre()
-  const { data: acc } = await supabase
-    .from('acciones_operativas')
-    .select('tipo, cantidad')
-    .eq('sucursal_id', sucursalId)
-    .eq('trimestre', trimestre)
-    .eq('anio', anio)
-  const totalDonacion = (acc ?? []).filter((a) => a.tipo === 'donacion').reduce((s, a) => s + (a.cantidad as number), 0)
-  const totalDecomiso = (acc ?? []).filter((a) => a.tipo === 'decomiso').reduce((s, a) => s + (a.cantidad as number), 0)
+  // Histórico de acciones_operativas: trimestre actual + anterior
+  const { trimestre: trimestreActual, anio: anioActual } = getTrimestre()
+  const trimestreAnterior = trimestreActual === 1 ? 4 : trimestreActual - 1
+  const anioAnterior = trimestreActual === 1 ? anioActual - 1 : anioActual
+
+  const accionSelect = 'tipo, cantidad, trimestre, anio, productos(descripcion, familia_id)'
+  const [{ data: accActualRaw }, { data: accAnteriorRaw }] = await Promise.all([
+    supabase.from('acciones_operativas').select(accionSelect)
+      .eq('sucursal_id', sucursalId).eq('trimestre', trimestreActual).eq('anio', anioActual),
+    supabase.from('acciones_operativas').select(accionSelect)
+      .eq('sucursal_id', sucursalId).eq('trimestre', trimestreAnterior).eq('anio', anioAnterior),
+  ])
+
+  // El operador solo ve el histórico de sus familias asignadas (mismo criterio
+  // de scope que los vencimientos activos). El admin ve toda la sucursal.
+  const scope = (a: AccionRow) =>
+    esAdmin || (a.productos?.familia_id != null && familiaIds.includes(a.productos.familia_id))
+  const accActual = ((accActualRaw ?? []) as unknown as AccionRow[]).filter(scope)
+  const accAnterior = ((accAnteriorRaw ?? []) as unknown as AccionRow[]).filter(scope)
+
+  const donActual = resumirAcciones(accActual, 'donacion')
+  const decActual = resumirAcciones(accActual, 'decomiso')
+  const donAnterior = resumirAcciones(accAnterior, 'donacion')
+  const decAnterior = resumirAcciones(accAnterior, 'decomiso')
+
+  // Patrones repetidos: mismo producto+tipo que aparece en ≥2 registros a lo
+  // largo de ambos trimestres (señal de merma estructural / recurrente).
+  const patronMap = new Map<string, { tipo: string; producto: string; veces: number; cantidad: number }>()
+  for (const a of [...accActual, ...accAnterior]) {
+    const producto = a.productos?.descripcion ?? '(sin producto)'
+    const key = `${a.tipo}::${producto}`
+    const prev = patronMap.get(key) ?? { tipo: a.tipo, producto, veces: 0, cantidad: 0 }
+    patronMap.set(key, { ...prev, veces: prev.veces + 1, cantidad: prev.cantidad + (a.cantidad ?? 0) })
+  }
+  const patronesRepetidos = Array.from(patronMap.values())
+    .filter((p) => p.veces >= 2)
+    .sort((a, b) => b.veces - a.veces || b.cantidad - a.cantidad)
+    .slice(0, 8)
 
   // 4. Construir prompt con datos reales + cálculo de merma estimada
   const procesados = vencs
@@ -242,6 +312,31 @@ const handler: Handler = async (event: HandlerEvent) => {
     ].join('\n')
   })
 
+  // Formateo del histórico por trimestre (con top de productos por acción)
+  const fmtTop = (top: Array<[string, { cantidad: number; veces: number }]>) =>
+    top.length > 0
+      ? top.map(([n, v]) => `    · ${n}: ${v.cantidad} u (${v.veces} ${v.veces === 1 ? 'registro' : 'registros'})`).join('\n')
+      : '    · (sin registros)'
+
+  const bloqueTrimestre = (
+    etiqueta: string,
+    don: ReturnType<typeof resumirAcciones>,
+    dec: ReturnType<typeof resumirAcciones>,
+  ) =>
+    [
+      etiqueta,
+      `- Donaciones: ${don.total} unidades en ${don.registros} registros`,
+      fmtTop(topProductos(don.porProducto)),
+      `- Decomisos: ${dec.total} unidades en ${dec.registros} registros`,
+      fmtTop(topProductos(dec.porProducto)),
+    ].join('\n')
+
+  const bloquePatrones = patronesRepetidos.length > 0
+    ? patronesRepetidos
+        .map((p) => `- ${p.producto} — ${p.tipo} ${p.veces} veces (total ${p.cantidad} u) en el período analizado`)
+        .join('\n')
+    : '- No se detectaron productos repetidos entre los registros disponibles.'
+
   const datosFormateados = [
     `Fecha de hoy: ${hoyStr}`,
     `Ámbito: ${esAdmin ? 'toda la sucursal' : 'familias asignadas del operador'}`,
@@ -249,9 +344,18 @@ const handler: Handler = async (event: HandlerEvent) => {
     `Vencimientos activos (${procesados.length}${vencs.length > procesados.length ? ` de ${vencs.length}` : ''}):`,
     lineas.length > 0 ? lineas.join('\n\n') : '(sin vencimientos activos)',
     '',
-    `Acciones del trimestre Q${trimestre} ${anio}:`,
-    `- Donación: ${totalDonacion} unidades`,
-    `- Decomiso: ${totalDecomiso} unidades`,
+    '=== ANÁLISIS HISTÓRICO DE ACCIONES OPERATIVAS ===',
+    '',
+    bloqueTrimestre(`Trimestre ACTUAL (Q${trimestreActual} ${anioActual}):`, donActual, decActual),
+    '',
+    bloqueTrimestre(`Trimestre ANTERIOR (Q${trimestreAnterior} ${anioAnterior}):`, donAnterior, decAnterior),
+    '',
+    'Comparativa trimestral (actual vs. anterior):',
+    `- Donaciones: ${comparativa(donActual.total, donAnterior.total)}`,
+    `- Decomisos: ${comparativa(decActual.total, decAnterior.total)}`,
+    '',
+    'Patrones repetidos detectados (mismo producto en ≥2 registros):',
+    bloquePatrones,
   ].join('\n')
 
   // 5. Llamar a DeepSeek
@@ -266,7 +370,7 @@ const handler: Handler = async (event: HandlerEvent) => {
           { role: 'system', content: esAdmin ? SYSTEM_ADMIN : SYSTEM_OPERADOR },
           { role: 'user', content: datosFormateados },
         ],
-        max_tokens: 1000,
+        max_tokens: 1300,
         temperature: 0.3,
       }),
     })
