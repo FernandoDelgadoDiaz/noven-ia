@@ -544,38 +544,58 @@ Trabajo de producto sobre la base auditada. No forma parte de los 28 ítems orig
 
 ## PENDIENTE — próxima pasada
 
-### P1 — Cablear la UI de `Importar.tsx` a los módulos [ ] PRIORIDAD ALTA
-Los módulos están listos y testeados; falta el componente. Dos intentos de agente
-fallaron por exceder el límite de salida al escribir el archivo entero de una vez:
-**construirlo por partes** (esqueleto + `Edit` sucesivos).
+### P1 — Cablear la UI de `Importar.tsx` a los módulos [x] (deployado `6a73e65dc36bff84ecd43390`)
+`Importar.tsx` pasó de 475 a ~1040 líneas, cableado a `importar-csv.ts` e
+`importar-reconciliacion.ts`. Chunk: 33.85 kB → 97.16 kB. Construido en 4 partes
+con ediciones incrementales (dos intentos previos de agente reventaron el límite
+de 32k tokens de salida al escribir el archivo entero de una vez).
 
-Gates que quedan SIN implementar (el importador hoy sigue con el comportamiento viejo):
+Gates implementados y verificados en el código:
 
-- **C5 · Familia no resuelta se ignora en silencio** — `Importar.tsx:118-127, 195`.
+- **C5 · Familia no resuelta [x]** — 8 caminos de corte antes de construir la
+  reconciliación (`Importar.tsx:242`). Si la familia no resuelve, `recon` queda null
+  y el preview nunca se renderiza. Mensajes distintos según si falta `Cód.Familia:`
+  o si el código no existe en `familias`. Contexto del bug original:
   Si el regex `Cód.Familia:` no matchea o el código no existe en `familias`,
   `familiaId` queda null y los productos nuevos se insertan **sin `familia_id`**.
   Es el origen de los 59 productos huérfanos. Además, para un operador la RLS
   `productos_insert_operador_familia` exige `uf.familia_id = productos.familia_id`,
   así que con familia null **todos** los inserts fallan.
-  → Bloquear la importación con mensajes distintos según el caso.
+  Sigue pendiente: los 59 productos ya huérfanos no se reparan solos (ver P3).
 
-- **C7 · El importador REASIGNA la familia de todo producto que matchea** —
+- **C7 · Reasignación silenciosa de familia [x]** — `payload.familia_id` se asigna
+  ahora en UN solo lugar (`Importar.tsx:334`), detrás de `debeAsignarFamilia()`:
+  solo si el producto no tenía familia (repara huérfanos) o si el admin tildó ese
+  producto puntual en la sección "Productos que cambiarían de familia".
+  Contexto del bug original:
   `Importar.tsx:198`: `if (familiaId !== null) updatePayload.familia_id = familiaId`.
   Cada producto que matchea recibe la familia de ese CSV, pisando la que tenía.
   **Este es el mecanismo que corrompió Turrocklets** (ver S6/P3).
-  → No pisar `familia_id` cuando difiere; juntar en "Productos que cambiarían de
-  familia" y exigir confirmación explícita (toggle apagado por defecto).
+  La decisión es por producto, no un toggle global: cada conflicto se lista con
+  "figura en [familia actual] en la app, este CSV dice [familia del CSV]".
 
-- **C8 · Gate de confirmación de familia antes de procesar** — no existe hoy.
-  → Tarjeta previa al preview: "Este CSV corresponde a la familia 003 GOLOSINAS.
-  Actualmente asignada a: Repositora Golosinas. ¿Confirmás?" con botones
-  "Sí, importar a 003 GOLOSINAS" / "Cancelar". Si la familia no tiene operador
-  asignado, avisarlo en ámbar y permitir continuar. Sin confirmación no hay escritura.
+- **C8 · Gate de confirmación de familia [x]** — `familiaConfirmada` arranca en
+  `false`; el preview y el botón de confirmar están detrás de esa bandera
+  (`Importar.tsx:629`) y `handleConfirmarImportacion` la vuelve a chequear (`:303`)
+  como defensa en profundidad.
+  La tarjeta nombra familia y operador asignado; si la familia no tiene operador,
+  avisa en ámbar y permite continuar.
 
 Los tres gates son independientes y se aplican en secuencia: C5 corta si no hay
 familia; C8 confirma el archivo completo; C7 decide producto por producto. **No
 unificar C7 con C8**: si confirmar el archivo implicara aceptar en bloque los
 reetiquetados, se reproduce exactamente el bug que corrompió Turrocklets.
+
+Además del brief, se agregó **aviso de posible duplicado** (`UMBRAL_AVISO = 0.70`):
+los productos que van a insertarse como nuevos y se parecen entre 70% y 85% a uno
+existente se listan como sospecha en el preview y en el reporte. El módulo solo
+matchea automáticamente por encima de 0,85; esa franja intermedia antes se
+insertaba en silencio.
+
+⚠️ **Sin verificación funcional en navegador.** Los gates están verificados por
+lectura de código y el build/lint pasan, pero nadie ejecutó todavía una
+importación real contra un CSV de Glaciar. Antes de usarlo en serio conviene
+probar con un archivo real y revisar el reporte.
 
 ### P2 — Los tres puntos de datos aprobados [ ]
 1. **`usuarios.activo = true` para gerente091@gmail.com.** Hoy está en `false`.
@@ -664,11 +684,13 @@ CSV con su familia en una tabla temporal y hacer el `EXCEPT` contra
 - El motor de riesgo sigue **triplicado**: `src/lib/riesgo.ts`,
   `netlify/functions/analisis.ts` (copia inline) y la función SQL
   `recalcular_niveles_vencimientos()`. Si cambian los umbrales hay que tocar los tres.
-- `usuarios_update_admin_or_self` tiene `qual = true` y `with_check = true`:
-  **cualquier usuario autenticado puede actualizar cualquier fila de `usuarios`**,
-  incluido su propio `rol`. No se tocó en esta sesión por estar fuera de alcance y
-  porque el panel Admin depende de esa policy — pero es un agujero de escalada de
-  privilegios y merece su propia tarea.
+- ~~Escalada de privilegios en `usuarios`~~ **[x] CERRADO** (por el usuario, vía SQL).
+  `usuarios_update_admin_or_self` (`qual = true`, `with_check = true`) fue
+  reemplazada por `usuarios_update_admin` y `usuarios_update_own`, esta última con
+  un WITH CHECK que exige que `rol` y `activo` sigan iguales a los actuales.
+  Verificado contra producción (4 tests, transacción con rollback): la auto-escalada
+  a admin es rechazada por la policy, un operador no puede editar a otro usuario,
+  sí puede editar su propio nombre, y el panel Admin sigue pudiendo editar a otros.
 - Policies duplicadas en `vencimientos` (`_select` y `_select_authenticated`,
   `_insert` e `_insert_own`) y en `familias`. Las de UPDATE/DELETE ya se
   consolidaron; las de SELECT/INSERT siguen duplicadas.
