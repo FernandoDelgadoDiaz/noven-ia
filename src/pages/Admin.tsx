@@ -105,6 +105,69 @@ function ModalUsuario({
   const [sectoresExpandidos, setSectoresExpandidos] = useState<Set<string>>(new Set())
   const [guardando, setGuardando] = useState(false)
   const [errores, setErrores] = useState<Partial<Record<keyof FormData | 'global', string>>>({})
+  const [familiasOcupadas, setFamiliasOcupadas] = useState<
+    Map<string, { usuarioId: string; nombre: string }>
+  >(new Map())
+  const [cargandoOcupacion, setCargandoOcupacion] = useState(true)
+  const [avisoRol, setAvisoRol] = useState<string | null>(null)
+
+  // Cargar mapa de familias ya tomadas por operadores al montar el modal
+  useEffect(() => {
+    async function cargarOcupacion() {
+      setCargandoOcupacion(true)
+      try {
+        const [{ data: operadoresData, error: errOp }, { data: asignacionesData, error: errAs }] =
+          await Promise.all([
+            supabase.from('usuarios').select('id, nombre').eq('rol', 'operador'),
+            supabase.from('usuario_familias').select('usuario_id, familia_id'),
+          ])
+        if (errOp || errAs) {
+          setErrores((prev) => ({
+            ...prev,
+            global:
+              'No pudimos cargar la disponibilidad de familias. Podés continuar, pero sin validación de conflictos.',
+          }))
+          return
+        }
+        interface OperadorFila { id: string; nombre: string }
+        interface AsignacionFila { usuario_id: string; familia_id: string }
+        const opArr = (operadoresData ?? []) as unknown as OperadorFila[]
+        const asArr = (asignacionesData ?? []) as unknown as AsignacionFila[]
+        const opSet = new Set(opArr.map((o) => o.id))
+        const mapa = new Map<string, { usuarioId: string; nombre: string }>()
+        for (const row of asArr) {
+          if (opSet.has(row.usuario_id)) {
+            const op = opArr.find((o) => o.id === row.usuario_id)
+            if (op) {
+              mapa.set(row.familia_id, { usuarioId: row.usuario_id, nombre: op.nombre })
+            }
+          }
+        }
+        setFamiliasOcupadas(mapa)
+      } finally {
+        setCargandoOcupacion(false)
+      }
+    }
+    void cargarOcupacion()
+  }, [])
+
+  // Verifica si una familia está bloqueada para un rol dado (otra persona la tiene asignada)
+  function esBloqueadaParaRol(
+    familiaId: string,
+    rol: RolUsuario,
+  ): { bloqueada: boolean; nombre?: string } {
+    if (rol !== 'operador') return { bloqueada: false }
+    const entrada = familiasOcupadas.get(familiaId)
+    if (!entrada) return { bloqueada: false }
+    // Si es el propio usuario que estamos editando, no bloquear
+    if (entrada.usuarioId === usuarioId) return { bloqueada: false }
+    return { bloqueada: true, nombre: entrada.nombre }
+  }
+
+  // Verifica si una familia está bloqueada para el rol actual del form
+  function familiaBloqueada(familiaId: string): { bloqueada: boolean; nombre?: string } {
+    return esBloqueadaParaRol(familiaId, form.rol)
+  }
 
   function toggleSector(sectorId: string) {
     setSectoresExpandidos((prev) => {
@@ -119,6 +182,8 @@ function ModalUsuario({
   }
 
   function toggleFamilia(familiaId: string) {
+    // Defensa en profundidad: no procesar familias bloqueadas
+    if (familiaBloqueada(familiaId).bloqueada) return
     setForm((prev) => {
       const next = new Set(prev.familiasSeleccionadas)
       if (next.has(familiaId)) {
@@ -133,10 +198,13 @@ function ModalUsuario({
   function marcarTodasSector(sectorId: string) {
     const grupo = sectoresConFamilias.find((g) => g.sector.id === sectorId)
     if (!grupo) return
-    const ids = grupo.familias.map((f) => f.id)
+    // Saltear familias bloqueadas para el rol actual
+    const ids = grupo.familias
+      .filter((f) => !familiaBloqueada(f.id).bloqueada)
+      .map((f) => f.id)
     setForm((prev) => {
       const next = new Set(prev.familiasSeleccionadas)
-      const todasMarcadas = ids.every((id) => next.has(id))
+      const todasMarcadas = ids.length > 0 && ids.every((id) => next.has(id))
       if (todasMarcadas) {
         ids.forEach((id) => next.delete(id))
       } else {
@@ -154,6 +222,24 @@ function ModalUsuario({
     if (modo === 'crear' && !form.password) errs.password = 'La contraseña es obligatoria'
     if (modo === 'crear' && form.password && form.password.length < 6)
       errs.password = 'La contraseña debe tener al menos 6 caracteres'
+
+    // Validar que ninguna familia seleccionada esté tomada por otro operador
+    if (form.rol === 'operador') {
+      const todasFamilias = sectoresConFamilias.flatMap((g) => g.familias)
+      const conflictos: string[] = []
+      for (const fId of form.familiasSeleccionadas) {
+        const { bloqueada, nombre } = familiaBloqueada(fId)
+        if (bloqueada) {
+          const familia = todasFamilias.find((f) => f.id === fId)
+          const label = familia ? `${familia.codigo} ${familia.nombre}` : fId
+          conflictos.push(`${label} (${nombre ?? 'otro operador'})`)
+        }
+      }
+      if (conflictos.length > 0) {
+        errs.global = `Estas familias ya están asignadas a otro operador: ${conflictos.join(', ')}. Quitalas o cambiá el rol.`
+      }
+    }
+
     setErrores(errs)
     return Object.keys(errs).length === 0
   }
@@ -232,9 +318,25 @@ function ModalUsuario({
           usuario_id: uid,
           familia_id: fId,
         }))
+        // TODO: riesgo de pérdida de datos — el DELETE anterior ya se ejecutó. Si este INSERT
+        // falla, el usuario queda sin familias asignadas. Se intenta rollback re-insertando las
+        // originales, pero sin transacción no hay garantía de consistencia total.
         const { error: errIns } = await supabase.from('usuario_familias').insert(rows)
         if (errIns) {
-          setErrores({ global: `Error al asignar familias: ${errIns.message}` })
+          let msgExtra = ''
+          const famIdsOriginales = initialData?.familiasIds ?? []
+          if (famIdsOriginales.length > 0) {
+            const rollbackRows = famIdsOriginales.map((fId) => ({
+              usuario_id: uid as string,
+              familia_id: fId,
+            }))
+            const { error: errRollback } = await supabase.from('usuario_familias').insert(rollbackRows)
+            if (errRollback) {
+              msgExtra =
+                ' Además, no pudimos restaurar las familias anteriores — revisá el usuario manualmente.'
+            }
+          }
+          setErrores({ global: errIns.message + msgExtra })
           setGuardando(false)
           return
         }
@@ -363,13 +465,39 @@ function ModalUsuario({
             <select
               id="campo-rol"
               value={form.rol}
-              onChange={(e) => setForm((p) => ({ ...p, rol: e.target.value as RolUsuario }))}
+              onChange={(e) => {
+                const nuevoRol = e.target.value as RolUsuario
+                setAvisoRol(null)
+                setForm((prev) => {
+                  if (nuevoRol === 'operador') {
+                    const nuevasFamilias = new Set(prev.familiasSeleccionadas)
+                    let quitadas = 0
+                    for (const fId of [...prev.familiasSeleccionadas]) {
+                      const { bloqueada } = esBloqueadaParaRol(fId, nuevoRol)
+                      if (bloqueada) {
+                        nuevasFamilias.delete(fId)
+                        quitadas++
+                      }
+                    }
+                    if (quitadas > 0) {
+                      setAvisoRol(
+                        `Se quitaron ${quitadas} familia${quitadas > 1 ? 's' : ''} que ya pertenecen a otro operador.`,
+                      )
+                    }
+                    return { ...prev, rol: nuevoRol, familiasSeleccionadas: nuevasFamilias }
+                  }
+                  return { ...prev, rol: nuevoRol }
+                })
+              }}
               className="w-full rounded-xl border border-border px-3.5 py-2.5 text-sm bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-brand/40 transition-shadow appearance-none"
             >
               <option value="operador">Operador</option>
               <option value="supervisor">Supervisor</option>
               <option value="admin">Admin</option>
             </select>
+            {avisoRol && (
+              <p className="text-xs text-amber-600 mt-1.5">{avisoRol}</p>
+            )}
           </div>
 
           {/* Activo toggle — solo en edición */}
@@ -400,7 +528,13 @@ function ModalUsuario({
               </span>
             </div>
 
-            {sectoresConFamilias.length === 0 ? (
+            {cargandoOcupacion ? (
+              <div className="rounded-xl border border-border overflow-hidden divide-y divide-border/60 animate-pulse">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="h-9 bg-muted/40" />
+                ))}
+              </div>
+            ) : sectoresConFamilias.length === 0 ? (
               <p className="text-xs text-muted-foreground italic py-2">
                 No hay sectores/familias cargados.
               </p>
@@ -408,10 +542,15 @@ function ModalUsuario({
               <div className="rounded-xl border border-border overflow-hidden divide-y divide-border/60">
                 {sectoresConFamilias.map(({ sector, familias }) => {
                   const expandido = sectoresExpandidos.has(sector.id)
+                  const familiasDisponibles = familias.filter(
+                    (f) => !familiaBloqueada(f.id).bloqueada,
+                  )
                   const seleccionadasEnSector = familias.filter((f) =>
                     form.familiasSeleccionadas.has(f.id),
                   ).length
-                  const todasEnSector = seleccionadasEnSector === familias.length
+                  const todasEnSector =
+                    familiasDisponibles.length > 0 &&
+                    familiasDisponibles.every((f) => form.familiasSeleccionadas.has(f.id))
 
                   return (
                     <div key={sector.id}>
@@ -450,22 +589,36 @@ function ModalUsuario({
                         <div className="divide-y divide-border/40 bg-white">
                           {familias.map((familia) => {
                             const checked = form.familiasSeleccionadas.has(familia.id)
+                            const { bloqueada, nombre: nombreOcupador } = familiaBloqueada(familia.id)
                             return (
                               <button
                                 key={familia.id}
                                 type="button"
                                 onClick={() => toggleFamilia(familia.id)}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-accent/50 transition-colors text-left"
+                                disabled={bloqueada}
+                                aria-disabled={bloqueada}
+                                className={`w-full flex flex-col gap-0.5 px-4 py-2.5 text-left transition-colors ${
+                                  bloqueada
+                                    ? 'opacity-50 cursor-not-allowed'
+                                    : 'hover:bg-accent/50'
+                                }`}
                               >
-                                {checked ? (
-                                  <CheckSquare className="h-4 w-4 text-brand shrink-0" />
-                                ) : (
-                                  <Square className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                                <div className="flex items-center gap-3">
+                                  {!bloqueada && checked ? (
+                                    <CheckSquare className="h-4 w-4 text-brand shrink-0" />
+                                  ) : (
+                                    <Square className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                                  )}
+                                  <span className="text-xs text-foreground">
+                                    <span className="font-mono text-muted-foreground mr-1">{familia.codigo}</span>
+                                    {familia.nombre}
+                                  </span>
+                                </div>
+                                {bloqueada && nombreOcupador && (
+                                  <p className="text-xs text-muted-foreground ml-7">
+                                    Asignada a {nombreOcupador}
+                                  </p>
                                 )}
-                                <span className="text-xs text-foreground">
-                                  <span className="font-mono text-muted-foreground mr-1">{familia.codigo}</span>
-                                  {familia.nombre}
-                                </span>
                               </button>
                             )
                           })}
@@ -491,13 +644,18 @@ function ModalUsuario({
           <button
             type="button"
             onClick={() => void guardar()}
-            disabled={guardando}
+            disabled={guardando || cargandoOcupacion}
             className="flex-1 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold shadow-brand transition-all active:scale-[0.97] disabled:opacity-60 flex items-center justify-center gap-2"
           >
             {guardando ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Guardando...
+              </>
+            ) : cargandoOcupacion ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Cargando...
               </>
             ) : (
               modo === 'crear' ? 'Crear usuario' : 'Guardar cambios'

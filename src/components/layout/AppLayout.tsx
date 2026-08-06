@@ -17,10 +17,15 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { to: '/scanner', label: 'Scanner', Icon: ScanLine, isMain: true },
   { to: '/vencimientos', label: 'Vencimientos', Icon: Calendar },
   { to: '/analisis', label: 'Análisis', Icon: BrainCircuit },
-  { to: '/importar', label: 'Importar', Icon: FileUp },
 ]
 
-const ADMIN_NAV_ITEM: NavItem = { to: '/admin', label: 'Admin', Icon: Users }
+// Items exclusivos de admin. Importar reescribe stock, venta media y familia de
+// productos de todos los operadores, así que no se ofrece fuera del rol admin.
+// La ruta además está protegida por AdminRoute: ocultar el link no alcanza.
+const ADMIN_NAV_ITEMS: NavItem[] = [
+  { to: '/importar', label: 'Importar', Icon: FileUp },
+  { to: '/admin', label: 'Admin', Icon: Users },
+]
 
 // Mobile: izquierda del FAB central
 const MOBILE_NAV_LEFT: NavItem[] = [
@@ -28,10 +33,9 @@ const MOBILE_NAV_LEFT: NavItem[] = [
   { to: '/vencimientos', label: 'Vencimientos', Icon: Calendar },
 ]
 
-// Mobile: derecha del FAB central (Admin se añade aquí si es admin)
+// Mobile: derecha del FAB central (los items de admin se añaden si es admin)
 const MOBILE_NAV_RIGHT_BASE: NavItem[] = [
   { to: '/analisis', label: 'Análisis', Icon: BrainCircuit },
-  { to: '/importar', label: 'Importar', Icon: FileUp },
 ]
 
 export default function AppLayout() {
@@ -54,9 +58,9 @@ export default function AppLayout() {
     navigate('/login')
   }
 
-  const navItems = isAdmin ? [...BASE_NAV_ITEMS, ADMIN_NAV_ITEM] : BASE_NAV_ITEMS
+  const navItems = isAdmin ? [...BASE_NAV_ITEMS, ...ADMIN_NAV_ITEMS] : BASE_NAV_ITEMS
   const mobileNavRight = isAdmin
-    ? [...MOBILE_NAV_RIGHT_BASE, ADMIN_NAV_ITEM]
+    ? [...MOBILE_NAV_RIGHT_BASE, ...ADMIN_NAV_ITEMS]
     : MOBILE_NAV_RIGHT_BASE
   return (
     <div className="flex min-h-screen bg-surface-base">

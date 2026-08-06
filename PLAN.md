@@ -448,3 +448,227 @@ Trabajo de producto sobre la base auditada. No forma parte de los 28 ítems orig
 - Edge cases validados por QA (PASS): días negativos truncados con `Math.max(0, dias)` → 100% merma (vencido); ventaMedia=0 → 100%; cantidad=0 → 100% (defensivo, no se da en la práctica por el schema). Sin regresión de rol/familias/RLS. `tsc` + `build` limpios.
 - Cosmético: se eliminó la redundancia "vencido hace X días" duplicada en la línea de "Días restantes" del prompt.
 - **Nota:** `calcularMerma` se sumó a la copia inline del motor de riesgo (no se pudo importar `src/lib/riesgo.ts`, módulo frontend-only). Sigue pendiente extraer la lógica compartida a `shared/`.
+
+---
+
+# Sesión 2026-08-05 — Bugfixes RLS + auditoría del importador CSV
+
+> Agente: Architect (NodoLabs Forge). Deploy `6a73ded558742b2b7fb65004`.
+> Filosofía aplicada: datos confiables o no hay sistema. Si el importador miente,
+> todo lo que se construye encima miente.
+
+## ENTREGADO Y VERIFICADO
+
+### S1 — Admin no podía eliminar vencimientos [x] (deployado)
+- **Archivo:** `src/components/dashboard/EditarVencimientoModal.tsx:122-131`
+- **Causa raíz:** el botón "Eliminar registro" hace un SOFT DELETE
+  (`UPDATE vencimientos SET activo=false`). Las policies de UPDATE en producción
+  eran `vencimientos_update` (`auth.uid() = usuario_id`) y `vencimientos_update_own`
+  (`usuario_id = auth.uid()`). No existía policy para admin: el UPDATE afectaba
+  **0 filas** y PostgREST **no devuelve error** en ese caso → falla silenciosa.
+  Por eso el botón "no hacía nada" sin mensaje.
+- **Migración:** `20260805000000_rls_vencimientos_admin_familia.sql` (aplicada).
+  Helper `public.rol_actual()` (SECURITY DEFINER, `search_path` fijo, EXECUTE solo
+  para `authenticated`) para no leer `usuarios` desde el cuerpo de la policy.
+  Policies unificadas `vencimientos_update_admin_o_familia` y
+  `vencimientos_delete_admin_o_familia`: admin/supervisor sin restricción, o
+  autor del registro, o dueño de la familia del producto.
+- **Decisión de diseño:** se conserva el OR `usuario_id = auth.uid()` a propósito.
+  Hay 59 productos con `familia_id` NULL; sin ese OR los vencimientos cargados
+  sobre esos productos quedarían inaccesibles para el operador que los cargó.
+- **Verificación (6 tests contra producción, en transacción con ROLLBACK):**
+  | Test | Resultado |
+  |---|---|
+  | Admin hace soft delete de registro ajeno | 1 fila — PASS |
+  | Operador intenta borrar de familia ajena | 0 filas — PASS |
+  | Operador borra en su propia familia | 1 fila — PASS |
+  | Familia 003 → segundo operador | bloqueado — PASS |
+  | Familia 003 → admin | permitido — PASS |
+  | Promover a operador con familia en conflicto | bloqueado — PASS |
+  Post-rollback: 30 vencimientos activos, 2 asignaciones, rol admin intactos.
+
+### S2 — Familia exclusiva por operador [x] (deployado)
+- **Migración:** `20260805000001_familia_exclusiva_operador.sql` (aplicada).
+- **Decisión arquitectónica — trigger, NO índice único parcial:** el predicado de
+  un índice parcial debe ser IMMUTABLE y PostgreSQL no admite subconsultas ahí.
+  El `rol` vive en `public.usuarios`, no en `usuario_familias`, así que
+  `WHERE (SELECT rol FROM usuarios ...) = 'operador'` es ilegal como predicado.
+  La alternativa —desnormalizar `rol` dentro de `usuario_familias`— crea un
+  segundo lugar de verdad que hay que mantener sincronizado. El trigger valida
+  contra la fuente única y admite el lock advisory.
+- `fn_familia_exclusiva_operador()` BEFORE INSERT/UPDATE en `usuario_familias`,
+  con `pg_advisory_xact_lock` para cerrar la carrera entre transacciones
+  concurrentes. Error `23505` con mensaje en castellano.
+- `fn_rol_operador_sin_colision()` BEFORE UPDATE OF rol en `usuarios`: cubre el
+  caso de promover a operador a alguien que ya tiene familias en conflicto.
+- Al aplicar: 0 colisiones preexistentes (003 → Repositora Golosinas, 014 → Hernan).
+- **Frontend:** `src/pages/Admin.tsx` — familias tomadas aparecen deshabilitadas
+  con "Asignada a {nombre}", el bloqueo se recalcula al cambiar el rol, se depuran
+  las selecciones en conflicto al pasar a operador, validación al guardar y
+  rollback de familias si el INSERT falla.
+
+### S3 — `/importar` estaba SIN PROTECCIÓN [x] (deployado) — no estaba en el brief
+- **Archivo:** `src/router/index.tsx:73-80` (antes del fix).
+- **Problema:** la ruta colgaba directamente de `PrivateRoute`, fuera del bloque
+  `AdminRoute`. **Cualquier usuario autenticado, incluido un operador, podía
+  entrar y reescribir stock, venta media y familia de productos de otras familias.**
+- **Fix:** ruta movida bajo `AdminRoute`. Además en
+  `src/components/layout/AppLayout.tsx` el link "Importar" estaba en
+  `BASE_NAV_ITEMS` y `MOBILE_NAV_RIGHT_BASE`, o sea visible para operadores;
+  se movió a `ADMIN_NAV_ITEMS`. Ocultar el link no alcanza — por eso el guard va
+  igual —, pero ofrecérselo a quien no puede usarlo era una invitación al error.
+
+### S4 — Reparación de descripciones corrompidas [x] (aplicada)
+- **Migración:** `20260805000002_reparar_descripciones_mojibake.sql`.
+- 6 productos tenían U+FFFD guardado en `descripcion` (`BA�O`, `SUE�OS`,
+  `CASTA�AS`, `JALAPE�O`, `BA�ADA`), todos donde iba una `Ñ`. Verificado uno por
+  uno: exactamente 1 carácter corrupto por fila, en los 6 el original es `Ñ`.
+- Backup en `public.productos_descripcion_backup_20260805` (RLS: SELECT solo admin)
+  con la query de rollback documentada en el archivo de migración.
+- UPDATE acotado por lista explícita de descripciones: no puede tocar filas nuevas
+  cuyo carácter corrupto no sea una `Ñ`. Restantes tras aplicar: 0.
+
+### S5 — Módulos del importador, escritos y testeados [x] (mergeados, SIN CABLEAR)
+- `src/lib/importar-csv.ts` — **38 tests pasando**
+- `src/lib/importar-reconciliacion.ts` — **30 tests pasando**
+- ⚠️ **Ninguno está importado por `src/pages/Importar.tsx` todavía.** Es código
+  muerto: Vite lo tree-shakea y no aparece en los chunks del build. No afecta el
+  bundle ni el comportamiento en producción.
+- Cobertura de los tests, con los casos reales de producción:
+  - `parsearNumeroArg('1.234')` → 1234 · `parsearNumeroArg('1.234,56')` → 1234.56
+  - Latin-1 vs UTF-8 detectados y decodificados correctamente
+  - CSV con columna nueva insertada: resuelve índices por nombre
+  - Escenario Turrocklets completo (ver S6)
+
+---
+
+## PENDIENTE — próxima pasada
+
+### P1 — Cablear la UI de `Importar.tsx` a los módulos [ ] PRIORIDAD ALTA
+Los módulos están listos y testeados; falta el componente. Dos intentos de agente
+fallaron por exceder el límite de salida al escribir el archivo entero de una vez:
+**construirlo por partes** (esqueleto + `Edit` sucesivos).
+
+Gates que quedan SIN implementar (el importador hoy sigue con el comportamiento viejo):
+
+- **C5 · Familia no resuelta se ignora en silencio** — `Importar.tsx:118-127, 195`.
+  Si el regex `Cód.Familia:` no matchea o el código no existe en `familias`,
+  `familiaId` queda null y los productos nuevos se insertan **sin `familia_id`**.
+  Es el origen de los 59 productos huérfanos. Además, para un operador la RLS
+  `productos_insert_operador_familia` exige `uf.familia_id = productos.familia_id`,
+  así que con familia null **todos** los inserts fallan.
+  → Bloquear la importación con mensajes distintos según el caso.
+
+- **C7 · El importador REASIGNA la familia de todo producto que matchea** —
+  `Importar.tsx:198`: `if (familiaId !== null) updatePayload.familia_id = familiaId`.
+  Cada producto que matchea recibe la familia de ese CSV, pisando la que tenía.
+  **Este es el mecanismo que corrompió Turrocklets** (ver S6/P3).
+  → No pisar `familia_id` cuando difiere; juntar en "Productos que cambiarían de
+  familia" y exigir confirmación explícita (toggle apagado por defecto).
+
+- **C8 · Gate de confirmación de familia antes de procesar** — no existe hoy.
+  → Tarjeta previa al preview: "Este CSV corresponde a la familia 003 GOLOSINAS.
+  Actualmente asignada a: Repositora Golosinas. ¿Confirmás?" con botones
+  "Sí, importar a 003 GOLOSINAS" / "Cancelar". Si la familia no tiene operador
+  asignado, avisarlo en ámbar y permitir continuar. Sin confirmación no hay escritura.
+
+Los tres gates son independientes y se aplican en secuencia: C5 corta si no hay
+familia; C8 confirma el archivo completo; C7 decide producto por producto. **No
+unificar C7 con C8**: si confirmar el archivo implicara aceptar en bloque los
+reetiquetados, se reproduce exactamente el bug que corrompió Turrocklets.
+
+### P2 — Los tres puntos de datos aprobados [ ]
+1. **`usuarios.activo = true` para gerente091@gmail.com.** Hoy está en `false`.
+   No es la causa del bug de borrado (ni `AdminRoute` ni `PrivateRoute` filtran por
+   `activo`), pero es una inconsistencia.
+2. **Deduplicar Turrocklets.** Sobreviviente `3328533` (id `be277e9a-0dfe-42a3-82db-a3e8dbd898fc`,
+   stock 169, venta media 3.15). Pasos, en orden:
+   - corregir su `familia_id` a **003 GOLOSINAS** (`1c4d345c-254a-4065-b111-f744f966faaa`);
+     hoy figura en 014 por el bug C7
+   - migrar el vencimiento activo `11731d9d-eb1e-46a0-b9bd-d97ed4f64a5b`
+     (2 unidades, vence 2026-08-07, nivel `donacion`, 0 acciones, cargado por
+     Repositora Golosinas) de `c4fba8e2` a `be277e9a`. **Sin colisión**: el
+     sobreviviente tiene 0 vencimientos, así que no viola
+     `uq_vencimiento_activo_por_producto_sucursal`
+   - migrar `codigo_barras = '0000077993540'` al sobreviviente (hoy lo tiene solo
+     el `0000000`). Si no se migra, al escanear el producto la app no lo encuentra
+     y **crea un tercer duplicado**. ⚠️ El EAN tiene formato raro (ceros a la
+     izquierda): validar contra el envase físico
+   - `imagen_url`: **ninguno de los dos tiene foto**, no hay nada que conservar
+   - desactivar `c4fba8e2` con `activo = false` (no borrar), con backup documentado
+3. **Migración de limpieza dedicada** para los dos grupos de P3.
+
+### P3 — Relevamiento de datos sucios [ ]
+- **59 productos con `familia_id` NULL** (de 651). Invisibles a las consultas por
+  familia y a la detección de huérfanos. Causa: C5.
+- **11 productos con `cod_art` fuera de `^\d{4,8}$`**, todos cargados desde el
+  Scanner. Nunca van a matchear un cod_art de Glaciar (7 dígitos):
+  | cod_art | descripción | marca | stock | codigo_barras |
+  |---|---|---|---|---|
+  | `0000000` | Turrocklets | Arcor | 127 | `0000077993540` |
+  | `7622201761288` | Galletitas mini chocolate | Oreo | 5 | null |
+  | `7622210795625` | Chocolate leche | Milka | 133 | null |
+  | `7790040003606` | Galletitas sabor queso | Mesitas | 9 | `7790040003606` |
+  | `7790040484801` | Alfajor triple chocolate | Tofi | 98 | null |
+  | `7790040953703` | Alfajor tofi blanco | Tofi | 74 | `7790040953703` |
+  | `7790310985236` | Papas fritas clásicas | Lays | 68 | null |
+  | `7790310985267` | Nachos sabor queso | Doritos | 103 | null |
+  | `7790310985274` | Palitos de maiz con queso | Cheetos | 58 | `7790310985274` |
+  | `7790310985335` | Papas flamin hot | Lays | 45 | null |
+  | `7798267200044` | Alfajor de maicena | La bustincera | 27 | null |
+  10 de los 11 tienen un **EAN-13 guardado en `cod_art`**; 6 de esos tienen
+  `codigo_barras` en NULL pese a que el `cod_art` *es* el EAN. La limpieza debe
+  mover `cod_art → codigo_barras` en esos casos.
+  Los dos grupos son **disjuntos**: ninguno de los 11 está entre los 59 sin familia.
+  Todos tienen `venta_media_diaria = 0`, así que el motor de riesgo los trata como
+  "sin rotación".
+
+### P4 — Productos con `familia_id` incorrecto [ ] INVESTIGACIÓN ABIERTA
+**Límite declarado: no se puede resolver sin los CSV de Glaciar.** Cualquier lista
+app-vs-Glaciar sin esos archivos sería inventada.
+
+Lo que sí está establecido:
+- **Mecanismo:** C7 (`Importar.tsx:198`), no UPDATEs manuales por descripción.
+- **Evidencia forense:** 154 productos actualizados en 22 segundos
+  (2026-05-29 23:43:07 → 23:43:29), ~7 por segundo — la firma del `for` secuencial
+  con un `await` por producto del importador. Un `UPDATE ... WHERE ilike` manual
+  habría sido instantáneo, en un único timestamp. Los 154 quedaron en familia 014.
+- Turrocklets `3328533` fue actualizado el 2026-08-04 23:32 → otra corrida, mismo
+  mecanismo.
+- **Implicancia:** el reparto actual 003 (398 productos) / 014 (194) no refleja la
+  taxonomía de Glaciar sino *qué CSV se importó último y matcheó cada producto*.
+
+Query de detección, para correr cuando estén los CSV: cargar los `cod_art` de cada
+CSV con su familia en una tabla temporal y hacer el `EXCEPT` contra
+`productos.familia_id`. Otros lotes sospechosos detectados:
+`2026-05-26 02:29:22` (13 productos, fam 003) y `2026-05-26 02:30:32` (9, fam 003).
+
+### P5 — Hallazgos MEDIO/BAJO del importador [ ]
+- **MEDIO · Atomicidad real.** `Importar.tsx:196-209`: N updates + N inserts
+  secuenciales sin transacción. Si falla a la mitad queda estado parcial. El fix
+  planificado (lotes de 50 con `Promise.all`) mejora la velocidad y el reporte de
+  errores pero **no da atomicidad**. Para eso hace falta una RPC `SECURITY DEFINER`
+  que reciba el lote y lo aplique en una transacción.
+- **MEDIO · `descripcion` y `marca` del CSV nunca actualizan** el registro existente
+  (`Importar.tsx:197` no las incluye). La divergencia entre lo que muestra la app y
+  lo que dice Glaciar queda invisible. Reportar el drift en vez de pisar en silencio.
+- **MEDIO · Sin deduplicación de `cod_art` dentro del mismo CSV** — resuelto en el
+  módulo nuevo, falta cablearlo.
+- **BAJO · `FOOTER_PATTERNS` incluye `'Fecha'`** (`Importar.tsx:59`): descarta
+  cualquier línea que contenga esa palabra. Muy amplio; hoy no causa daño porque el
+  guard del regex sobre la columna 0 ya filtra, pero es frágil.
+- **BAJO · Mensaje de error genérico cuando no aparece `Cod.Art.`**: se reporta
+  "no se encontraron productos" en vez de "no se encontró el encabezado".
+
+### P6 — Deuda técnica arrastrada [ ]
+- El motor de riesgo sigue **triplicado**: `src/lib/riesgo.ts`,
+  `netlify/functions/analisis.ts` (copia inline) y la función SQL
+  `recalcular_niveles_vencimientos()`. Si cambian los umbrales hay que tocar los tres.
+- `usuarios_update_admin_or_self` tiene `qual = true` y `with_check = true`:
+  **cualquier usuario autenticado puede actualizar cualquier fila de `usuarios`**,
+  incluido su propio `rol`. No se tocó en esta sesión por estar fuera de alcance y
+  porque el panel Admin depende de esa policy — pero es un agujero de escalada de
+  privilegios y merece su propia tarea.
+- Policies duplicadas en `vencimientos` (`_select` y `_select_authenticated`,
+  `_insert` e `_insert_own`) y en `familias`. Las de UPDATE/DELETE ya se
+  consolidaron; las de SELECT/INSERT siguen duplicadas.

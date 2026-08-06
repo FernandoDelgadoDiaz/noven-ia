@@ -71,16 +71,21 @@ export const router = createBrowserRouter([
             ),
           },
           {
-            path: 'importar',
-            element: (
-              <ErrorBoundary>
-                <Suspense {...suspenseProps}><Importar /></Suspense>
-              </ErrorBoundary>
-            ),
-          },
-          {
+            // Importar y Admin son exclusivos de rol admin.
+            // La importación reescribe stock, venta media y familia de productos
+            // que pertenecen a otros operadores: no puede quedar al alcance de
+            // un operador. El guard de ruta es la primera barrera; la segunda es
+            // la confirmación explícita de familia dentro de Importar.
             element: <AdminRoute />,
             children: [
+              {
+                path: 'importar',
+                element: (
+                  <ErrorBoundary>
+                    <Suspense {...suspenseProps}><Importar /></Suspense>
+                  </ErrorBoundary>
+                ),
+              },
               {
                 path: 'admin',
                 element: (
