@@ -415,6 +415,16 @@ export default function Importar() {
     L.push(`Errores: ${resultado.errores.length}`)
     for (const e of resultado.errores) L.push(`  - ${e}`)
 
+    if (recon.duplicadosPorEan.length > 0) {
+      L.push('')
+      L.push(`DUPLICADOS DETECTADOS POR CÓDIGO DE BARRAS (${recon.duplicadosPorEan.length})`)
+      L.push('El mismo producto está cargado dos veces. Dar de baja el del Scanner.')
+      for (const d of recon.duplicadosPorEan) {
+        L.push(`  - Glaciar: ${d.principal.cod_art} · ${d.principal.descripcion} · stock ${d.principal.stock_actual}`)
+        L.push(`    Scanner: ${d.duplicado.cod_art} · ${d.duplicado.descripcion} · stock ${d.duplicado.stock_actual}`)
+      }
+    }
+
     if (recon.huerfanos.length > 0) {
       L.push('')
       L.push(`PRODUCTOS DE LA APP QUE NO VINIERON EN EL CSV (${recon.huerfanos.length})`)
@@ -637,6 +647,47 @@ export default function Importar() {
               </div>
               <span className="px-2.5 py-1 bg-brand text-white text-xs font-bold rounded-lg">{familia.codigo}</span>
             </div>
+
+            {/* ── Duplicados ligados por código de barras ──────────────────── */}
+            {recon.duplicadosPorEan.length > 0 && (
+              <div className="bg-white rounded-card shadow-card overflow-hidden border border-red-300 animate-fade-in">
+                <div className="px-4 py-3.5 bg-red-50 border-b border-red-200">
+                  <h2 className="text-red-900 font-bold text-sm">
+                    Duplicados detectados por código de barras ({recon.duplicadosPorEan.length})
+                  </h2>
+                  <p className="text-red-700 text-xs mt-0.5">
+                    El mismo producto físico está cargado dos veces: una desde Glaciar y otra desde el Scanner.
+                    El motor de riesgo lo está contando doble. Se actualiza el de Glaciar; el otro hay que darlo de baja a mano.
+                  </p>
+                </div>
+                <div className="divide-y divide-border/60">
+                  {recon.duplicadosPorEan.map((d) => (
+                    <div key={d.duplicado.id} className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="bg-brand-light/50 rounded-lg p-3">
+                        <p className="text-[10px] uppercase tracking-wide text-brand font-bold">De Glaciar · se actualiza</p>
+                        <p className="text-foreground text-sm font-semibold mt-1">{d.principal.descripcion}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          <span className="font-mono">{d.principal.cod_art}</span> · stock {d.principal.stock_actual} · v.media {Number(d.principal.venta_media_diaria).toFixed(2)}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          código de barras <span className="font-mono">{d.principal.codigo_barras}</span>
+                        </p>
+                      </div>
+                      <div className="bg-red-50 rounded-lg p-3">
+                        <p className="text-[10px] uppercase tracking-wide text-red-700 font-bold">Del Scanner · duplicado</p>
+                        <p className="text-foreground text-sm font-semibold mt-1">{d.duplicado.descripcion}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          <span className="font-mono">{d.duplicado.cod_art}</span> · stock {d.duplicado.stock_actual} · v.media {Number(d.duplicado.venta_media_diaria).toFixed(2)}
+                        </p>
+                        <p className="text-[11px] text-red-700 mt-1">
+                          Su cod_art es en realidad el código de barras del otro registro.
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* ── Huérfanos: el caso Turrocklets ───────────────────────────── */}
             {recon.huerfanos.length > 0 && (
@@ -1025,6 +1076,26 @@ export default function Importar() {
                 </button>
               </div>
             </div>
+
+            {recon.duplicadosPorEan.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-card px-4 py-3.5">
+                <p className="text-red-900 font-bold text-sm">
+                  Duplicados detectados por código de barras ({recon.duplicadosPorEan.length})
+                </p>
+                <p className="text-red-700 text-xs mt-0.5 mb-2">
+                  Se actualizó el registro de Glaciar. El del Scanner sigue activo y hay que darlo de baja a mano,
+                  o el motor de riesgo va a seguir contando el producto dos veces.
+                </p>
+                {recon.duplicadosPorEan.map((d) => (
+                  <p key={d.duplicado.id} className="text-red-800 text-xs">
+                    <span className="font-mono font-semibold">{d.principal.cod_art}</span> {d.principal.descripcion}
+                    {' ← dar de baja '}
+                    <span className="font-mono font-semibold">{d.duplicado.cod_art}</span> {d.duplicado.descripcion}
+                    {' (stock '}{d.duplicado.stock_actual}{')'}
+                  </p>
+                ))}
+              </div>
+            )}
 
             {/* Huérfanos: se repiten en el reporte, no solo en el preview */}
             {recon.huerfanos.length > 0 && (

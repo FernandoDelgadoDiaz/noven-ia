@@ -50,6 +50,26 @@ export interface Huerfano {
   motivoCodArt: MotivoCodArt
 }
 
+/**
+ * Duplicado lógico detectado por el ÚNICO vínculo duro que existe entre un
+ * producto escaneado y su equivalente en Glaciar: el código de barras.
+ *
+ * El registro de Glaciar guarda el EAN en `codigo_barras`; el que se cargó desde
+ * el Scanner guardó ese mismo EAN en `cod_art` (campo equivocado). Cuando ambos
+ * conviven, son el mismo producto físico contado dos veces.
+ *
+ * Esta detección no depende de la similaridad de descripción, que falla en casos
+ * reales: "Chocolate leche" contra "CHOCOLATE CONLECHE MILKA Un(240" queda muy
+ * por debajo del umbral y aun así son el mismo producto.
+ */
+export interface DuplicadoPorEan {
+  fila: FilaParseada
+  /** El registro de Glaciar: el que debe sobrevivir. */
+  principal: ProductoDb
+  /** El registro escaneado, cuyo cod_art es en realidad el EAN del principal. */
+  duplicado: ProductoDb
+}
+
 export interface Reconciliacion {
   /** Match inequívoco por código: se actualizan sin preguntar. */
   aActualizar: FilaConciliada[]
@@ -63,6 +83,8 @@ export interface Reconciliacion {
   conflictosFamilia: FilaConciliada[]
   /** Filas que apuntaban a un producto ya tomado por otra fila del CSV. */
   colisiones: FilaConciliada[]
+  /** Pares producto-de-Glaciar / producto-escaneado ligados por el código de barras. */
+  duplicadosPorEan: DuplicadoPorEan[]
 }
 
 // ─── Clasificación de cod_art ─────────────────────────────────────────────────
@@ -190,12 +212,33 @@ export function reconciliar(
     }
   }
 
+  // ── Duplicados ligados por código de barras ───────────────────────────────
+  // Para cada fila que matcheó contra un producto de Glaciar con codigo_barras,
+  // se busca si existe OTRO producto cuyo cod_art sea exactamente ese EAN: es el
+  // registro escaneado del mismo producto físico. Es el vínculo duro, y atrapa
+  // los pares que la similaridad de descripción no alcanza a ver.
+  const duplicadosPorEan: DuplicadoPorEan[] = []
+  const yaReportado = new Set<string>()
+  for (const fc of [...aActualizar, ...aConfirmar]) {
+    const principal = fc.match
+    if (!principal?.codigo_barras) continue
+    const duplicado = porCodArt.get(principal.codigo_barras)
+    if (!duplicado || duplicado.id === principal.id) continue
+    if (yaReportado.has(duplicado.id)) continue
+    yaReportado.add(duplicado.id)
+    duplicadosPorEan.push({ fila: fc.fila, principal, duplicado })
+  }
+
   // ── Huérfanos: la app los ubica en esta familia pero el CSV no los trajo ───
+  // Se excluyen los ya señalados como duplicado por EAN: para esos hay un
+  // diagnóstico más preciso y accionable que "no vino en el CSV".
   const huerfanos: Huerfano[] =
     familiaIdCsv === null
       ? []
       : candidatos
-          .filter((p) => p.familia_id === familiaIdCsv && !asignados.has(p.id))
+          .filter(
+            (p) => p.familia_id === familiaIdCsv && !asignados.has(p.id) && !yaReportado.has(p.id),
+          )
           .map((p) => ({ producto: p, motivoCodArt: clasificarCodArt(p.cod_art) }))
 
   // Más probable primero: los de cod_art sospechoso son los candidatos reales a
@@ -210,5 +253,5 @@ export function reconciliar(
 
   const conflictosFamilia = [...aActualizar, ...aConfirmar].filter((f) => f.conflictoFamilia)
 
-  return { aActualizar, aConfirmar, nuevos, huerfanos, conflictosFamilia, colisiones }
+  return { aActualizar, aConfirmar, nuevos, huerfanos, conflictosFamilia, colisiones, duplicadosPorEan }
 }

@@ -764,27 +764,74 @@ comparación inversa). Cerraría este tipo de duplicado de raíz.
 
 ---
 
-## OBSERVACIÓN — se corrió una importación con el código nuevo
+## CORRECCIÓN — las 87 escrituras NO fueron el importador
 
-Entre el deploy `6a73e65dc36bff84ecd43390` y el cierre de P2 la base cambió por
-fuera de las migraciones de esta sesión:
+Una versión previa de este documento atribuía las 87 escrituras del
+2026-08-06 00:50:58 al importador nuevo, por leer esa concentración como lotes de
+`Promise.all`. **Era incorrecto.** Fue un UPDATE masivo corrido a mano en el SQL
+Editor con los 415 cod_art del CSV real de familia 003, más dos UPDATE sueltos
+(`3127680` → 014 Pehuamar, `2989207` → 003 Galak).
 
-- `productos.familia_id` NULL: **59 → 0**
-- familia 003: 398 → 487 productos · familia 014: 194 → 164 (30 productos se movieron)
-- **87 productos actualizados dentro de un mismo segundo** (2026-08-06 00:50:58)
+Los números cierran: 57 NULL + 31 de 014 del script + 2 manuales = 59 → 0.
 
-Ese patrón es la firma del importador NUEVO: lotes de 50 con `Promise.all`. El
-código viejo escribía ~7 por segundo (un `await` por producto en un `for`).
-La asignación de los 59 huérfanos es consistente con `debeAsignarFamilia()`, que
-asigna familia cuando el producto no tenía ninguna; los 30 que se movieron de 014
-a 003 son consistentes con conflictos aprobados a mano en la sección "Productos
-que cambiarían de familia".
+**Nadie corrió todavía una importación con el código nuevo. Los gates C5/C7/C8
+siguen SIN validación funcional**: están verificados por lectura de código, tests
+de los módulos y build/lint, pero ninguna importación real pasó por ellos.
 
-**Sin confirmar con el usuario.** Si efectivamente fue una importación real, los
-gates C5/C7/C8 tienen su primera validación funcional en producción y conviene
-revisar el reporte que quedó. Si NO fue una importación, hay que investigar de
-dónde salieron esas 87 escrituras.
+Lección metodológica: una sola sentencia SQL escribe todas sus filas en el mismo
+instante, o sea MÁS concentrado que los lotes de la aplicación, no menos. La
+concentración temporal por sí sola no distingue "bulk UPDATE manual" de "lotes de
+la app". Lo que sí discrimina es lo opuesto: ~7 filas/segundo sostenido durante
+decenas de segundos (como el lote del 2026-05-29) solo puede ser un bucle
+secuencial con un `await` por fila. Esa inferencia sigue en pie; la de las 87 no.
 
 Aparte: los vencimientos activos bajaron de 30 a 18 (118 totales, 100 inactivos,
-86 de ellos vencidos, 0 activos vencidos). Es consistente con la operación normal
-o con el job `pg_cron`, no con las migraciones de esta sesión.
+86 vencidos, 0 activos vencidos). Consistente con la operación normal o el job
+`pg_cron`, no con las migraciones de esta sesión.
+
+---
+
+## Duplicados por código de barras — detección y limpieza [x]
+
+### Mejora en el módulo: el vínculo duro
+`importar-reconciliacion.ts` ahora cruza el `codigo_barras` del producto de
+Glaciar contra el `cod_art` de los productos escaneados (antes solo hacía la
+comparación inversa). Nuevo campo `duplicadosPorEan` en `Reconciliacion`, con
+sección propia en el preview y en el reporte. Los pares detectados así se excluyen
+de la lista de huérfanos, porque tienen un diagnóstico más preciso.
+
+**Por qué la similaridad de descripción no alcanza** (medido, no estimado):
+- "Chocolate leche" vs "CHOCOLATE CONLECHE MILKA Un(240" → **0,591**
+- Umbral de matcheo automático → 0,85
+
+### Tres pares deduplicados (migraciones `20260805110000` y `dedup_cofler_ean8`)
+Criterio uniforme: sobrevive el registro de Glaciar, el escaneado queda con
+`activo = false`. Nada se borra. Los 3 tenían 0 vencimientos activos.
+
+| # | Glaciar (sobrevive) | Scanner (baja) | detectado por |
+|---|---|---|---|
+| 1 | `3210595` ALFAJORES DE MAICENA (38 u, 0.68) | `7798267200044` Alfajor de maicena (27 u) | EAN-13 en cod_art |
+| 2 | `2319100` CHOCOLATE CONLECHE MILKA (44 u, 0.24) | `7622210795625` Chocolate leche (133 u) | **solo** el codigo_barras |
+| 3 | `2986826` CHOCOLATE BLANCO CON MANI COFLER (105 u, 0.37) | `77981912` Chocolate blanco con mani (167 u) | **solo** el codigo_barras |
+
+### ⚠️ Hallazgo importante: el EAN-8 es indetectable por formato
+El par 3 apareció recién con la mejora. Su `cod_art` `77981912` es un **EAN-8**:
+tiene 8 dígitos, así que **pasa el patrón `^\d{4,8}$` de un cod_art válido de
+Glaciar**. `clasificarCodArt()` lo devuelve como `null` (sano) y el badge
+"cod_art es un EAN" nunca se le muestra.
+
+**Ninguna heurística de formato puede atrapar este caso**, porque el espacio de
+los EAN-8 se solapa exactamente con el de los códigos legítimos de Glaciar. El
+`codigo_barras` es el único discriminante. Esto refuerza la regla: la similaridad
+de descripción y el formato del código son ayudas; el código de barras es la
+única evidencia dura de que dos registros son el mismo producto físico.
+
+Estado final: **0 duplicados por EAN activos**. 647 productos activos, 4 inactivos
+(los 3 pares + Turrocklets), 19 filas respaldadas en
+`dedup_turrocklets_backup_20260805`.
+
+### Pendiente relacionado
+Detectar duplicados donde el registro de Glaciar **no** tenga `codigo_barras`
+cargado. Ahí no hay vínculo duro y solo queda la similaridad de descripción, con
+sus falsos negativos conocidos. La única solución de fondo es que el Scanner
+guarde el EAN en `codigo_barras` y nunca en `cod_art`.
