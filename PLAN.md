@@ -835,3 +835,77 @@ Detectar duplicados donde el registro de Glaciar **no** tenga `codigo_barras`
 cargado. Ahí no hay vínculo duro y solo queda la similaridad de descripción, con
 sus falsos negativos conocidos. La única solución de fondo es que el Scanner
 guarde el EAN en `codigo_barras` y nunca en `cod_art`.
+
+---
+
+## Scanner — cerrar el agujero de raíz [x] (deploy `6a73ecd2831ba97ff1cc9766`)
+
+### Hallazgo previo: el bug principal YA estaba cerrado
+Antes de tocar nada se auditaron todos los caminos que escriben `cod_art`. El
+commit `841a3bc` (**2026-05-27**) ya había agregado validación estricta:
+truncado a 7 dígitos, `codArtValido()` exigiendo exactamente 7, precarga que
+manda 13 dígitos al campo EAN, y botón de guardar deshabilitado si algo no valida.
+
+**Los 16 registros con `cod_art` fuera de formato se crearon entre el 2026-05-22
+y el 2026-05-24 — todos anteriores a ese commit. Ninguno después.** El Scanner no
+venía generando duplicados nuevos; los que hay son legacy.
+
+### Pero había cuatro huecos reales, y uno era un bloqueo funcional
+
+**1 · El EAN-8 no se podía cargar en absoluto** — `eanNuevoValido()` exigía
+exactamente 13 dígitos. EAN-8 es el estándar de productos chicos: golosinas y
+chocolates, justo el catálogo de este comercio. El operador escaneaba, recibía
+"El EAN debe tener exactamente 13 dígitos" y el botón de guardar quedaba
+deshabilitado **sin ningún camino alternativo**. Es plausible que así naciera
+`77981912`: el 24 de mayo todavía se podía meter en `cod_art`.
+→ Ahora se aceptan 8 (EAN-8), 12 (UPC-A), 13 (EAN-13) y 14 (GTIN-14).
+
+**2 · `0000000` seguía pasando la validación** — siete dígitos, o sea válido para
+`esCodArtValido()`. Es el placeholder exacto que originó el duplicado de
+Turrocklets, y hasta hoy se podía volver a crear. Lo detectó un test, no la
+lectura del código.
+→ Se rechaza el cod_art de todos ceros. Los ceros a la izquierda siguen siendo
+válidos: `0022354` es un código real.
+
+**3 · Faltaba el chequeo del vínculo duro antes de insertar** — el alta verificaba
+`cod_art` duplicado y `codigo_barras` duplicado, pero no el caso clave: que ya
+exista un producto **cuyo `cod_art` sea exactamente el EAN que se está por
+registrar**. Ese es el duplicado legacy, y sin el chequeo se creaba uno nuevo.
+→ `buscarConflictoCodigos()` en `useProductos`, con tres motivos distintos y
+mensaje accionable por cada uno. **No filtra por `activo`**: los índices únicos
+aplican también a los productos dados de baja, y antes reutilizar el código de
+uno desactivado devolvía una violación de constraint cruda sin decir cuál era.
+
+**4 · `handleEanCapturado` guardaba lo que viniera del lector sin validar el largo**
+→ Ahora valida, y además chequea el vínculo duro antes de asignar.
+
+### Módulo nuevo: `src/lib/codigos.ts`
+Centraliza la regla, que antes estaba repetida en 6 lugares como literales
+`/^\d{7}$/` y `/^\d{13}$/`. **21 tests.**
+
+**Invariante verificada por test, no por inspección:** la intersección entre
+"EAN válido" y "cod_art válido" es vacía, porque ningún largo de EAN (8, 12, 13,
+14) coincide con el largo del cod_art (7). Es lo que hace estructuralmente
+imposible que un código de barras real entre como código interno.
+
+Los 4 duplicados reales de producción (`0000000`, `7798267200044`,
+`7622210795625`, `77981912`) están en la suite: los cuatro son rechazados hoy.
+
+### ⚠️ Límite que hay que tener presente
+El EAN-8 y el cod_art de Glaciar **no se pueden distinguir con certeza por
+formato** cuando el largo coincide — el espacio de los EAN-8 se solapa con el de
+los códigos internos de 8 dígitos. Acá se resuelve porque el cod_art de Glaciar
+es de largo fijo 7, pero si algún día Glaciar emite códigos de 8 dígitos, la
+desambiguación por formato deja de funcionar. El discriminante robusto es el
+origen del dato: lector de barras → EAN; tipeo en el campo de código interno →
+cod_art. El código está estructurado así.
+
+### Pendiente relacionado
+- Los 12 productos legacy con `cod_art` fuera de formato que NO son duplicados
+  conocidos siguen sin poder matchear con Glaciar. Aparecen como huérfanos en
+  cada importación. Reparar cada uno requiere el cod_art real del CSV.
+- Hay 4 productos con `cod_art` de 8 dígitos y descripción en mayúsculas estilo
+  Glaciar (`12651129`, `13487283`, `33568577`, `00586790`, todos del
+  2026-05-22 19:30-19:32, todos con `codigo_barras` NULL). No tienen gemelo
+  detectable por código de barras. Habría que revisarlos contra el CSV: pueden
+  ser duplicados cuyo par no tiene el EAN cargado.

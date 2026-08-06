@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { ScanLine, Search, CheckCircle, Package, Barcode, ChevronLeft, ShieldAlert, AlertCircle } from 'lucide-react'
 import { useScanner } from '@/hooks/useScanner'
+import { useProductos, type ConflictoCodigos } from '@/hooks/useProductos'
 import { useAuth } from '@/hooks/useAuth'
 import { useUsuarioFamilias } from '@/hooks/useUsuarioFamilias'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
@@ -12,6 +13,15 @@ import type { VencimientoExistente } from '@/components/scanner/VencimientoForm'
 import { calcularDiasRestantes, calcularNivelRiesgo } from '@/lib/riesgo'
 import { RISK_VISUAL } from '@/lib/risk-config'
 import type { Producto, Familia } from '@/types/index'
+import {
+  LARGO_COD_ART,
+  MAX_LARGO_EAN,
+  MENSAJE_COD_ART_INVALIDO,
+  MENSAJE_EAN_INVALIDO,
+  clasificarCodigoEscaneado,
+  esCodArtValido,
+  esEanValido,
+} from '@/lib/codigos'
 
 type Paso = 'inicio' | 'confirmando' | 'capturar_ean' | 'completar_cod_art' | 'vencimiento_existente' | 'formulario' | 'exito' | 'nuevo_producto' | 'familia_bloqueada'
 type CategoriaProducto = 'CHOCOLATES' | 'CARAMELOS' | 'SNACKS' | 'CHICLES' | 'CEREALES' | 'OTRO'
@@ -21,6 +31,7 @@ const inputCls = 'w-full h-12 px-4 bg-surface-base border border-border rounded-
 
 export default function Scanner() {
   const { scanBarcode, scanning, error: scanError, reset } = useScanner()
+  const { buscarConflictoCodigos } = useProductos()
   const { user } = useAuth()
   const { esAdmin, familiaIds, loading: famLoading } = useUsuarioFamilias()
   const { sucursalId } = useSucursalActual()
@@ -120,17 +131,24 @@ export default function Scanner() {
 
       setPaso('confirmando')
     } else if (!scanError) {
+      // Precarga del alta. Un código escaneado NUNCA se usa como sustituto del
+      // cod_art: si es un código de barras va a `codigo_barras` y el operador
+      // debe tipear el código interno de Glaciar aparte. Adivinar mal acá es
+      // exactamente lo que generó los duplicados que el importador no resuelve.
+      // El largo ya desambigua: 7 dígitos es cod_art, 8/12/13/14 es código de
+      // barras. No se usa `esBarcode` para forzar la decisión porque el comercio
+      // puede tener etiquetas impresas con el código interno.
       const codigoTrim = codigo.trim()
-      if (/^\d{13}$/.test(codigoTrim)) {
-        // Es un EAN de 13 dígitos → precargar campo EAN, no cod_art
+      const clase = clasificarCodigoEscaneado(codigoTrim)
+      if (clase === 'ean') {
         setNuevoProductoEan(codigoTrim)
         setNuevoProductoCodArt('')
-      } else if (/^\d{7}$/.test(codigoTrim)) {
-        // Es un código interno de 7 dígitos → precargar cod_art
+      } else if (clase === 'cod_art') {
         setNuevoProductoCodArt(codigoTrim)
         setNuevoProductoEan('')
       } else {
-        // Formato desconocido → dejar ambos vacíos
+        // Ante la duda no se precarga nada: mejor que tipee el operador a que el
+        // sistema adivine mal y meta un EAN en cod_art.
         setNuevoProductoCodArt('')
         setNuevoProductoEan('')
       }
@@ -194,31 +212,24 @@ export default function Scanner() {
 
   // Validaciones en tiempo real
   function handleCodArtChange(valor: string): void {
-    // Solo permitir dígitos
-    const soloDigitos = valor.replace(/\D/g, '').slice(0, 7)
+    // Solo dígitos, y truncado al largo del código interno: aunque el operador
+    // pegue un EAN completo acá, nunca puede entrar entero como cod_art.
+    const soloDigitos = valor.replace(/\D/g, '').slice(0, LARGO_COD_ART)
     setNuevoProductoCodArt(soloDigitos)
-    if (soloDigitos.length === 0) {
-      setErrorCodArt(null)
-    } else if (soloDigitos.length !== 7) {
-      setErrorCodArt('El código interno debe tener exactamente 7 dígitos')
-    } else {
-      setErrorCodArt(null)
-    }
+    setErrorCodArt(
+      soloDigitos.length === 0 || esCodArtValido(soloDigitos) ? null : MENSAJE_COD_ART_INVALIDO,
+    )
   }
 
   function handleEanNuevoCapturado(ean: string): void {
     setModalEanNuevoAbierto(false)
-    const soloDigitos = ean.replace(/\D/g, '').slice(0, 13)
+    const soloDigitos = ean.replace(/\D/g, '').slice(0, MAX_LARGO_EAN)
     setNuevoProductoEan(soloDigitos)
-    if (soloDigitos.length !== 13) {
-      setErrorEanNuevo('El EAN debe tener exactamente 13 dígitos')
-    } else {
-      setErrorEanNuevo(null)
-    }
+    setErrorEanNuevo(esEanValido(soloDigitos) ? null : MENSAJE_EAN_INVALIDO)
   }
 
-  function codArtValido(): boolean { return /^\d{7}$/.test(nuevoProductoCodArt) }
-  function eanNuevoValido(): boolean { return /^\d{13}$/.test(nuevoProductoEan) }
+  function codArtValido(): boolean { return esCodArtValido(nuevoProductoCodArt) }
+  function eanNuevoValido(): boolean { return esEanValido(nuevoProductoEan) }
 
   function handleGuardadoExitoso(): void {
     setGuardadoExitoso(true)
@@ -239,12 +250,34 @@ export default function Scanner() {
   async function handleEanCapturado(ean: string): Promise<void> {
     setModalEanAbierto(false)
     if (!productoEncontrado) return
+    const codigo = ean.trim()
+    // Antes se guardaba lo que viniera del lector sin validar el largo.
+    if (!esEanValido(codigo)) { setErrorEan(MENSAJE_EAN_INVALIDO); return }
     setGuardandoEan(true)
     setErrorEan(null)
     const { data: duplicado, error: errCheck } = await supabase
-      .from('productos').select('id').eq('codigo_barras', ean.trim()).neq('id', productoEncontrado.id).maybeSingle()
+      .from('productos').select('id, descripcion, cod_art').eq('codigo_barras', codigo).neq('id', productoEncontrado.id).maybeSingle()
     if (errCheck) { setGuardandoEan(false); setErrorEan(`Error al verificar: ${errCheck.message}`); return }
-    if (duplicado) { setGuardandoEan(false); setErrorEan('Este código ya está registrado en otro producto.'); return }
+    if (duplicado) {
+      setGuardandoEan(false)
+      setErrorEan(`Este código de barras ya está registrado en "${(duplicado as { descripcion: string }).descripcion}".`)
+      return
+    }
+
+    // Vínculo duro: si otro producto tiene este EAN como cod_art, los dos
+    // registros son el mismo objeto físico. Asignarlo acá dejaría el duplicado
+    // en pie y encima ligado por dos campos distintos.
+    const { data: legacy } = await supabase
+      .from('productos').select('id, descripcion, cod_art').eq('cod_art', codigo).neq('id', productoEncontrado.id).maybeSingle()
+    if (legacy) {
+      setGuardandoEan(false)
+      const l = legacy as { descripcion: string; cod_art: string }
+      setErrorEan(
+        `Existe otro producto, "${l.descripcion}", cargado con este código de barras en el campo del código interno. ` +
+          'Probablemente sean el mismo producto. Avisale al administrador antes de continuar.',
+      )
+      return
+    }
     const { error: errUpdate } = await supabase
       .from('productos').update({ codigo_barras: ean.trim(), updated_at: new Date().toISOString() }).eq('id', productoEncontrado.id)
     setGuardandoEan(false)
@@ -257,12 +290,12 @@ export default function Scanner() {
   async function handleAgregarNuevoProducto(): Promise<void> {
     // Validaciones de formato
     if (!codArtValido()) {
-      setErrorCodArt('El código interno debe tener exactamente 7 dígitos')
+      setErrorCodArt(MENSAJE_COD_ART_INVALIDO)
       setErrorNuevo('Corregí los errores antes de continuar.')
       return
     }
     if (!eanNuevoValido()) {
-      setErrorEanNuevo('El EAN debe tener exactamente 13 dígitos')
+      setErrorEanNuevo(MENSAJE_EAN_INVALIDO)
       setErrorNuevo('Corregí los errores antes de continuar.')
       return
     }
@@ -278,27 +311,35 @@ export default function Scanner() {
     setErrorNuevo(null)
     setGuardandoNuevo(true)
 
-    // Verificar duplicado cod_art
-    const { data: dupCodArt } = await supabase
-      .from('productos')
-      .select('id')
-      .eq('cod_art', nuevoProductoCodArt.trim())
-      .maybeSingle()
-    if (dupCodArt) {
+    // Chequeo de códigos ocupados ANTES de insertar. Incluye productos dados de
+    // baja (los índices únicos aplican igual) y, sobre todo, el vínculo duro:
+    // si ya existe un producto cuyo cod_art es este mismo EAN, es el mismo
+    // objeto físico cargado antes con el código en el campo equivocado.
+    // Insertar acá crearía el duplicado que después el importador no resuelve.
+    let conflicto: ConflictoCodigos | null = null
+    try {
+      conflicto = await buscarConflictoCodigos(nuevoProductoCodArt, nuevoProductoEan)
+    } catch (err) {
       setGuardandoNuevo(false)
-      setErrorNuevo('Este código interno ya existe. Buscalo en el scanner.')
+      setErrorNuevo(`Error al verificar los códigos: ${err instanceof Error ? err.message : String(err)}`)
       return
     }
 
-    // Verificar duplicado EAN
-    const { data: dupEan } = await supabase
-      .from('productos')
-      .select('id')
-      .eq('codigo_barras', nuevoProductoEan.trim())
-      .maybeSingle()
-    if (dupEan) {
+    if (conflicto) {
       setGuardandoNuevo(false)
-      setErrorNuevo('Este EAN ya está registrado en otro producto.')
+      const { producto: existente, motivo } = conflicto
+      const baja = existente.activo === false ? ' (dado de baja)' : ''
+      const ficha = `"${existente.descripcion}"${baja} · código interno ${existente.cod_art}`
+      if (motivo === 'cod_art_ocupado') {
+        setErrorNuevo(`El código interno ${nuevoProductoCodArt.trim()} ya lo usa ${ficha}.`)
+      } else if (motivo === 'ean_ocupado') {
+        setErrorNuevo(`Este código de barras ya está registrado en ${ficha}.`)
+      } else {
+        setErrorNuevo(
+          `Ya existe ${ficha}, cargado con este código de barras en el campo del código interno. ` +
+            'Es el mismo producto: no lo cargues de nuevo. Avisale al administrador para que le corrija el código en vez de duplicarlo.',
+        )
+      }
       return
     }
 
@@ -479,20 +520,21 @@ export default function Scanner() {
   }
 
   function handleCodArtCompletandoChange(valor: string): void {
-    const soloDigitos = valor.replace(/\D/g, '').slice(0, 7)
+    const soloDigitos = valor.replace(/\D/g, '').slice(0, LARGO_COD_ART)
     setCodArtCompletando(soloDigitos)
-    if (soloDigitos.length > 0 && soloDigitos.length !== 7) {
-      setErrorCodArtCompletando('El código interno debe tener exactamente 7 dígitos')
-    } else {
-      setErrorCodArtCompletando(null)
-    }
+    setErrorCodArtCompletando(
+      soloDigitos.length === 0 || esCodArtValido(soloDigitos) ? null : MENSAJE_COD_ART_INVALIDO,
+    )
   }
 
   async function handleGuardarCodArt(): Promise<void> {
     if (!productoEncontrado) return
     const codigo = codArtCompletando.trim()
-    if (!/^\d{7}$/.test(codigo)) {
-      setErrorCodArtCompletando('El código interno debe tener exactamente 7 dígitos')
+    // El largo exacto de 7 es lo que impide que un código de barras entre acá:
+    // los largos válidos de EAN (8, 12, 13, 14) son todos distintos de 7, así
+    // que ningún código de barras real puede pasar esta validación.
+    if (!esCodArtValido(codigo)) {
+      setErrorCodArtCompletando(MENSAJE_COD_ART_INVALIDO)
       return
     }
     setGuardandoCodArt(true)
@@ -557,7 +599,7 @@ export default function Scanner() {
 
   // ── Completar cod_art faltante (Caso 2) ─────────────────────────────────────
   if (paso === 'completar_cod_art' && productoEncontrado) {
-    const codArtListo = /^\d{7}$/.test(codArtCompletando)
+    const codArtListo = esCodArtValido(codArtCompletando)
     return (
       <div className="min-h-screen bg-surface-base flex flex-col">
         <SubHeader paso={2} titulo="Registrar código interno" subtitulo="El código de Glaciar es necesario para identificar el producto" onBack={handleCancelarConfirmacion} />
@@ -698,7 +740,7 @@ export default function Scanner() {
                 )}
               </div>
 
-              {/* EAN — captura SOLO por cámara (13 dígitos) */}
+              {/* Código de barras — captura SOLO por cámara (EAN-8/12/13/14) */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-foreground uppercase tracking-wide">
                   Código EAN <span className="text-red-500">*</span>

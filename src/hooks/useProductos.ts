@@ -1,8 +1,19 @@
 import { supabase } from '@/lib/supabase'
 import type { Producto } from '@/types/index'
 
+/**
+ * Producto preexistente que impide dar de alta uno nuevo con estos códigos.
+ * `motivo` explica cuál es el choque, para poder mostrarle al operador algo
+ * accionable en vez de un error crudo de constraint.
+ */
+export interface ConflictoCodigos {
+  producto: Producto
+  motivo: 'cod_art_ocupado' | 'ean_ocupado' | 'ean_guardado_como_cod_art'
+}
+
 interface UseProductosReturn {
   searchByBarcode: (barcode: string) => Promise<Producto | null>
+  buscarConflictoCodigos: (codArt: string, ean: string) => Promise<ConflictoCodigos | null>
   upsertProducto: (p: Partial<Producto>) => Promise<void>
 }
 
@@ -52,6 +63,49 @@ export function useProductos(): UseProductosReturn {
   }
 
   /**
+   * Verifica, ANTES de insertar, si algún producto ya ocupa estos códigos.
+   *
+   * A diferencia de `searchByBarcode`, NO filtra por `activo`: los índices únicos
+   * `productos_cod_art_key` y `productos_codigo_barras_key` aplican también a los
+   * productos dados de baja. Sin este chequeo, intentar reutilizar el código de
+   * un producto desactivado devolvía una violación de constraint cruda, sin
+   * ninguna pista de qué producto lo estaba ocupando.
+   *
+   * El tercer caso —`ean_guardado_como_cod_art`— es el vínculo duro: existe un
+   * producto cuyo `cod_art` es exactamente el EAN que se está por registrar. Eso
+   * significa que ese producto es el MISMO objeto físico, cargado antes con el
+   * código en el campo equivocado. Insertar uno nuevo crearía el duplicado que
+   * el importador después no puede resolver.
+   */
+  async function buscarConflictoCodigos(
+    codArt: string,
+    ean: string,
+  ): Promise<ConflictoCodigos | null> {
+    const c = codArt.trim()
+    const e = ean.trim()
+
+    if (c !== '') {
+      const { data, error } = await supabase.from('productos').select('*').eq('cod_art', c).maybeSingle()
+      if (error) throw new Error(error.message)
+      if (data) return { producto: data as Producto, motivo: 'cod_art_ocupado' }
+    }
+
+    if (e !== '') {
+      const { data, error } = await supabase.from('productos').select('*').eq('codigo_barras', e).maybeSingle()
+      if (error) throw new Error(error.message)
+      if (data) return { producto: data as Producto, motivo: 'ean_ocupado' }
+
+      // Vínculo duro: el EAN escaneado quedó guardado como cod_art en otro registro.
+      const { data: legacy, error: errLegacy } = await supabase
+        .from('productos').select('*').eq('cod_art', e).maybeSingle()
+      if (errLegacy) throw new Error(errLegacy.message)
+      if (legacy) return { producto: legacy as Producto, motivo: 'ean_guardado_como_cod_art' }
+    }
+
+    return null
+  }
+
+  /**
    * Inserta o actualiza un producto.
    * Si `p.id` está presente se hace update; si no, se hace insert.
    * Requiere que el usuario tenga el rol "admin" (el RLS lo valida en servidor).
@@ -74,6 +128,7 @@ export function useProductos(): UseProductosReturn {
 
   return {
     searchByBarcode,
+    buscarConflictoCodigos,
     upsertProducto,
   }
 }
