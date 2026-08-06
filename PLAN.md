@@ -597,7 +597,7 @@ lectura de código y el build/lint pasan, pero nadie ejecutó todavía una
 importación real contra un CSV de Glaciar. Antes de usarlo en serio conviene
 probar con un archivo real y revisar el reporte.
 
-### P2 — Los tres puntos de datos aprobados [ ]
+### P2 — Los tres puntos de datos aprobados [x] (migración `20260805100000`)
 1. **`usuarios.activo = true` para gerente091@gmail.com.** Hoy está en `false`.
    No es la causa del bug de borrado (ni `AdminRoute` ni `PrivateRoute` filtran por
    `activo`), pero es una inconsistencia.
@@ -694,3 +694,97 @@ CSV con su familia en una tabla temporal y hacer el `EXCEPT` contra
 - Policies duplicadas en `vencimientos` (`_select` y `_select_authenticated`,
   `_insert` e `_insert_own`) y en `familias`. Las de UPDATE/DELETE ya se
   consolidaron; las de SELECT/INSERT siguen duplicadas.
+
+---
+
+## Cierre P2 — 2026-08-05
+
+### P2.1 — `usuarios.activo = true` para gerente091@gmail.com [x]
+Verificado: `activo = true`. Respaldo en `dedup_turrocklets_backup_20260805`.
+
+### P2.2 — Turrocklets deduplicado [x]
+Orden de ejecución obligado por el índice ÚNICO `productos_codigo_barras_key`:
+hay que liberar el `codigo_barras` del duplicado ANTES de asignárselo al que
+sobrevive. Invertir esos dos pasos hace fallar la migración entera.
+
+Estado final verificado:
+| cod_art | familia | stock | v.media | codigo_barras | activo | venc. activos |
+|---|---|---|---|---|---|---|
+| `0000000` | 003 | 127 | 0.00 | null | **false** | 0 |
+| `3328533` | **003** | 169 | 3.15 | `0000077993540` | true | **1** |
+
+El vencimiento migró al registro correcto conservando su `usuario_id`, así que
+sigue perteneciendo a Repositora Golosinas, operadora de 003. La familia del
+sobreviviente se corrigió de 014 a 003.
+
+### P2.3 — EAN guardado en el campo equivocado [x] parcial
+9 de 11 productos con EAN-13 en `cod_art` ahora tienen ese EAN también en
+`codigo_barras`, para que el Scanner y el fallback del importador puedan
+encontrarlos. `cod_art` se dejó como estaba: es NOT NULL y único, y no se puede
+inventar el código real de Glaciar.
+
+**Lo que NO se hizo y no se puede hacer sin los CSV de Glaciar:** reemplazar el
+`cod_art` EAN por el real. Sigue abierto.
+
+---
+
+## HALLAZGO NUEVO — dos duplicados más del tipo Turrocklets [ ]
+
+Los 2 productos que el guard de unicidad dejó fuera de P2.3 no eran un caso
+borde: son **duplicados lógicos** del mismo producto físico. El `codigo_barras`
+del registro de Glaciar es exactamente el `cod_art` del registro escaneado, lo
+que los liga sin ambigüedad.
+
+**Par 1 — Alfajor de maicena**
+| origen | cod_art | descripción | stock | v.media | codigo_barras |
+|---|---|---|---|---|---|
+| Scanner | `7798267200044` | Alfajor de maicena | 27 | 0.00 | null |
+| Glaciar | `3210595` | ALFAJORES DE MAICENA | 38 | 0.68 | `7798267200044` |
+
+**Par 2 — Chocolate Milka**
+| origen | cod_art | descripción | stock | v.media | codigo_barras |
+|---|---|---|---|---|---|
+| Scanner | `7622210795625` | Chocolate leche | 133 | 0.00 | null |
+| Glaciar | `2319100` | CHOCOLATE CONLECHE MILKA Un(240 | 44 | 0.24 | `7622210795625` |
+
+Ninguno de los 4 tiene vencimientos activos, así que deduplicarlos es de bajo
+riesgo. Mismo procedimiento que Turrocklets: sobrevive el de Glaciar, hereda el
+`codigo_barras`, y el escaneado se da de baja lógica.
+
+⚠️ **El par 2 NO lo detecta el matcheo por descripción del importador**:
+"Chocolate leche" contra "CHOCOLATE CONLECHE MILKA Un(240" queda por debajo del
+umbral de 0,85. Sí aparece como huérfano con el badge "cod_art es un EAN", que es
+la red que lo atrapa. Vale como recordatorio de que la similaridad de descripción
+es una ayuda, no una garantía: **el `codigo_barras` es el único vínculo duro**
+entre un producto escaneado y su equivalente en Glaciar.
+
+Mejora candidata para el importador: cruzar el `codigo_barras` del producto de
+Glaciar contra el `cod_art` de los productos escaneados (hoy se hace la
+comparación inversa). Cerraría este tipo de duplicado de raíz.
+
+---
+
+## OBSERVACIÓN — se corrió una importación con el código nuevo
+
+Entre el deploy `6a73e65dc36bff84ecd43390` y el cierre de P2 la base cambió por
+fuera de las migraciones de esta sesión:
+
+- `productos.familia_id` NULL: **59 → 0**
+- familia 003: 398 → 487 productos · familia 014: 194 → 164 (30 productos se movieron)
+- **87 productos actualizados dentro de un mismo segundo** (2026-08-06 00:50:58)
+
+Ese patrón es la firma del importador NUEVO: lotes de 50 con `Promise.all`. El
+código viejo escribía ~7 por segundo (un `await` por producto en un `for`).
+La asignación de los 59 huérfanos es consistente con `debeAsignarFamilia()`, que
+asigna familia cuando el producto no tenía ninguna; los 30 que se movieron de 014
+a 003 son consistentes con conflictos aprobados a mano en la sección "Productos
+que cambiarían de familia".
+
+**Sin confirmar con el usuario.** Si efectivamente fue una importación real, los
+gates C5/C7/C8 tienen su primera validación funcional en producción y conviene
+revisar el reporte que quedó. Si NO fue una importación, hay que investigar de
+dónde salieron esas 87 escrituras.
+
+Aparte: los vencimientos activos bajaron de 30 a 18 (118 totales, 100 inactivos,
+86 de ellos vencidos, 0 activos vencidos). Es consistente con la operación normal
+o con el job `pg_cron`, no con las migraciones de esta sesión.
