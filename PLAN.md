@@ -909,3 +909,53 @@ cod_art. El código está estructurado así.
   2026-05-22 19:30-19:32, todos con `codigo_barras` NULL). No tienen gemelo
   detectable por código de barras. Habría que revisarlos contra el CSV: pueden
   ser duplicados cuyo par no tiene el EAN cargado.
+
+---
+
+## REGRESIÓN corregida — el header de Glaciar ocupa DOS líneas [x] (deploy `6a763482dc7069fb39e773a0`)
+
+El importador nuevo **rechazaba el CSV real**. Regresión introducida al pasar de
+índices fijos a resolución por nombre: `resolverColumnas()` leía UNA sola línea.
+
+En el reporte real el nombre de cada columna es la concatenación vertical de dos
+líneas físicas:
+
+| índice | línea 18 | línea 19 | nombre real |
+|---|---|---|---|
+| 8  | Stock | Suc.  | Stock Suc. |
+| 13 | Venta | Media | Venta Media |
+| 1  | —     | Descripción | Descripción |
+
+Resolviendo solo contra la línea 19, `Stock Suc.` y `Venta Media` no existían →
+`faltantes` no vacío → corte con "Faltan columnas requeridas en el CSV".
+
+### Correcciones
+1. `resolverColumnas()` acepta un BLOQUE de líneas y combina los nombres por índice.
+2. Detección del bloque **guiada por el resultado**: se prueba el ancla sola,
+   después sumando 1 línea, después 2, y se corta apenas resuelve todas las
+   columnas requeridas. Un primer intento usó "es continuación si tiene ≥3
+   celdas": umbral arbitrario que rechazaba archivos válidos con línea de
+   arrastre corta — la misma clase de error que causó la regresión. Lo detectó
+   un test, no la lectura del código.
+3. `normalizarEncabezado()` ahora descarta TODO lo no alfanumérico. Antes solo
+   sacaba puntos y espacios, así que **`U/M` no matcheaba y el gramaje quedaba
+   en null** en cada importación.
+4. El inicio de datos es la primera línea cuya columna de código matchee el
+   patrón, en vez de `idxHeader + 1`. Evita reportar líneas intermedias como
+   filas descartadas.
+
+### Verificación sobre una fila de datos real
+`3328533 TURROCKLETS`: stock del índice 8 → **169**, venta media del índice 13 →
+**3.15**, gramaje `25 GR` desde Cont + U/M, 0 descartes espurios. Ídem con el
+archivo codificado en cp1252.
+
+### Encoding: verificado en ambos sentidos
+El mismo CSV en Windows-1252 se detecta y decodifica bien, y `Descripción`
+recupera la tilde. Se agregó también el caso inverso: si se decodifica mal como
+UTF-8, el encabezado queda como `Descripci` + U+FFFD + `n`, no matchea por
+nombre, y el parser **bloquea la importación** en vez de importar descripciones
+corruptas. Es el comportamiento correcto, pero conviene tenerlo presente: un
+fallo de encoding se manifiesta como "faltan columnas", no como texto raro.
+
+**38 tests nuevos** (header en dos líneas, cp1252, mojibake, header en una sola
+línea, línea de arrastre corta). Suite total: 5 archivos, todos en verde.

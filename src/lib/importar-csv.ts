@@ -198,7 +198,18 @@ function normalizarEncabezado(celda: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/�/g, '')
     .toLowerCase()
-    .replace(/[.\s_]/g, '')
+    .replace(/[^a-z0-9]/g, '')
+}
+
+/** Una fila de datos arranca con un código de artículo en la primera columna. */
+const PATRON_COD_ART = /^\d{4,13}$/
+
+function celdas(linea: string): string[] {
+  return linea.split('\t').map((c) => c.trim())
+}
+
+function esFilaDeDatos(linea: string, idxCodArt = 0): boolean {
+  return PATRON_COD_ART.test(celdas(linea)[idxCodArt] ?? '')
 }
 
 /**
@@ -207,13 +218,34 @@ function normalizarEncabezado(celda: string): string {
  * si Glaciar agregaba una columna, el importador escribía la venta media en el
  * stock sin avisar. Ahora un cambio de orden se detecta o se reporta.
  */
-export function resolverColumnas(lineaHeader: string): {
+export function resolverColumnas(lineasHeader: string | string[]): {
   columnas: MapaColumnas
   encabezados: string[]
   faltantes: string[]
   validado: boolean
 } {
-  const encabezados = lineaHeader.split('\t').map((c) => c.trim())
+  // El encabezado de Glaciar ocupa DOS líneas físicas y el nombre real de cada
+  // columna es la concatenación vertical de ambas celdas del mismo índice:
+  //
+  //   línea 1:  [8]'Stock'     [13]'Venta'
+  //   línea 2:  [8]'Suc.'      [13]'Media'   [1]'Descripción'
+  //   nombre →      Stock Suc.      Venta Media
+  //
+  // Resolver contra una sola línea hacía que "Stock Suc." y "Venta Media" no
+  // existieran y el archivo real quedara rechazado por columnas faltantes.
+  const bloque = Array.isArray(lineasHeader) ? lineasHeader : [lineasHeader]
+  const filas = bloque.map(celdas)
+  const ancho = Math.max(0, ...filas.map((f) => f.length))
+
+  const encabezados: string[] = []
+  for (let i = 0; i < ancho; i++) {
+    encabezados.push(
+      filas
+        .map((f) => f[i] ?? '')
+        .filter((c) => c !== '')
+        .join(' '),
+    )
+  }
   const norm = encabezados.map(normalizarEncabezado)
 
   const buscar = (pred: (h: string) => boolean): number => norm.findIndex(pred)
@@ -294,10 +326,12 @@ export function parsearCsvGlaciar(textoCompleto: string): ResultadoParser {
     }
   }
 
-  // Localizar el encabezado y resolver los índices de columna.
+  // Localizar la línea que contiene 'Cod.Art.'. Es el ancla del encabezado, pero
+  // NO necesariamente todo el encabezado: en el reporte real hay una línea previa
+  // con la primera mitad de los nombres ('Stock', 'Venta', 'Mín'...).
   let idxHeader = -1
   for (let i = 0; i < lineas.length; i++) {
-    if (normalizarEncabezado(lineas[i]).includes('codart')) {
+    if (celdas(lineas[i]).some((c) => normalizarEncabezado(c) === 'codart')) {
       idxHeader = i
       break
     }
@@ -316,7 +350,37 @@ export function parsearCsvGlaciar(textoCompleto: string): ResultadoParser {
     }
   }
 
-  const { columnas, encabezados, faltantes, validado } = resolverColumnas(lineas[idxHeader])
+  // Extender el encabezado hacia arriba mientras las líneas previas sean
+  // continuación del mismo bloque: varias celdas separadas por tabs, sin ser una
+  // fila de datos ni un pie. Se limita a 2 líneas de arrastre para no tragarse
+  // el bloque de metadatos del reporte ("Sucursal:", "Cód.Familia:"), que tiene
+  // pocas celdas.
+  // Se prueba resolver con la línea del ancla sola, después sumando la de
+  // arriba, después dos. Se corta apenas una combinación resuelve TODAS las
+  // columnas requeridas, y si ninguna lo logra se conserva la que menos
+  // faltantes dejó.
+  //
+  // El criterio es el resultado, no la forma de la línea: un umbral del tipo
+  // "es continuación si tiene al menos N celdas" es arbitrario y rechaza
+  // archivos válidos cuya línea de arrastre tenga pocas columnas.
+  const MAX_LINEAS_ARRASTRE = 2
+  let resolucion = resolverColumnas(lineas[idxHeader])
+
+  for (let arrastre = 1; arrastre <= MAX_LINEAS_ARRASTRE; arrastre++) {
+    if (resolucion.faltantes.length === 0) break
+    const inicio = idxHeader - arrastre
+    if (inicio < 0) break
+    const previa = lineas[inicio]
+    // No cruzar hacia arriba más allá del bloque de encabezado.
+    if (previa.trim() === '') break
+    if (esFilaDeDatos(previa)) break
+    if (FOOTER_PATTERNS.some((pat) => previa.includes(pat))) break
+
+    const intento = resolverColumnas(lineas.slice(inicio, idxHeader + 1))
+    if (intento.faltantes.length < resolucion.faltantes.length) resolucion = intento
+  }
+
+  const { columnas, encabezados, faltantes, validado } = resolucion
 
   // Sin las columnas requeridas no se parsea nada: importar a ciegas es peor
   // que no importar.
@@ -336,7 +400,14 @@ export function parsearCsvGlaciar(textoCompleto: string): ResultadoParser {
   const maxIndice = Math.max(columnas.codArt, columnas.descripcion, columnas.stock, columnas.ventaMedia)
   const vistos = new Map<string, number>()
 
-  for (let i = idxHeader + 1; i < lineas.length; i++) {
+  // Los datos empiezan en la primera línea cuya columna de código matchee el
+  // patrón de cod_art. Arrancar en idxHeader+1 a secas hacía que cualquier línea
+  // intermedia (subtítulos, separadores) se reportara como fila descartada.
+  let idxDatos = idxHeader + 1
+  while (idxDatos < lineas.length && !esFilaDeDatos(lineas[idxDatos], columnas.codArt)) idxDatos++
+  if (idxDatos === lineas.length) idxDatos = idxHeader + 1
+
+  for (let i = idxDatos; i < lineas.length; i++) {
     const linea = lineas[i]
     const nroLinea = i + 1
     if (linea.trim() === '') continue
