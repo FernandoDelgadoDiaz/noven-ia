@@ -326,18 +326,30 @@ export function parsearCsvGlaciar(textoCompleto: string): ResultadoParser {
     }
   }
 
-  // Localizar la línea que contiene 'Cod.Art.'. Es el ancla del encabezado, pero
-  // NO necesariamente todo el encabezado: en el reporte real hay una línea previa
-  // con la primera mitad de los nombres ('Stock', 'Venta', 'Mín'...).
-  let idxHeader = -1
+  // ── Localizar el encabezado real ────────────────────────────────────────────
+  //
+  // Hay MÁS DE UNA línea que contiene 'Cod.Art.'. El bloque de parámetros del
+  // reporte trae una etiqueta de filtro 'Cod.Art.:' (con dos puntos) que
+  // normaliza igual que el encabezado verdadero:
+  //
+  //   L10  'Período de Referencia Desde:' … 'Cod.Art.:'   ← ANCLA FALSA
+  //   L19  'Cod.Art.' 'Descripción' 'Marca' … 'Media' …   ← encabezado real
+  //
+  // Anclar en la primera coincidencia y rendirse ahí hacía que el parser nunca
+  // llegara a L19 y rechazara el archivo real con "Faltan columnas requeridas",
+  // listando como encabezados encontrados el bloque de parámetros.
+  //
+  // Por eso se recorren TODOS los candidatos: para cada uno se prueba el bloque
+  // (la línea sola, +1, +2) y se corta apenas uno resuelve todas las columnas
+  // requeridas. Solo tras agotarlos se reporta error, con el ÚLTIMO candidato
+  // probado —el más cercano a los datos— en vez del primero.
+  const MAX_LINEAS_ARRASTRE = 2
+  const candidatos: number[] = []
   for (let i = 0; i < lineas.length; i++) {
-    if (celdas(lineas[i]).some((c) => normalizarEncabezado(c) === 'codart')) {
-      idxHeader = i
-      break
-    }
+    if (celdas(lineas[i]).some((c) => normalizarEncabezado(c) === 'codart')) candidatos.push(i)
   }
 
-  if (idxHeader === -1) {
+  if (candidatos.length === 0) {
     return {
       filas: [],
       descartadas: [],
@@ -350,34 +362,39 @@ export function parsearCsvGlaciar(textoCompleto: string): ResultadoParser {
     }
   }
 
-  // Extender el encabezado hacia arriba mientras las líneas previas sean
-  // continuación del mismo bloque: varias celdas separadas por tabs, sin ser una
-  // fila de datos ni un pie. Se limita a 2 líneas de arrastre para no tragarse
-  // el bloque de metadatos del reporte ("Sucursal:", "Cód.Familia:"), que tiene
-  // pocas celdas.
-  // Se prueba resolver con la línea del ancla sola, después sumando la de
-  // arriba, después dos. Se corta apenas una combinación resuelve TODAS las
-  // columnas requeridas, y si ninguna lo logra se conserva la que menos
-  // faltantes dejó.
-  //
-  // El criterio es el resultado, no la forma de la línea: un umbral del tipo
-  // "es continuación si tiene al menos N celdas" es arbitrario y rechaza
-  // archivos válidos cuya línea de arrastre tenga pocas columnas.
-  const MAX_LINEAS_ARRASTRE = 2
-  let resolucion = resolverColumnas(lineas[idxHeader])
+  /**
+   * Mejor bloque para un candidato: se prueba la línea sola, después sumando la
+   * de arriba, después dos. El criterio es el RESULTADO (cuántas columnas
+   * requeridas quedan sin resolver), no la forma de la línea: un umbral del tipo
+   * "es continuación si tiene al menos N celdas" es arbitrario y rechaza
+   * archivos válidos cuya línea de arrastre sea corta.
+   */
+  function resolverDesde(idxAncla: number): ReturnType<typeof resolverColumnas> {
+    let mejor = resolverColumnas(lineas[idxAncla])
+    for (let arrastre = 1; arrastre <= MAX_LINEAS_ARRASTRE; arrastre++) {
+      if (mejor.faltantes.length === 0) break
+      const inicio = idxAncla - arrastre
+      if (inicio < 0) break
+      const previa = lineas[inicio]
+      if (esFilaDeDatos(previa)) break
+      if (FOOTER_PATTERNS.some((pat) => previa.includes(pat))) break
+      // Una línea vacía no corta el bloque: en el reporte real puede haber
+      // separadores en blanco entre las dos mitades del encabezado.
+      const intento = resolverColumnas(lineas.slice(inicio, idxAncla + 1))
+      if (intento.faltantes.length < mejor.faltantes.length) mejor = intento
+    }
+    return mejor
+  }
 
-  for (let arrastre = 1; arrastre <= MAX_LINEAS_ARRASTRE; arrastre++) {
-    if (resolucion.faltantes.length === 0) break
-    const inicio = idxHeader - arrastre
-    if (inicio < 0) break
-    const previa = lineas[inicio]
-    // No cruzar hacia arriba más allá del bloque de encabezado.
-    if (previa.trim() === '') break
-    if (esFilaDeDatos(previa)) break
-    if (FOOTER_PATTERNS.some((pat) => previa.includes(pat))) break
-
-    const intento = resolverColumnas(lineas.slice(inicio, idxHeader + 1))
-    if (intento.faltantes.length < resolucion.faltantes.length) resolucion = intento
+  let idxHeader = candidatos[candidatos.length - 1]
+  let resolucion = resolverDesde(idxHeader)
+  for (const candidato of candidatos) {
+    const intento = resolverDesde(candidato)
+    if (intento.faltantes.length === 0) {
+      idxHeader = candidato
+      resolucion = intento
+      break
+    }
   }
 
   const { columnas, encabezados, faltantes, validado } = resolucion

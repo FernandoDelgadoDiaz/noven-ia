@@ -959,3 +959,68 @@ fallo de encoding se manifiesta como "faltan columnas", no como texto raro.
 
 **38 tests nuevos** (header en dos líneas, cp1252, mojibake, header en una sola
 línea, línea de arrastre corta). Suite total: 5 archivos, todos en verde.
+
+---
+
+## El ancla falsa `Cod.Art.:` — tercer intento, este sí [x] (deploy `6a7c4f408fa6f79b22c4828b`)
+
+El importador seguía rechazando el CSV real después de dos correcciones. La
+causa: **hay más de una línea que contiene "Cod.Art."**.
+
+| línea | contenido | rol |
+|---|---|---|
+| L10 | `Período de Referencia Desde:` … `Cod.Art.:` (5 celdas, en col. 4) | **ancla falsa** |
+| L18 | `Fec.` `Mín` `Stock` `Stock` … `Venta` … (19 celdas) | header parte 1 |
+| L19 | `Cod.Art.` `Descripción` `Marca` … `Media` … (19 celdas, en col. 0) | header parte 2 |
+
+`normalizarEncabezado()` descarta los dos puntos, así que `Cod.Art.:` y
+`Cod.Art.` normalizan **ambos** a `codart`. El parser anclaba en L10, probaba
+combinar con L11 y L12, nunca resolvía `Stock Suc.` ni `Venta Media`, y cortaba
+sin llegar jamás a L19. El mensaje de error listaba el bloque de parámetros como
+"encabezados encontrados", que fue la pista definitiva.
+
+### Corrección
+Se recolectan **todos** los índices candidatos (líneas con una celda que
+normalice a `codart`). Para cada uno, en orden, se prueba el bloque: la línea
+sola, +1, +2. Se corta apenas uno resuelve todas las columnas requeridas. Solo
+tras agotarlos se reporta error, con el **último** candidato probado —el más
+cercano a los datos— en vez del primero.
+
+### Por qué se escapó dos veces
+**Los fixtures arrancaban cerca de L18 y nunca incluían el bloque de parámetros
+L00-L10, que es donde vive el ancla falsa.** Un test que empieza en el
+encabezado no prueba la detección del encabezado. Las dos correcciones
+anteriores eran correctas en lo suyo y pasaban sus tests; el problema era que
+los tests no tocaban el caso real.
+
+### Regla para el futuro
+**Cualquier fixture del importador arranca en L00 con el archivo completo.**
+Está escrita como comentario al principio de `scripts/tests/archivo-real.test.mjs`.
+
+### La suite ahora vive en el repo
+Los tests estaban en un directorio temporal y se perdían entre sesiones — que es
+exactamente por qué esta regresión se pudo escapar tres veces. Ahora:
+
+```
+npm test        # 171 aserciones en 6 archivos
+```
+
+- `scripts/test.mjs` — runner, corre cada archivo en su proceso y devuelve
+  código distinto de cero si alguno falla (encadenable antes de un deploy)
+- `scripts/tests/_helpers.mjs` — compila los módulos TS con el esbuild que ya
+  trae Vite; sin dependencias nuevas. Incluye `aCp1252()` para probar encoding
+- `archivo-real.test.mjs` (28) — el archivo completo desde L00, los 6 tests
+  exigidos, en UTF-8 y en cp1252
+- `parser-csv.test.mjs` (35) · `reconciliacion.test.mjs` (36) ·
+  `duplicados-ean.test.mjs` (10) · `codigos.test.mjs` (23) ·
+  `header-dos-lineas.test.mjs` (39)
+
+### Verificado sobre filas de datos reales
+| cod_art | descripción | stock (índ. 8) | venta media (índ. 13) | gramaje |
+|---|---|---|---|---|
+| `3514328` | CHOCOLATE AMARGO 60 NARANJA | 5 | 0.04 | 70 GR |
+| `3197402` | CHOCOLATE AMARGO 60%CACAO | 12 | 0.50 | 100 GR |
+| `3328533` | TURROCKLETS | 169 | 3.15 | 25 GR |
+
+Familia `003` detectada desde L03. Cero descartes espurios (L00-L19 no cuentan
+como filas descartadas). Resultado idéntico byte a byte entre UTF-8 y cp1252.
