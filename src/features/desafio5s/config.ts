@@ -1,7 +1,7 @@
 export const DESAFIO_5S_SECTORES = [
   'Gerencia',
   'Administración',
-  'Línea de cajas',
+  'Línea de Cajas',
   'Salón',
   'Carnicería',
   'Verdulería',
