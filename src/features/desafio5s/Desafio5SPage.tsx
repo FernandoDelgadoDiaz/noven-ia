@@ -101,7 +101,7 @@ export default function Desafio5SPage(){
 
     {screen==='result'&&result&&<section className="d5-result">
       <div className="d5-score"><small>DESAFÍO COMPLETADO</small><strong>{result.puntaje}<span>/15</span></strong><b>{Number(result.porcentaje).toFixed(1)}%</b></div>
-      <h2>{result.resultado.replaceAll('_',' ')}</h2>
+      <h2>{result.resultado.split('_').join(' ')}</h2>
       <div className="d5-breakdown">{[1,2,3,4,5].map(s=><div key={s}><span>S{s}</span><b>{result.por_s?.[`S${s}`]??0}/3</b></div>)}</div>
       <p>{testMode?'Esta partida fue de prueba y no modifica ningún ranking ni estadística oficial.':'Tu evaluación oficial quedó finalizada. Ese legajo no puede volver a realizarla.'}</p>
       {!testMode&&<button className="d5-primary" disabled={busy} onClick={()=>showRanking()}>VER RANKING</button>}
