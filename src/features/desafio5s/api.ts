@@ -6,6 +6,12 @@ export type InicioResult = EvalSession & { status:'started'|'in_progress'|'compl
 export type Pregunta = { orden:number; total:number; pregunta_id:string; pregunta:string; imagen_url:string|null; tipo:'situacional'|'fotografica'; opciones:string[] }
 export type Resultado = { puntaje:number; porcentaje:number; resultado:string; por_s:Record<string,number> }
 export type Ranking = { mi_posicion:number|null; mi_puntaje:number; mi_porcentaje:number; top10:Array<{posicion:number;nombre:string;sector:string;puntaje:number;porcentaje:number}>; sectores:Array<{posicion:number;sector:string;promedio:number;evaluados:number;afianzados:number}> }
+export type AdminDashboard={
+  general:{esperados:number;evaluados:number;pendientes:number;afianzados:number;refuerzo:number;reevaluacion:number;promedio:number}
+  sectores:Array<{sector:string;evaluados:number;promedio:number;afianzados:number;refuerzo:number;reevaluacion:number}>
+  por_s:Array<{s:string;correctas:number;total:number;porcentaje:number}>
+  personas:Array<{legajo:string;nombre:string;sector:string;puntaje:number;porcentaje:number;resultado:string;fecha:string}>
+}
 
 function unwrap<T>(data:T|null,error:{message:string}|null):T{
   if(error) throw new Error(error.message)
@@ -49,4 +55,14 @@ export async function iniciarPruebaAdmin():Promise<EvalSession>{
   const {data,error}=await supabase.rpc('desafio5s_admin_iniciar_prueba')
   const d=unwrap<any>(data,error)
   return {evaluacionId:d.evaluacion_id,accessToken:d.access_token}
+}
+
+export async function obtenerAdminDashboard():Promise<AdminDashboard>{
+  const {data,error}=await supabase.rpc('desafio5s_admin_dashboard')
+  return unwrap<AdminDashboard>(data,error)
+}
+
+export async function habilitarReevaluacion(legajo:string):Promise<void>{
+  const {error}=await supabase.rpc('desafio5s_admin_habilitar_reevaluacion',{p_legajo:legajo})
+  if(error) throw new Error(error.message)
 }
