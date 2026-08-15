@@ -15,13 +15,13 @@ const Analisis = lazy(() => import('../pages/Analisis'))
 const Importar = lazy(() => import('../pages/Importar'))
 const Admin = lazy(() => import('../pages/Admin'))
 const Desafio5S = lazy(() => import('../features/desafio5s/Desafio5SPage'))
+const Desafio5SAdmin = lazy(() => import('../features/desafio5s/Desafio5SAdminPage'))
 
 const suspenseProps = { fallback: <RouteSkeleton /> }
 const lazyPage = (Page: typeof Dashboard) => <ErrorBoundary><Suspense {...suspenseProps}><Page /></Suspense></ErrorBoundary>
 
 export const router = createBrowserRouter([
   { path: '/login', element: <ErrorBoundary><Login /></ErrorBoundary> },
-  // Módulo público e independiente. No utiliza AppLayout ni guards de Noven.
   { path: '/desafio-5s', element: lazyPage(Desafio5S) },
   {
     path: '/',
@@ -41,6 +41,7 @@ export const router = createBrowserRouter([
             children: [
               { path: 'importar', element: lazyPage(Importar) },
               { path: 'admin', element: lazyPage(Admin) },
+              { path: 'desafio-5s/admin', element: lazyPage(Desafio5SAdmin) },
             ],
           },
         ],
