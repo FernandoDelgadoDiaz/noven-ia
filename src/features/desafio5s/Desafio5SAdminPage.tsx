@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { habilitarReevaluacion, obtenerAdminDashboard, type AdminDashboard } from './api'
 import './desafio5s.css'
+import './desafio5s-admin.css'
 
 export default function Desafio5SAdminPage(){
   const [data,setData]=useState<AdminDashboard|null>(null)
