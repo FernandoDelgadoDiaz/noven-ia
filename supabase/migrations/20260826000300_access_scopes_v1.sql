@@ -178,9 +178,38 @@ SELECT
 FROM public.usuarios u
 WHERE u.activo = true;
 
--- Copiar asignaciones de familias legacy a scope 091. Si el usuario no tiene
--- acceso operador, la fila se conserva igualmente en esta fase para no perder
--- información histórica; el cutover validará consistencia antes de activar.
+-- Gate reproducible: si el legado contiene dos operadores distintos para la
+-- misma familia, no elegimos uno en silencio. La migración se detiene y exige
+-- corregir el dato antes de crear el scope por sucursal.
+DO $$
+DECLARE
+  v_conflictos integer;
+BEGIN
+  SELECT count(*)
+  INTO v_conflictos
+  FROM (
+    SELECT uf.familia_id
+    FROM public.usuario_familias uf
+    JOIN public.usuarios u ON u.id = uf.usuario_id
+    WHERE u.rol = 'operador'
+      AND u.activo = true
+      AND uf.usuario_id IS NOT NULL
+      AND uf.familia_id IS NOT NULL
+    GROUP BY uf.familia_id
+    HAVING count(DISTINCT uf.usuario_id) > 1
+  ) conflictos;
+
+  IF v_conflictos > 0 THEN
+    RAISE EXCEPTION
+      'Backfill multitenant abortado: % familia(s) legacy tienen más de un operador activo. Resolver antes de migrar.',
+      v_conflictos;
+  END IF;
+END;
+$$;
+
+-- Solo las asignaciones de OPERADORES se trasladan a la tabla de responsabilidad
+-- por familia. Gerentes y supervisores obtienen alcance por usuario_accesos y no
+-- deben ocupar la exclusividad operativa de una familia.
 INSERT INTO public.usuario_familias_sucursal (
   usuario_id,
   organizacion_id,
@@ -193,7 +222,10 @@ SELECT
   '00000000-0000-0000-0000-000000000001',
   uf.familia_id
 FROM public.usuario_familias uf
-WHERE uf.usuario_id IS NOT NULL
+JOIN public.usuarios u ON u.id = uf.usuario_id
+WHERE u.rol = 'operador'
+  AND u.activo = true
+  AND uf.usuario_id IS NOT NULL
   AND uf.familia_id IS NOT NULL
 ON CONFLICT (usuario_id, sucursal_id, familia_id) DO NOTHING;
 
@@ -333,6 +365,10 @@ GRANT EXECUTE ON FUNCTION noven_private.puede_ver_familia_sucursal(uuid, uuid) T
 
 -- -----------------------------------------------------------------------------
 -- 5. POLICIES de las entidades NUEVAS solamente
+--
+-- Los helpers de abajo reciben columnas DE CADA FILA. Por eso se invocan
+-- directamente. No se envuelven en `(SELECT helper(columna))`: Supabase solo
+-- recomienda ese initPlan cuando el resultado NO depende de los datos de la fila.
 -- -----------------------------------------------------------------------------
 GRANT SELECT ON TABLE public.organizaciones TO authenticated;
 GRANT SELECT ON TABLE public.zonas TO authenticated;
@@ -344,13 +380,13 @@ CREATE POLICY organizaciones_select_scope
   ON public.organizaciones
   FOR SELECT
   TO authenticated
-  USING ((SELECT noven_private.tiene_acceso_organizacion(id)));
+  USING (noven_private.tiene_acceso_organizacion(id));
 
 CREATE POLICY zonas_select_scope
   ON public.zonas
   FOR SELECT
   TO authenticated
-  USING ((SELECT noven_private.tiene_acceso_zona(id)));
+  USING (noven_private.tiene_acceso_zona(id));
 
 -- Las policies legacy de `sucursales` siguen coexistiendo hasta el cutover, por
 -- lo que esta policy todavía NO endurece por sí sola la tabla legacy.
@@ -358,19 +394,19 @@ CREATE POLICY sucursales_select_scope_v1
   ON public.sucursales
   FOR SELECT
   TO authenticated
-  USING ((SELECT noven_private.tiene_acceso_sucursal(id)));
+  USING (noven_private.tiene_acceso_sucursal(id));
 
 CREATE POLICY producto_codigos_select_scope
   ON public.producto_codigos
   FOR SELECT
   TO authenticated
-  USING ((SELECT noven_private.tiene_acceso_organizacion(organizacion_id)));
+  USING (noven_private.tiene_acceso_organizacion(organizacion_id));
 
 CREATE POLICY producto_sucursal_select_scope
   ON public.producto_sucursal
   FOR SELECT
   TO authenticated
-  USING ((SELECT noven_private.tiene_acceso_sucursal(sucursal_id)));
+  USING (noven_private.tiene_acceso_sucursal(sucursal_id));
 
 COMMENT ON TABLE public.usuario_accesos IS
   'Fuente de autorización multitenant: rol + scope organización/zona/sucursal.';
