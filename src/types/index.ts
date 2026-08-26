@@ -128,7 +128,7 @@ export interface ProductoCodigo {
   organizacion_id: string
   producto_id: string
   codigo: string
-  tipo: 'ean8' | 'upca' | 'ean13' | 'gtin14' | 'other'
+  tipo: 'ean8' | 'upca' | 'ean13' | 'gtin14' | 'otro'
   es_principal: boolean
   activo: boolean
   created_at: string
