@@ -15,13 +15,145 @@ interface UseVencimientosReturn extends VencimientosState {
   sinFamilias: boolean
 }
 
+interface VencimientoOperativoRow {
+  id: string
+  producto_id: string
+  sucursal_id: string
+  usuario_id: string
+  cantidad: number
+  lote: string | null
+  fecha_vencimiento: string
+  fecha_carga: string
+  activo: boolean
+  created_at: string
+  nivel_actual: string | null
+  organizacion_id: string
+  cod_art: string
+  codigo_barras: string | null
+  descripcion: string
+  marca: string | null
+  gramaje: string | null
+  categoria: string | null
+  proveedor: string | null
+  sector: string | null
+  precio_costo: number | null
+  imagen_url: string | null
+  familia_id: string | null
+  producto_activo: boolean
+  producto_created_at: string
+  producto_updated_at: string
+  stock_actual: number
+  venta_media_diaria: number
+}
+
 /**
- * Narrowing helper: valida que una fila de Supabase incluye el join de producto.
+ * Narrowing helper para el camino legacy.
  */
 function hasProducto(
   row: Vencimiento & { producto: Producto | null },
 ): row is Vencimiento & { producto: Producto } {
   return row.producto !== null
+}
+
+function vistaOperativaNoDisponible(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  return error.code === '42P01' || error.code === 'PGRST205'
+}
+
+function mapOperativo(row: VencimientoOperativoRow): Vencimiento & {
+  producto: Producto
+  nivel_actual: string | null
+} {
+  const producto: Producto = {
+    id: row.producto_id,
+    cod_art: row.cod_art,
+    codigo_barras: row.codigo_barras,
+    descripcion: row.descripcion,
+    marca: row.marca,
+    gramaje: row.gramaje,
+    categoria: row.categoria,
+    proveedor: row.proveedor,
+    sector: row.sector,
+    venta_media_diaria: row.venta_media_diaria,
+    stock_actual: row.stock_actual,
+    precio_costo: row.precio_costo,
+    imagen_url: row.imagen_url,
+    familia_id: row.familia_id,
+    activo: row.producto_activo,
+    created_at: row.producto_created_at,
+    updated_at: row.producto_updated_at,
+    organizacion_id: row.organizacion_id,
+  }
+
+  return {
+    id: row.id,
+    producto_id: row.producto_id,
+    sucursal_id: row.sucursal_id,
+    usuario_id: row.usuario_id,
+    cantidad: row.cantidad,
+    lote: row.lote,
+    fecha_vencimiento: row.fecha_vencimiento,
+    fecha_carga: row.fecha_carga,
+    activo: row.activo,
+    created_at: row.created_at,
+    producto,
+    nivel_actual: row.nivel_actual,
+  }
+}
+
+async function cargarLegacy(sucursalId: string): Promise<{
+  rows: (Vencimiento & { producto: Producto | null; nivel_actual: string | null })[]
+  error: string | null
+}> {
+  const { data, error } = await supabase
+    .from('vencimientos')
+    .select(
+      `
+      id,
+      producto_id,
+      sucursal_id,
+      usuario_id,
+      cantidad,
+      lote,
+      fecha_vencimiento,
+      fecha_carga,
+      activo,
+      created_at,
+      nivel_actual,
+      producto:productos (
+        id,
+        cod_art,
+        codigo_barras,
+        descripcion,
+        marca,
+        gramaje,
+        categoria,
+        proveedor,
+        sector,
+        venta_media_diaria,
+        stock_actual,
+        precio_costo,
+        familia_id,
+        imagen_url,
+        activo,
+        created_at,
+        updated_at
+      )
+    `,
+    )
+    .eq('sucursal_id', sucursalId)
+    .eq('activo', true)
+    .order('fecha_vencimiento', { ascending: true })
+
+  if (error) return { rows: [], error: error.message }
+
+  return {
+    rows: (data ?? []) as unknown as (Vencimiento & {
+      producto: Producto | null
+      nivel_actual: string | null
+    })[],
+    error: null,
+  }
 }
 
 export function useVencimientos(sucursalId: string | null): UseVencimientosReturn {
@@ -40,65 +172,45 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
     setFetchLoading(true)
     setFetchError(null)
 
-    const { data: rows, error } = await supabase
-      .from('vencimientos')
+    // Camino objetivo multitenant. La vista obtiene VMD/stock de producto_sucursal
+    // y su RLS ya filtra sucursal + familia antes de devolver datos al navegador.
+    const { data: operativos, error: operativoError } = await supabase
+      .from('v_vencimientos_operativos')
       .select(
-        `
-        id,
-        producto_id,
-        sucursal_id,
-        usuario_id,
-        cantidad,
-        lote,
-        fecha_vencimiento,
-        fecha_carga,
-        activo,
-        created_at,
-        nivel_actual,
-        producto:productos (
-          id,
-          cod_art,
-          codigo_barras,
-          descripcion,
-          marca,
-          gramaje,
-          categoria,
-          proveedor,
-          sector,
-          venta_media_diaria,
-          stock_actual,
-          precio_costo,
-          familia_id,
-          imagen_url,
-          activo,
-          created_at,
-          updated_at
-        )
-      `,
+        'id, producto_id, sucursal_id, usuario_id, cantidad, lote, fecha_vencimiento, fecha_carga, activo, created_at, nivel_actual, organizacion_id, cod_art, codigo_barras, descripcion, marca, gramaje, categoria, proveedor, sector, precio_costo, imagen_url, familia_id, producto_activo, producto_created_at, producto_updated_at, stock_actual, venta_media_diaria',
       )
       .eq('sucursal_id', sucursalId)
       .eq('activo', true)
       .order('fecha_vencimiento', { ascending: true })
 
-    if (error) {
-      setFetchError(error.message)
+    let typed: (Vencimiento & { producto: Producto; nivel_actual: string | null })[]
+
+    if (!operativoError) {
+      typed = ((operativos ?? []) as unknown as VencimientoOperativoRow[]).map(mapOperativo)
+    } else if (vistaOperativaNoDisponible(operativoError)) {
+      // Compatibilidad EXCLUSIVA para producción pre-migración. Nunca caer al
+      // esquema abierto ante 401/403/RLS: eso convertiría un error de permisos
+      // en un bypass de seguridad.
+      const legacy = await cargarLegacy(sucursalId)
+      if (legacy.error) {
+        setFetchError(legacy.error)
+        setFetchLoading(false)
+        return
+      }
+      typed = legacy.rows.filter(hasProducto)
+    } else {
+      setFetchError(operativoError.message)
       setFetchLoading(false)
       return
     }
 
     const hoyDate = new Date()
 
-    const typed = (rows ?? []) as unknown as (Vencimiento & {
-      producto: Producto | null
-      nivel_actual: string | null
-    })[]
-
-    // Detección de transición a 'urgente': si el nivel calculado es 'urgente' y la
-    // columna nivel_actual aún no lo refleja, persistimos el cambio. El webhook de DB
-    // sobre ese UPDATE dispara la notificación push. Solo se escribe en el cambio real.
+    // Detección de transición a 'urgente': el cron server-side es la garantía
+    // principal; se conserva esta escritura reactiva para no cambiar el flujo de
+    // notificaciones de 091 durante el cutover.
     const transiciones: string[] = []
     const conRiesgo: VencimientoConRiesgo[] = typed
-      .filter(hasProducto)
       .map((row) => {
         const resultado = calcularRiesgo(row, row.producto, hoyDate)
         if (resultado.nivel_riesgo === 'urgente' && row.nivel_actual !== 'urgente') {
@@ -120,6 +232,8 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
     void fetchData()
   }, [fetchData])
 
+  // Defensa adicional de UI. En multitenant la base ya aplica este scope; se
+  // mantiene para compatibilidad con el camino legacy hasta retirar sus policies.
   const data = useMemo(() => {
     if (famLoading) return []
     if (esAdmin) return rawData
