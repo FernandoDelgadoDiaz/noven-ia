@@ -1,1 +1,1 @@
-noven-scanner-direct-control-deploy-check-20260827-a
+noven-adaptive-image-compression-deploy-check-20260827-a
