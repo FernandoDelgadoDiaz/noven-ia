@@ -18,6 +18,7 @@ jobs:
       - name: Inspect production responses
         env:
           SITE_URL: https://noven-ia.netlify.app
+          SITE_ID: 1e8b0a22-0e86-4d43-8d38-58740f2b8a7a
         shell: bash
         run: |
           set -u
@@ -26,12 +27,17 @@ jobs:
           sed -n '1,20p' root.headers || true
           echo 'ROOT_ASSETS:'
           grep -oE '/assets/[^" ]+' root.html | head -n 10 || true
-          echo 'ROOT_PREFIX:'
-          head -c 300 root.html || true
           echo
 
-          echo '=== MARKER A ==='
+          echo '=== MARKER ==='
           curl -sS -L -o marker.txt -w 'HTTP_STATUS=%{http_code}\nFINAL_URL=%{url_effective}\n' "${SITE_URL}/deploy-marker.txt" || true
-          echo 'MARKER_BODY:'
-          cat marker.txt 2>/dev/null || true
+          echo 'MARKER_PREFIX:'
+          head -c 120 marker.txt 2>/dev/null || true
+          echo
+
+          echo '=== NETLIFY SITE API WITHOUT TOKEN ==='
+          curl -sS -D api.headers -o site.json -w 'HTTP_STATUS=%{http_code}\n' "https://api.netlify.com/api/v1/sites/${SITE_ID}" || true
+          sed -n '1,20p' api.headers || true
+          echo 'API_BODY_PREFIX:'
+          head -c 800 site.json 2>/dev/null || true
           echo
