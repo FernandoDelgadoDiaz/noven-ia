@@ -153,7 +153,7 @@ export default function AppLayout() {
             <Bell className="h-4 w-4 text-brand" aria-hidden="true" />
           </div>
           <p className="flex-1 text-xs text-foreground leading-snug">
-            🔔 Activá las notificaciones para recibir alertas de vencimientos urgentes
+            🔔 Activá las notificaciones para recibir alertas urgentes y de Radar Zonal
           </p>
           <button
             type="button"
