@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, FileSearch, Layers3, ShieldCheck, Tags } from 'lucide-react'
+import { ArrowRight, FileCheck2, FileSearch, Layers3, ShieldCheck, Tags } from 'lucide-react'
 
 export default function ImportarInicio() {
   const navigate = useNavigate()
@@ -17,13 +17,13 @@ export default function ImportarInicio() {
           <div>
             <p className="text-foreground font-semibold text-sm">Aprendizaje compartido por toda la organización</p>
             <p className="text-muted-foreground text-xs mt-1 leading-relaxed">
-              La carga por familia sirve para aprender y corregir. El asistido completo actualiza lo ya conocido y cualquier código nuevo
-              queda en una bandeja global: cuando una sucursal lo clasifica, todas las demás reutilizan esa clasificación.
+              El asistido completo actualiza lo conocido. Los códigos nuevos quedan en una bandeja global y pueden resolverse manualmente
+              o usando un CSV filtrado de Glaciar. Una vez clasificados, todas las sucursales reutilizan esa decisión.
             </p>
           </div>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-2 gap-4">
           <button
             type="button"
             onClick={() => navigate('/importar/familia')}
@@ -32,11 +32,10 @@ export default function ImportarInicio() {
             <div className="h-11 w-11 rounded-2xl bg-brand-light flex items-center justify-center mb-4">
               <FileSearch className="h-5 w-5 text-brand" />
             </div>
-            <p className="text-xs uppercase tracking-wide text-brand font-bold">Aprendizaje</p>
+            <p className="text-xs uppercase tracking-wide text-brand font-bold">Aprendizaje detallado</p>
             <h2 className="text-foreground font-bold text-lg mt-1">Importar por familia</h2>
             <p className="text-muted-foreground text-sm mt-2 leading-relaxed">
-              Para un CSV filtrado, por ejemplo Almacén → Golosinas. Permite detectar nuevos productos,
-              corregir códigos y confirmar la familia.
+              Para un CSV filtrado, por ejemplo Almacén → Golosinas. Permite reconciliar, corregir códigos y confirmar la familia.
             </p>
             <div className="mt-5 flex items-center gap-2 text-brand text-sm font-semibold">
               Abrir por familia <ArrowRight className="h-4 w-4" />
@@ -54,7 +53,7 @@ export default function ImportarInicio() {
             <p className="text-xs uppercase tracking-wide text-brand font-bold">Mantenimiento</p>
             <h2 className="text-foreground font-bold text-lg mt-1">Asistido completo</h2>
             <p className="text-muted-foreground text-sm mt-2 leading-relaxed">
-              Para toda la Reposición Asistida. Actualiza stock/VMD por sucursal y registra los códigos todavía desconocidos.
+              Para toda la Reposición Asistida. Actualiza stock/VMD por sucursal y registra automáticamente los códigos desconocidos.
             </p>
             <div className="mt-5 flex items-center gap-2 text-brand text-sm font-semibold">
               Abrir actualización masiva <ArrowRight className="h-4 w-4" />
@@ -69,13 +68,31 @@ export default function ImportarInicio() {
             <div className="h-11 w-11 rounded-2xl bg-brand-light flex items-center justify-center mb-4">
               <Tags className="h-5 w-5 text-brand" />
             </div>
-            <p className="text-xs uppercase tracking-wide text-brand font-bold">Catálogo compartido</p>
+            <p className="text-xs uppercase tracking-wide text-brand font-bold">Resolución manual</p>
             <h2 className="text-foreground font-bold text-lg mt-1">Pendientes de clasificación</h2>
             <p className="text-muted-foreground text-sm mt-2 leading-relaxed">
-              Clasificá una sola vez los códigos nuevos. La decisión se propaga a todas las sucursales que ya los detectaron.
+              Clasificá uno o varios códigos nuevos. La decisión se propaga a todas las sucursales que ya los detectaron.
             </p>
             <div className="mt-5 flex items-center gap-2 text-brand text-sm font-semibold">
               Ver pendientes <ArrowRight className="h-4 w-4" />
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/importar/pendientes/aprender')}
+            className="text-left bg-white rounded-[24px] shadow-card hover:shadow-elevated border border-border/60 hover:border-brand/30 p-5 transition-all active:scale-[0.99]"
+          >
+            <div className="h-11 w-11 rounded-2xl bg-brand-light flex items-center justify-center mb-4">
+              <FileCheck2 className="h-5 w-5 text-brand" />
+            </div>
+            <p className="text-xs uppercase tracking-wide text-brand font-bold">Resolución automática</p>
+            <h2 className="text-foreground font-bold text-lg mt-1">Aprender desde CSV filtrado</h2>
+            <p className="text-muted-foreground text-sm mt-2 leading-relaxed">
+              Subí, por ejemplo, el CSV de Golosinas. Noven usa su Cód.Familia para resolver juntos todos los pendientes presentes en ese archivo.
+            </p>
+            <div className="mt-5 flex items-center gap-2 text-brand text-sm font-semibold">
+              Aprender desde archivo <ArrowRight className="h-4 w-4" />
             </div>
           </button>
         </div>
