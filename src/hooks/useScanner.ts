@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useProductos } from '@/hooks/useProductos'
+import { useSucursalActual } from '@/hooks/useSucursalActual'
 import type { Producto } from '@/types/index'
 
 interface ScannerState {
@@ -13,8 +14,15 @@ interface UseScannerReturn extends ScannerState {
   reset: () => void
 }
 
-export function useScanner(sucursalId: string): UseScannerReturn {
+/**
+ * El scope explícito es opcional para mantener compatibilidad con el Scanner
+ * actual. Si no se informa, se usa la sucursal operativa resuelta por el contexto.
+ */
+export function useScanner(sucursalId?: string): UseScannerReturn {
   const { searchByBarcode } = useProductos()
+  const { sucursalId: sucursalActual } = useSucursalActual()
+  const scope = (sucursalId ?? sucursalActual).trim()
+
   const [state, setState] = useState<ScannerState>({
     scanning: false,
     error: null,
@@ -26,7 +34,7 @@ export function useScanner(sucursalId: string): UseScannerReturn {
       setState((prev) => ({ ...prev, error: 'Código de barras vacío', lastResult: null }))
       return null
     }
-    if (!sucursalId) {
+    if (!scope) {
       setState((prev) => ({ ...prev, error: 'Seleccioná una sucursal antes de escanear.', lastResult: null }))
       return null
     }
@@ -34,7 +42,7 @@ export function useScanner(sucursalId: string): UseScannerReturn {
     setState({ scanning: true, error: null, lastResult: null })
 
     try {
-      const producto = await searchByBarcode(barcode, sucursalId)
+      const producto = await searchByBarcode(barcode, scope)
       setState({ scanning: false, error: null, lastResult: producto })
       return producto
     } catch (err) {
