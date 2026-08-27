@@ -15,7 +15,9 @@ const Scanner = lazy(() => import('../pages/Scanner'))
 const Vencimientos = lazy(() => import('../pages/Vencimientos'))
 const Historial = lazy(() => import('../pages/Historial'))
 const Analisis = lazy(() => import('../pages/Analisis'))
+const ImportarInicio = lazy(() => import('../pages/ImportarInicio'))
 const Importar = lazy(() => import('../pages/Importar'))
+const ImportarMasivo = lazy(() => import('../pages/ImportarMasivo'))
 const Admin = lazy(() => import('../pages/Admin'))
 
 const suspenseProps = { fallback: <RouteSkeleton /> }
@@ -72,17 +74,32 @@ export const router = createBrowserRouter([
           },
           {
             // Importar y Admin son exclusivos de rol admin.
-            // La importación reescribe stock, venta media y familia de productos
-            // que pertenecen a otros operadores: no puede quedar al alcance de
-            // un operador. El guard de ruta es la primera barrera; la segunda es
-            // la confirmación explícita de familia dentro de Importar.
+            // La importación reescribe stock, venta media y clasificación del
+            // catálogo; el guard de ruta es la primera barrera y las operaciones
+            // masivas vuelven a validar usuario/sucursal en servidor y DB.
             element: <AdminRoute />,
             children: [
               {
                 path: 'importar',
                 element: (
                   <ErrorBoundary>
+                    <Suspense {...suspenseProps}><ImportarInicio /></Suspense>
+                  </ErrorBoundary>
+                ),
+              },
+              {
+                path: 'importar/familia',
+                element: (
+                  <ErrorBoundary>
                     <Suspense {...suspenseProps}><Importar /></Suspense>
+                  </ErrorBoundary>
+                ),
+              },
+              {
+                path: 'importar/masivo',
+                element: (
+                  <ErrorBoundary>
+                    <Suspense {...suspenseProps}><ImportarMasivo /></Suspense>
                   </ErrorBoundary>
                 ),
               },
