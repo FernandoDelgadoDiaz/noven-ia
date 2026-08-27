@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-analysis-copy-deploy-check-20260827-a
+          EXPECTED_MARKER: noven-analysis-policy-deploy-check-20260827-b
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |
@@ -42,6 +42,16 @@ jobs:
           set -euo pipefail
           html="$(curl -fsS "${SITE_URL}/")"
           printf '%s' "${html}" | grep -q '<div id="root"></div>'
+
+      - name: Verify analysis function exists
+        env:
+          SITE_URL: https://noven-ia.netlify.app
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl -sS -o /tmp/analysis-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/analisis" -H 'Content-Type: application/json' -d '{}')"
+          # Sin token debe existir y rechazar con 401. 404 significaría que la Function no fue publicada.
+          test "${status}" = "401"
 
       - name: Verify Radar Zonal function exists
         env:
