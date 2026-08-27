@@ -1,0 +1,44 @@
+name: Production Deploy Smoke
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - public/deploy-marker.txt
+      - .github/workflows/deploy-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Wait for exact Netlify deployment
+        env:
+          EXPECTED_MARKER: noven-multitenant-v1-deploy-check-20260827-a
+          SITE_URL: https://noven-ia.netlify.app
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 40); do
+            actual="$(curl -fsS "${SITE_URL}/deploy-marker.txt" 2>/dev/null || true)"
+            if [ "${actual}" = "${EXPECTED_MARKER}" ]; then
+              echo "Exact deploy marker found."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Expected deploy marker was not published."
+          exit 1
+
+      - name: Verify SPA shell
+        env:
+          SITE_URL: https://noven-ia.netlify.app
+        shell: bash
+        run: |
+          set -euo pipefail
+          html="$(curl -fsS "${SITE_URL}/")"
+          printf '%s' "${html}" | grep -q '<div id="root"></div>'
