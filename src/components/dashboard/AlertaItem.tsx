@@ -26,12 +26,19 @@ function formatDiasRestantes(dias: number): string {
   return `Vence en ${dias} días`
 }
 
-function formatMotivo(cantidadLote: number, ventaMediaDiaria: number, diasRestantes: number, nivel: string): string {
+function formatMotivo(
+  cantidadLote: number,
+  ventaMediaDiaria: number,
+  diasComercialesRestantes: number,
+  nivel: string,
+): string {
   if (nivel === 'decomiso') return 'Vencido · decomiso requerido'
   if (nivel === 'donacion') return 'Retiro obligatorio'
   if (ventaMediaDiaria <= 0) return 'Sin rotación'
+  if (diasComercialesRestantes <= 0) return 'Sin ventana comercial'
+
   const diasStock = calcularDiasStock(cantidadLote, ventaMediaDiaria)
-  if (diasStock > diasRestantes) return 'Rotación baja'
+  if (diasStock > diasComercialesRestantes) return 'No llega a venderse a tiempo'
   return 'Rotación suficiente'
 }
 
@@ -48,7 +55,12 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
 
   const titulo = formatTitulo(producto.descripcion, producto.gramaje, producto.marca)
   const diasLabel = formatDiasRestantes(vencimiento.dias_restantes)
-  const motivo = formatMotivo(vencimiento.cantidad, producto.venta_media_diaria, vencimiento.dias_restantes, vencimiento.nivel_riesgo)
+  const motivo = formatMotivo(
+    vencimiento.cantidad,
+    producto.venta_media_diaria,
+    vencimiento.dias_comerciales_restantes,
+    vencimiento.nivel_riesgo,
+  )
   const isDecomiso = vencimiento.nivel_riesgo === 'decomiso'
   const isDonacion = vencimiento.nivel_riesgo === 'donacion'
   const showPulse = cfg.dotPulse
