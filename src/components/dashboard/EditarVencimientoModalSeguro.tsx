@@ -18,7 +18,11 @@ import {
   type NivelRiesgo,
 } from '@/lib/riesgo'
 import { RISK_VISUAL } from '@/lib/risk-config'
-import { cacheBustPublicUrl, pathImagenProducto, prepararImagenProducto } from '@/lib/image-pipeline'
+import {
+  consultarModoImagenProducto,
+  guardarImagenProductoGlobal,
+  type ModoImagenProducto,
+} from '@/lib/product-image'
 import ProductIdentity from '@/components/product/ProductIdentity'
 import type { EstadoSeguimientoRag } from '@/types/index'
 
@@ -107,6 +111,8 @@ export default function EditarVencimientoModalSeguro({
   const [subiendoFoto, setSubiendoFoto] = useState(false)
   const [fotoGuardada, setFotoGuardada] = useState(false)
   const [errorFoto, setErrorFoto] = useState<string | null>(null)
+  const [modoFoto, setModoFoto] = useState<ModoImagenProducto | null>(null)
+  const [cargandoPermisoFoto, setCargandoPermisoFoto] = useState(true)
 
   const [nivelCalculado, setNivelCalculado] = useState<NivelRiesgo>(() =>
     calcularNivelRiesgo(
@@ -150,6 +156,30 @@ export default function EditarVencimientoModalSeguro({
   }, [vencimiento.id])
 
   useEffect(() => {
+    let activo = true
+    async function cargarModoFoto(): Promise<void> {
+      if (!sucursalId) {
+        if (activo) setCargandoPermisoFoto(false)
+        return
+      }
+      setCargandoPermisoFoto(true)
+      try {
+        const modo = await consultarModoImagenProducto(sucursalId, vencimiento.producto_id)
+        if (!activo) return
+        setModoFoto(modo)
+      } catch (err) {
+        if (!activo) return
+        console.error('[EditarVencimientoModalSeguro] modo imagen:', err)
+        setModoFoto('solo_lectura')
+      } finally {
+        if (activo) setCargandoPermisoFoto(false)
+      }
+    }
+    void cargarModoFoto()
+    return () => { activo = false }
+  }, [sucursalId, vencimiento.producto_id])
+
+  useEffect(() => {
     setNivelCalculado(
       calcularNivelRiesgo(
         calcularDiasRestantes(fechaVencimiento),
@@ -172,17 +202,8 @@ export default function EditarVencimientoModalSeguro({
       setErrorFoto('No se pudo resolver la organización del producto.')
       return
     }
-
-    const { data: modo, error: modoError } = await supabase.rpc('modo_imagen_producto_operador', {
-      p_sucursal_id: sucursalId,
-      p_producto_id: vencimiento.producto_id,
-    })
-    if (modoError) {
-      setErrorFoto('No se pudo validar el permiso para la foto.')
-      return
-    }
-    if (modo === 'solo_lectura') {
-      setErrorFoto('La foto ya es compartida por la organización. Para reemplazarla se requiere supervisor o gerencia.')
+    if (modoFoto === 'solo_lectura') {
+      setErrorFoto('La foto ya es compartida por la organización y tu perfil no puede reemplazarla.')
       if (fotoInputRef.current) fotoInputRef.current.value = ''
       return
     }
@@ -194,39 +215,19 @@ export default function EditarVencimientoModalSeguro({
     setErrorFoto(null)
 
     try {
-      const preparada = await prepararImagenProducto(file)
-      const paths = pathImagenProducto(organizacionId, vencimiento.producto_id)
-
-      const { error: fullError } = await supabase.storage
-        .from('productos-imagenes')
-        .upload(paths.full, preparada.full, { upsert: true, contentType: 'image/webp', cacheControl: '3600' })
-      if (fullError) throw fullError
-
-      const { error: thumbError } = await supabase.storage
-        .from('productos-imagenes')
-        .upload(paths.thumb, preparada.thumb, { upsert: true, contentType: 'image/webp', cacheControl: '3600' })
-      if (thumbError) throw thumbError
-
-      const version = Date.now()
-      const { data: fullUrlData } = supabase.storage.from('productos-imagenes').getPublicUrl(paths.full)
-      const { data: thumbUrlData } = supabase.storage.from('productos-imagenes').getPublicUrl(paths.thumb)
-      const publicUrl = cacheBustPublicUrl(fullUrlData.publicUrl, version)
-      const thumbUrl = cacheBustPublicUrl(thumbUrlData.publicUrl, version)
-
-      const { error: updateError } = await supabase.rpc('actualizar_imagen_producto_operador_v2', {
-        p_sucursal_id: sucursalId,
-        p_producto_id: vencimiento.producto_id,
-        p_imagen_url: publicUrl,
-        p_imagen_thumb_url: thumbUrl,
+      const resultado = await guardarImagenProductoGlobal({
+        file,
+        sucursalId,
+        productoId: vencimiento.producto_id,
+        organizacionId,
       })
-      if (updateError) throw updateError
-
-      setFotoUrl(publicUrl)
+      setFotoUrl(resultado.publicUrl)
+      setModoFoto(resultado.modoPosterior)
       setFotoGuardada(true)
-      onImagenActualizada?.(publicUrl)
+      onImagenActualizada?.(resultado.publicUrl)
       if (fotoInputRef.current) fotoInputRef.current.value = ''
     } catch (err) {
-      console.error('[EditarVencimientoModalSeguro] imagen V2:', err)
+      console.error('[EditarVencimientoModalSeguro] imagen global:', err)
       setFotoUrl(vencimiento.productos.imagen_url ?? null)
       const message = err instanceof Error ? err.message : ''
       setErrorFoto(message || 'No se pudo guardar la foto. Intentá de nuevo.')
@@ -333,7 +334,8 @@ export default function EditarVencimientoModalSeguro({
 
   const badge = BADGE_CONFIG[nivelCalculado]
   const riskViz = RISK_VISUAL[nivelCalculado]
-  const ocupado = guardando || cerrandoVendido || anulando
+  const ocupado = guardando || cerrandoVendido || anulando || subiendoFoto
+  const puedeEditarFoto = modoFoto === 'agregar' || modoFoto === 'reemplazar'
   const inputCls = 'w-full h-11 px-3 bg-surface-base border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150'
 
   return (
@@ -348,10 +350,17 @@ export default function EditarVencimientoModalSeguro({
               ) : (
                 <div className="h-20 w-20 rounded-2xl bg-muted flex items-center justify-center text-2xl">📷</div>
               )}
-              <button type="button" onClick={() => fotoInputRef.current?.click()} disabled={subiendoFoto || ocupado} className="w-20 mt-1 py-1 rounded-lg bg-muted text-[9px] font-semibold text-muted-foreground disabled:opacity-50">
-                {subiendoFoto ? 'Guardando…' : fotoUrl ? 'Cambiar foto' : 'Agregar foto'}
-              </button>
-              <input ref={fotoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void handleFotoChange(e) }} />
+              {puedeEditarFoto && (
+                <button type="button" onClick={() => fotoInputRef.current?.click()} disabled={subiendoFoto || ocupado || cargandoPermisoFoto} className="w-20 mt-1 py-1 rounded-lg bg-muted text-[9px] font-semibold text-muted-foreground disabled:opacity-50">
+                  {subiendoFoto ? 'Guardando…' : modoFoto === 'reemplazar' ? 'Cambiar foto' : 'Agregar foto'}
+                </button>
+              )}
+              {fotoUrl && modoFoto === 'solo_lectura' && (
+                <p className="w-20 text-[9px] text-muted-foreground text-center mt-1">Foto compartida</p>
+              )}
+              {puedeEditarFoto && (
+                <input ref={fotoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void handleFotoChange(e) }} />
+              )}
               {fotoGuardada && <p className="text-[10px] text-emerald-600 text-center mt-1">Guardada</p>}
               {errorFoto && <p className="text-[10px] text-red-500 text-center mt-1 max-w-20">{errorFoto}</p>}
             </div>

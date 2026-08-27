@@ -13,6 +13,9 @@ assert.match(source, /for \(const intento of intentos\)/, 'La compresión debe r
 assert.match(source, /render\.blob\.size <= targetBytes/, 'Cada intento debe validar el peso obtenido')
 assert.match(source, /maxSide: 1200, quality: 0\.78/, 'Debe conservar máxima calidad como primer intento')
 assert.match(source, /maxSide: 560, quality: 0\.48/, 'Debe existir un fallback fuerte para fotos móviles difíciles')
+assert.match(source, /webp\?\.type === 'image\/webp'/, 'No debe asumir que pedir WebP garantiza recibir WebP')
+assert.match(source, /canvasABlob\(canvas, 'image\/jpeg'/, 'Debe usar JPEG como fallback cuando WebP no está disponible')
+assert.match(source, /jpeg\?\.type === 'image\/jpeg'/, 'Debe validar el MIME real del fallback JPEG')
 assert.doesNotMatch(source, /La foto optimizada todavía supera 1 MB\. Probá con otra imagen\./, 'No se debe rechazar una foto móvil tras un único intento')
 
-console.log('✓ Fotos de producto usan compresión adaptativa antes de rechazar la imagen')
+console.log('✓ Fotos de producto usan compresión adaptativa y fallback WebP → JPEG')
