@@ -6,11 +6,16 @@ import { decodificarCsv } from '../../src/lib/importar-csv'
 import { analizarReporteGlaciar } from '../../src/lib/importar-glaciar'
 import { reconciliar, type FilaConciliada, type ProductoDb } from '../../src/lib/importar-reconciliacion'
 
+interface DecisionInput {
+  decision: 'mismo' | 'distinto'
+  productoIdEsperado: string
+}
+
 interface Body {
   sucursalId?: string
   nombreArchivo?: string
   archivoBase64?: string
-  decisiones?: Record<string, 'mismo' | 'distinto'>
+  decisiones?: Record<string, DecisionInput>
   familiasAprobadas?: string[]
 }
 
@@ -286,20 +291,30 @@ const handler: Handler = async (event: HandlerEvent) => {
 
   for (const fc of recon.aConfirmar) {
     const decision = decisiones[String(fc.fila.linea)]
-    if (decision === 'mismo') {
+    if (!decision) continue
+
+    if (!fc.match || decision.productoIdEsperado !== fc.match.id) {
+      return json(409, {
+        success: false,
+        error:
+          `El catálogo cambió desde el preview en la línea ${fc.fila.linea}. ` +
+          'No se aplicó ningún cambio. Volvé a cargar el archivo y revisá las coincidencias.',
+      })
+    }
+
+    if (decision.decision === 'mismo') {
       operaciones.push(aOperacionActualizar(fc, familia.id, familiasAprobadas))
-      if (fc.match && fc.match.cod_art !== fc.fila.cod_art) {
+      if (fc.match.cod_art !== fc.fila.cod_art) {
         codArtCorregidos.push({ de: fc.match.cod_art, a: fc.fila.cod_art, descripcion: fc.match.descripcion })
       }
-    } else if (decision === 'distinto') {
+    } else if (decision.decision === 'distinto') {
       operaciones.push(aOperacionInsertar(fc))
       insertadosConDecision.push({
         codArt: fc.fila.cod_art,
         descripcion: fc.fila.descripcion,
-        similarA: fc.match ? `${fc.match.cod_art} — ${fc.match.descripcion}` : '',
+        similarA: `${fc.match.cod_art} — ${fc.match.descripcion}`,
       })
     }
-    // Sin decisión: igual que la UI histórica, se excluye de la escritura.
   }
 
   for (const fc of recon.nuevos) operaciones.push(aOperacionInsertar(fc))
