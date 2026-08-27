@@ -1,0 +1,337 @@
+from pathlib import Path
+
+
+def replace_once(text: str, old: str, new: str, label: str) -> str:
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f'{label}: expected exactly 1 occurrence, found {count}')
+    return text.replace(old, new, 1)
+
+
+# Types
+path = Path('src/types/index.ts')
+s = path.read_text()
+s = replace_once(
+    s,
+    '  imagen_url: string | null\n  familia_id: string | null',
+    '  imagen_url: string | null\n  imagen_thumb_url?: string | null\n  familia_id: string | null',
+    'types imagen_thumb_url',
+)
+path.write_text(s)
+
+# useVencimientos
+path = Path('src/hooks/useVencimientos.ts')
+s = path.read_text()
+s = replace_once(
+    s,
+    '  imagen_url: string | null\n  familia_id: string | null',
+    '  imagen_url: string | null\n  imagen_thumb_url: string | null\n  familia_id: string | null',
+    'useVencimientos row thumb',
+)
+s = replace_once(
+    s,
+    '    imagen_url: row.imagen_url,\n    familia_id: row.familia_id,',
+    '    imagen_url: row.imagen_url,\n    imagen_thumb_url: row.imagen_thumb_url,\n    familia_id: row.familia_id,',
+    'useVencimientos map thumb',
+)
+s = replace_once(
+    s,
+    '        imagen_url,\n        activo,',
+    '        imagen_url,\n        imagen_thumb_url,\n        activo,',
+    'useVencimientos legacy select thumb',
+)
+s = replace_once(
+    s,
+    'precio_costo, imagen_url, familia_id, sector_id',
+    'precio_costo, imagen_url, imagen_thumb_url, familia_id, sector_id',
+    'useVencimientos operational select thumb',
+)
+path.write_text(s)
+
+# Dashboard
+path = Path('src/pages/Dashboard.tsx')
+s = path.read_text()
+s = s.replace("import RiesgoCard from '@/components/dashboard/RiesgoCard'\n", '')
+s = replace_once(
+    s,
+    '              imagen_url: vencimientoEditando.producto.imagen_url,\n',
+    '              imagen_url: vencimientoEditando.producto.imagen_url,\n              imagen_thumb_url: vencimientoEditando.producto.imagen_thumb_url,\n              organizacion_id: vencimientoEditando.producto.organizacion_id,\n',
+    'Dashboard modal image metadata',
+)
+s = replace_once(
+    s,
+    '<main className="px-4 md:px-8 py-5 md:py-6 space-y-5 md:space-y-6">',
+    '<main className="px-4 md:px-8 py-4 md:py-6 space-y-4 md:space-y-5">',
+    'Dashboard spacing',
+)
+s = replace_once(
+    s,
+    '              <div className="flex items-center gap-4 bg-red-50 border-l-4 border-red-600 rounded-r-2xl px-5 py-4 animate-fade-in">',
+    '              <div className="flex items-center gap-3 bg-red-50 border-l-4 border-red-600 rounded-r-2xl px-4 py-3 animate-fade-in">',
+    'Dashboard critical compact',
+)
+s = replace_once(
+    s,
+    '                <div className="h-10 w-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">\n                  <AlertTriangle className="h-5 w-5 text-red-600" aria-hidden="true" />',
+    '                <div className="h-9 w-9 rounded-xl bg-red-100 flex items-center justify-center shrink-0">\n                  <AlertTriangle className="h-4 w-4 text-red-600" aria-hidden="true" />',
+    'Dashboard critical icon compact',
+)
+s = replace_once(
+    s,
+    "                    {enRiesgo} producto{enRiesgo !== 1 ? 's' : ''} en estado crítico — Requieren acción inmediata para evitar pérdidas.",
+    "                    {enRiesgo} producto{enRiesgo !== 1 ? 's' : ''} requieren acción inmediata.",
+    'Dashboard critical copy',
+)
+s = replace_once(
+    s,
+    '                  className="shrink-0 px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-xl transition-colors duration-150 active:scale-[0.97] whitespace-nowrap"',
+    '                  className="shrink-0 px-3 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-xl transition-colors duration-150 active:scale-[0.97] whitespace-nowrap"',
+    'Dashboard critical button',
+)
+s = replace_once(s, '                  Ver vencimientos →', '                  Ver →', 'Dashboard critical button copy')
+start = s.index('            {/* ── KPI command center ── */}')
+end = s.index('            {/* ── Alertas priorizadas ── */}', start)
+kpi = '''            {/* ── KPI command center compacto ── */}
+            <section aria-label="Resumen de riesgos" className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate('/vencimientos?filtro=riesgo')}
+                  className="bg-white rounded-[20px] shadow-card p-3.5 text-left min-h-[94px] hover:shadow-elevated transition-all active:scale-[0.98]"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="h-8 w-8 rounded-xl bg-orange-50 flex items-center justify-center">
+                      <Package className="h-4 w-4 text-orange-600" aria-hidden="true" />
+                    </div>
+                    <span className="text-[10px] font-semibold text-muted-foreground">{enRiesgo} productos</span>
+                  </div>
+                  <div className="mt-2 flex items-end gap-2">
+                    <span className="text-3xl font-black leading-none tabular-nums text-orange-600">{unidadesEnRiesgo}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-0.5">unidades en riesgo</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigate('/vencimientos?filtro=radar')}
+                  className="bg-white rounded-[20px] shadow-card p-3.5 text-left min-h-[94px] hover:shadow-elevated transition-all active:scale-[0.98]"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="h-8 w-8 rounded-xl bg-amber-50 flex items-center justify-center">
+                      <Package className="h-4 w-4 text-amber-500" aria-hidden="true" />
+                    </div>
+                    <span className="text-[10px] font-semibold text-muted-foreground">hasta 45 días</span>
+                  </div>
+                  <div className="mt-2 flex items-end gap-2">
+                    <span className="text-3xl font-black leading-none tabular-nums text-amber-600">{enRadar}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-0.5">en radar</span>
+                  </div>
+                </button>
+              </div>
+
+              <div className="bg-white rounded-[20px] shadow-card px-3.5 py-3">
+                <div className="flex items-center justify-between gap-3 mb-2.5">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Resultados</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{trimestreInfo.label}</p>
+                  </div>
+                  <button type="button" onClick={() => navigate('/historial')} className="text-[10px] font-semibold text-brand">Ver historial →</button>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-border">
+                  <button type="button" onClick={() => navigate('/historial?tipo=vendido')} className="px-2 text-left">
+                    <div className="flex items-center gap-1.5"><CircleCheckBig className="h-3.5 w-3.5 text-emerald-600" /><span className="text-xl font-black tabular-nums text-emerald-600">{loadingAcciones ? '–' : vendidos}</span></div>
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mt-1">Vendidos</p>
+                  </button>
+                  <button type="button" onClick={() => navigate('/historial?tipo=donacion')} className="px-3 text-left">
+                    <div className="flex items-center gap-1.5"><HandHeart className="h-3.5 w-3.5 text-orange-600" /><span className="text-xl font-black tabular-nums text-orange-600">{loadingAcciones ? '–' : donaciones}</span></div>
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mt-1">Donación</p>
+                  </button>
+                  <button type="button" onClick={() => navigate('/historial?tipo=decomiso')} className="px-3 text-left">
+                    <div className="flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5 text-red-600" /><span className="text-xl font-black tabular-nums text-red-600">{loadingAcciones ? '–' : decomisosTrimestrales}</span></div>
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mt-1">Decomiso</p>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+'''
+s = s[:start] + kpi + s[end:]
+path.write_text(s)
+
+# Alert item
+path = Path('src/components/dashboard/AlertaItem.tsx')
+s = path.read_text()
+old_fn = '''function formatMotivo(cantidadLote: number, ventaMediaDiaria: number, diasRestantes: number): string {
+  if (ventaMediaDiaria <= 0) return 'Sin rotación'
+  const diasStock = calcularDiasStock(cantidadLote, ventaMediaDiaria)
+  if (diasStock > diasRestantes) return 'Rotación baja'
+  return 'Rotación suficiente'
+}'''
+new_fn = '''function formatMotivo(cantidadLote: number, ventaMediaDiaria: number, diasRestantes: number, nivel: string): string {
+  if (nivel === 'decomiso') return 'Vencido · decomiso requerido'
+  if (nivel === 'donacion') return 'Retiro obligatorio'
+  if (ventaMediaDiaria <= 0) return 'Sin rotación'
+  const diasStock = calcularDiasStock(cantidadLote, ventaMediaDiaria)
+  if (diasStock > diasRestantes) return 'Rotación baja'
+  return 'Rotación suficiente'
+}'''
+s = replace_once(s, old_fn, new_fn, 'AlertaItem motivo')
+s = replace_once(
+    s,
+    '  const motivo = formatMotivo(vencimiento.cantidad, producto.venta_media_diaria, vencimiento.dias_restantes)',
+    '  const motivo = formatMotivo(vencimiento.cantidad, producto.venta_media_diaria, vencimiento.dias_restantes, vencimiento.nivel_riesgo)',
+    'AlertaItem motivo call',
+)
+s = replace_once(
+    s,
+    '  const showAccionBtn = (isDecomiso || isDonacion) && Boolean(onRegistrarAccion)\n',
+    "  const showAccionBtn = (isDecomiso || isDonacion) && Boolean(onRegistrarAccion)\n  const accionesVisibles = (isDecomiso || isDonacion) ? [] : vencimiento.acciones_sugeridas.slice(0, 2)\n  const accionesRestantes = Math.max(vencimiento.acciones_sugeridas.length - accionesVisibles.length, 0)\n",
+    'AlertaItem actions compact',
+)
+s = replace_once(s, '      <div className="p-4 md:p-5 flex items-start gap-4">', '      <div className="p-3.5 md:p-4 flex items-start gap-3">', 'AlertaItem header padding')
+s = s.replace('h-[60px] w-[60px]', 'h-[52px] w-[52px]')
+s = replace_once(
+    s,
+    '                src={producto.imagen_url}\n                alt={producto.descripcion}\n                className="h-full w-full object-cover"',
+    '                src={producto.imagen_thumb_url ?? producto.imagen_url}\n                alt={producto.descripcion}\n                loading="lazy"\n                decoding="async"\n                className="h-full w-full object-cover"',
+    'AlertaItem lazy thumbnail',
+)
+op_start = s.index('      {/* Operative row: SKU · Familia · Cantidad · Estado */}')
+op_end = s.index('      {/* Bottom: smart action chips — compactos */}', op_start)
+op_new = '''      {/* Identificación operativa compacta */}
+      <div className="px-3.5 md:px-4 pb-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
+        {producto.cod_art && <span className="font-mono font-semibold text-foreground/70">SKU {producto.cod_art}</span>}
+        {producto.cod_art && <span aria-hidden="true">·</span>}
+        <span className="font-semibold text-foreground/70">{vencimiento.cantidad} un</span>
+        {familiaNombre && <span aria-hidden="true">·</span>}
+        {familiaNombre && <span className="font-medium truncate max-w-[190px]">{familiaNombre}</span>}
+      </div>
+
+'''
+s = s[:op_start] + op_new + s[op_end:]
+chips_start = s.index('      {/* Bottom: smart action chips — compactos */}')
+chips_end = s.index('      {/* Accion operativa: donacion o decomiso */}', chips_start)
+chips_new = '''      {/* Próximos pasos: máximo dos para evitar competencia visual */}
+      {accionesVisibles.length > 0 && (
+        <div className="flex items-center gap-1.5 px-3.5 md:px-4 pb-2 overflow-hidden">
+          {accionesVisibles.map((accion) => (
+            <span key={accion} className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-orange-50 text-orange-700 border border-orange-100 truncate max-w-[190px]">
+              {accion}
+            </span>
+          ))}
+          {accionesRestantes > 0 && <span className="text-[10px] text-muted-foreground shrink-0">+{accionesRestantes}</span>}
+        </div>
+      )}
+
+'''
+s = s[:chips_start] + chips_new + s[chips_end:]
+s = s.replace('className="px-4 md:px-5 pb-4 pt-0"', 'className="px-3.5 md:px-4 pb-3 pt-0"')
+s = s.replace("'w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border-2", "'w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold border")
+marker = '\ninterface DatoOperativoProps {'
+if marker not in s:
+    raise SystemExit('AlertaItem DatoOperativo marker missing')
+s = s.split(marker, 1)[0].rstrip() + '\n'
+path.write_text(s)
+
+# Modal image upload
+path = Path('src/components/dashboard/EditarVencimientoModalSeguro.tsx')
+s = path.read_text()
+s = replace_once(
+    s,
+    "import { RISK_VISUAL } from '@/lib/risk-config'\n",
+    "import { RISK_VISUAL } from '@/lib/risk-config'\nimport { cacheBustPublicUrl, pathImagenProducto, prepararImagenProducto } from '@/lib/image-pipeline'\n",
+    'Modal image pipeline import',
+)
+s = replace_once(
+    s,
+    '    imagen_url?: string | null\n',
+    '    imagen_url?: string | null\n    imagen_thumb_url?: string | null\n    organizacion_id?: string\n',
+    'Modal image metadata type',
+)
+handler_start = s.index('  async function handleFotoChange')
+handler_end = s.index('  const puedeGestionarRag', handler_start)
+handler = '''  async function handleFotoChange(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!sucursalId) {
+      setErrorFoto('No hay una sucursal seleccionada.')
+      return
+    }
+    const organizacionId = vencimiento.productos.organizacion_id
+    if (!organizacionId) {
+      setErrorFoto('No se pudo resolver la organización del producto.')
+      return
+    }
+
+    const { data: modo, error: modoError } = await supabase.rpc('modo_imagen_producto_operador', {
+      p_sucursal_id: sucursalId,
+      p_producto_id: vencimiento.producto_id,
+    })
+    if (modoError) {
+      setErrorFoto('No se pudo validar el permiso para la foto.')
+      return
+    }
+    if (modo === 'solo_lectura') {
+      setErrorFoto('La foto ya es compartida por la organización. Para reemplazarla se requiere supervisor o gerencia.')
+      if (fotoInputRef.current) fotoInputRef.current.value = ''
+      return
+    }
+
+    const localUrl = URL.createObjectURL(file)
+    setFotoUrl(localUrl)
+    setSubiendoFoto(true)
+    setFotoGuardada(false)
+    setErrorFoto(null)
+
+    try {
+      const preparada = await prepararImagenProducto(file)
+      const paths = pathImagenProducto(organizacionId, vencimiento.producto_id)
+
+      const { error: fullError } = await supabase.storage
+        .from('productos-imagenes')
+        .upload(paths.full, preparada.full, { upsert: true, contentType: 'image/webp', cacheControl: '3600' })
+      if (fullError) throw fullError
+
+      const { error: thumbError } = await supabase.storage
+        .from('productos-imagenes')
+        .upload(paths.thumb, preparada.thumb, { upsert: true, contentType: 'image/webp', cacheControl: '3600' })
+      if (thumbError) throw thumbError
+
+      const version = Date.now()
+      const { data: fullUrlData } = supabase.storage.from('productos-imagenes').getPublicUrl(paths.full)
+      const { data: thumbUrlData } = supabase.storage.from('productos-imagenes').getPublicUrl(paths.thumb)
+      const publicUrl = cacheBustPublicUrl(fullUrlData.publicUrl, version)
+      const thumbUrl = cacheBustPublicUrl(thumbUrlData.publicUrl, version)
+
+      const { error: updateError } = await supabase.rpc('actualizar_imagen_producto_operador_v2', {
+        p_sucursal_id: sucursalId,
+        p_producto_id: vencimiento.producto_id,
+        p_imagen_url: publicUrl,
+        p_imagen_thumb_url: thumbUrl,
+      })
+      if (updateError) throw updateError
+
+      setFotoUrl(publicUrl)
+      setFotoGuardada(true)
+      onImagenActualizada?.(publicUrl)
+      if (fotoInputRef.current) fotoInputRef.current.value = ''
+    } catch (err) {
+      console.error('[EditarVencimientoModalSeguro] imagen V2:', err)
+      setFotoUrl(vencimiento.productos.imagen_url ?? null)
+      const message = err instanceof Error ? err.message : ''
+      setErrorFoto(message || 'No se pudo guardar la foto. Intentá de nuevo.')
+    } finally {
+      URL.revokeObjectURL(localUrl)
+      setSubiendoFoto(false)
+    }
+  }
+
+'''
+s = s[:handler_start] + handler + s[handler_end:]
+s = s.replace(
+    '<img src={fotoUrl} alt={vencimiento.productos.descripcion} className="h-20 w-20 rounded-2xl object-cover" />',
+    '<img src={fotoUrl} alt={vencimiento.productos.descripcion} decoding="async" className="h-20 w-20 rounded-2xl object-cover" />',
+)
+path.write_text(s)
+
+print('Dashboard + Image Pipeline V2 patch applied successfully.')
