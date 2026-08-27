@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react'
 import { X, HandHeart, Trash2, AlertTriangle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/hooks/useAuth'
-import { getTrimestreActual } from '@/hooks/useAccionesOperativas'
-import { useSucursalActual } from '@/hooks/useSucursalActual'
 import type { VencimientoConRiesgo } from '@/types/index'
 
 type TipoAccion = 'donacion' | 'decomiso'
@@ -26,8 +23,6 @@ export default function AccionOperativaModal({
   onClose,
   onSuccess,
 }: AccionOperativaModalProps) {
-  const { user } = useAuth()
-  const { sucursalId } = useSucursalActual()
   const [observaciones, setObservaciones] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -48,8 +43,8 @@ export default function AccionOperativaModal({
   )
 
   const mensaje = esDonacion
-    ? `Estás por retirar ${vencimiento.cantidad} unidad${vencimiento.cantidad !== 1 ? 'es' : ''} de ${nombreProducto} para donación. Esta acción no se puede deshacer.`
-    : `Estás por registrar el decomiso de ${vencimiento.cantidad} unidad${vencimiento.cantidad !== 1 ? 'es' : ''} de ${nombreProducto} vencidas.`
+    ? `Estás por retirar ${vencimiento.cantidad} unidad${vencimiento.cantidad !== 1 ? 'es' : ''} de ${nombreProducto} para donación. Esta acción quedará registrada como cierre del vencimiento.`
+    : `Estás por registrar el decomiso de ${vencimiento.cantidad} unidad${vencimiento.cantidad !== 1 ? 'es' : ''} de ${nombreProducto} vencidas. Esta acción quedará registrada como cierre del vencimiento.`
 
   const placeholderObs = esDonacion
     ? 'Ej: Donado a comedor municipal'
@@ -63,43 +58,17 @@ export default function AccionOperativaModal({
   const iconColor = esDonacion ? 'text-orange-600' : 'text-red-600'
 
   async function handleConfirmar(): Promise<void> {
-    if (!user) {
-      setError('No hay sesión activa. Recargá la página.')
-      return
-    }
-
     setLoading(true)
     setError(null)
 
-    const { trimestre, anio } = getTrimestreActual()
-
-    // 1. INSERT en acciones_operativas
-    const { error: insertError } = await supabase.from('acciones_operativas').insert({
-      tipo,
-      cantidad: vencimiento.cantidad,
-      producto_id: vencimiento.producto_id,
-      vencimiento_id: vencimiento.id,
-      sucursal_id: sucursalId,
-      usuario_id: user.id,
-      trimestre,
-      anio,
-      observaciones: observaciones.trim() || null,
+    const { error: rpcError } = await supabase.rpc('cerrar_vencimiento_operativo', {
+      p_vencimiento_id: vencimiento.id,
+      p_resultado: tipo,
+      p_observaciones: observaciones.trim() || null,
     })
 
-    if (insertError) {
-      setError(`No se pudo registrar la acción: ${insertError.message}`)
-      setLoading(false)
-      return
-    }
-
-    // 2. Soft delete del vencimiento
-    const { error: updateError } = await supabase
-      .from('vencimientos')
-      .update({ activo: false })
-      .eq('id', vencimiento.id)
-
-    if (updateError) {
-      setError(`Acción registrada pero no se pudo cerrar el vencimiento: ${updateError.message}`)
+    if (rpcError) {
+      setError(`No se pudo registrar el cierre: ${rpcError.message}`)
       setLoading(false)
       return
     }
