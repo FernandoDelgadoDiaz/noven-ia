@@ -8,10 +8,31 @@ export interface ImagenProductoPreparada {
 }
 
 const MAX_SOURCE_BYTES = 20 * 1024 * 1024
-const FULL_MAX_SIDE = 1200
-const THUMB_MAX_SIDE = 240
-const FULL_QUALITY = 0.78
-const THUMB_QUALITY = 0.72
+const FULL_TARGET_BYTES = 900 * 1024
+const THUMB_TARGET_BYTES = 180 * 1024
+
+interface IntentoCompresion {
+  maxSide: number
+  quality: number
+}
+
+const FULL_ATTEMPTS: IntentoCompresion[] = [
+  { maxSide: 1200, quality: 0.78 },
+  { maxSide: 1200, quality: 0.68 },
+  { maxSide: 1080, quality: 0.66 },
+  { maxSide: 960, quality: 0.64 },
+  { maxSide: 840, quality: 0.60 },
+  { maxSide: 720, quality: 0.56 },
+  { maxSide: 640, quality: 0.52 },
+  { maxSide: 560, quality: 0.48 },
+]
+
+const THUMB_ATTEMPTS: IntentoCompresion[] = [
+  { maxSide: 240, quality: 0.72 },
+  { maxSide: 220, quality: 0.64 },
+  { maxSide: 200, quality: 0.58 },
+  { maxSide: 180, quality: 0.52 },
+]
 
 function dimensionesAjustadas(width: number, height: number, maxSide: number): { width: number; height: number } {
   if (width <= maxSide && height <= maxSide) return { width, height }
@@ -86,6 +107,35 @@ async function renderWebp(
   return { blob, width: size.width, height: size.height }
 }
 
+async function renderWebpHastaPeso(
+  source: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+  intentos: IntentoCompresion[],
+  targetBytes: number,
+  tipo: 'foto' | 'miniatura',
+): Promise<{ blob: Blob; width: number; height: number }> {
+  let ultimo: { blob: Blob; width: number; height: number } | null = null
+
+  for (const intento of intentos) {
+    const render = await renderWebp(
+      source,
+      sourceWidth,
+      sourceHeight,
+      intento.maxSide,
+      intento.quality,
+    )
+    ultimo = render
+    if (render.blob.size <= targetBytes) return render
+  }
+
+  // En una fotografía real de producto, incluso una imagen muy ruidosa debería
+  // entrar ampliamente en el objetivo al llegar al último intento. Mantener un
+  // error explícito protege Storage si el navegador devuelve un blob anómalo.
+  const pesoKb = ultimo ? Math.ceil(ultimo.blob.size / 1024) : 0
+  throw new Error(`No se pudo optimizar la ${tipo} automáticamente (${pesoKb} KB). Intentá nuevamente.`)
+}
+
 export async function prepararImagenProducto(file: File): Promise<ImagenProductoPreparada> {
   if (!file.type.startsWith('image/')) {
     throw new Error('Seleccioná un archivo de imagen.')
@@ -97,16 +147,23 @@ export async function prepararImagenProducto(file: File): Promise<ImagenProducto
   const imagen = await cargarImagen(file)
   try {
     const [full, thumb] = await Promise.all([
-      renderWebp(imagen.source, imagen.width, imagen.height, FULL_MAX_SIDE, FULL_QUALITY),
-      renderWebp(imagen.source, imagen.width, imagen.height, THUMB_MAX_SIDE, THUMB_QUALITY),
+      renderWebpHastaPeso(
+        imagen.source,
+        imagen.width,
+        imagen.height,
+        FULL_ATTEMPTS,
+        FULL_TARGET_BYTES,
+        'foto',
+      ),
+      renderWebpHastaPeso(
+        imagen.source,
+        imagen.width,
+        imagen.height,
+        THUMB_ATTEMPTS,
+        THUMB_TARGET_BYTES,
+        'miniatura',
+      ),
     ])
-
-    if (full.blob.size > 1024 * 1024) {
-      throw new Error('La foto optimizada todavía supera 1 MB. Probá con otra imagen.')
-    }
-    if (thumb.blob.size > 300 * 1024) {
-      throw new Error('La miniatura optimizada quedó demasiado pesada.')
-    }
 
     return {
       full: full.blob,
