@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ChevronLeft, HandHeart, Trash2, PackageOpen, Clock, User } from 'lucide-react'
+import { ChevronLeft, HandHeart, Trash2, PackageOpen, Clock, User, CircleCheckBig } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getTrimestreActual } from '@/hooks/useAccionesOperativas'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
 
-type TipoAccion = 'donacion' | 'decomiso'
+type TipoAccion = 'vendido' | 'donacion' | 'decomiso'
 
 interface HistorialRow {
   id: string
@@ -33,6 +33,14 @@ const TIPO_CONFIG: Record<TipoAccion, {
   iconColor: string
   totalColor: string
 }> = {
+  vendido: {
+    titulo: 'Vendidos',
+    verbo: 'vendidas',
+    Icono: CircleCheckBig,
+    iconBg: 'bg-emerald-100',
+    iconColor: 'text-emerald-600',
+    totalColor: 'text-emerald-600',
+  },
   donacion: {
     titulo: 'Donaciones',
     verbo: 'donadas',
@@ -67,7 +75,8 @@ export default function Historial() {
   const [searchParams] = useSearchParams()
   const { sucursalId, loading: sucursalLoading } = useSucursalActual()
 
-  const tipo: TipoAccion = searchParams.get('tipo') === 'decomiso' ? 'decomiso' : 'donacion'
+  const tipoParam = searchParams.get('tipo')
+  const tipo: TipoAccion = tipoParam === 'vendido' || tipoParam === 'decomiso' ? tipoParam : 'donacion'
   const config = TIPO_CONFIG[tipo]
 
   const trimestreInfo = useMemo(() => getTrimestreActual(), [])
