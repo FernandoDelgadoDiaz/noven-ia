@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { useSucursalActual } from '@/hooks/useSucursalActual'
 import type { Familia, Producto } from '@/types/index'
 
 export interface ConflictoCodigos {
@@ -19,32 +20,42 @@ export interface NuevoProductoScannerInput {
 }
 
 interface UseProductosReturn {
-  searchByBarcode: (barcode: string, sucursalId: string) => Promise<Producto | null>
+  searchByBarcode: (barcode: string, sucursalId?: string) => Promise<Producto | null>
   buscarConflictoCodigos: (
     codArt: string,
     ean: string,
-    sucursalId: string,
+    sucursalId?: string,
     excluirProductoId?: string | null,
   ) => Promise<ConflictoCodigos | null>
   vincularEanScanner: (sucursalId: string, productoId: string, ean: string) => Promise<Producto>
   completarCodArtScanner: (sucursalId: string, productoId: string, codArt: string) => Promise<Producto>
   crearProductoScanner: (input: NuevoProductoScannerInput) => Promise<Producto>
-  listarFamiliasScanner: (sucursalId: string) => Promise<Familia[]>
+  listarFamiliasScanner: (sucursalId?: string) => Promise<Familia[]>
   /** Compatibilidad temporal para flujos no migrados del catálogo. */
   upsertProducto: (p: Partial<Producto>) => Promise<void>
 }
 
 /**
- * Acceso al catálogo. El Scanner usa exclusivamente RPCs con scope de sucursal:
- * la organización se deriva en PostgreSQL y nunca se decide en el navegador.
+ * Acceso al catálogo. El Scanner usa RPCs con scope de sucursal: la organización
+ * se deriva en PostgreSQL y nunca se decide en el navegador. Para no obligar a
+ * cada consumidor a repetir el mismo parámetro, el hook usa la sucursal actual
+ * como contexto por defecto; los flujos zonales pueden pasar otra sucursal de
+ * forma explícita una vez que exista el selector de contexto.
  */
 export function useProductos(): UseProductosReturn {
-  async function searchByBarcode(barcode: string, sucursalId: string): Promise<Producto | null> {
+  const { sucursalId: sucursalActual } = useSucursalActual()
+
+  function resolverSucursal(sucursalId?: string): string {
+    return (sucursalId ?? sucursalActual).trim()
+  }
+
+  async function searchByBarcode(barcode: string, sucursalId?: string): Promise<Producto | null> {
     const codigo = barcode.trim()
-    if (!codigo || !sucursalId) return null
+    const scope = resolverSucursal(sucursalId)
+    if (!codigo || !scope) return null
 
     const { data, error } = await supabase.rpc('buscar_producto_scanner', {
-      p_sucursal_id: sucursalId,
+      p_sucursal_id: scope,
       p_codigo: codigo,
     })
 
@@ -55,13 +66,14 @@ export function useProductos(): UseProductosReturn {
   async function buscarConflictoCodigos(
     codArt: string,
     ean: string,
-    sucursalId: string,
+    sucursalId?: string,
     excluirProductoId: string | null = null,
   ): Promise<ConflictoCodigos | null> {
-    if (!sucursalId) return null
+    const scope = resolverSucursal(sucursalId)
+    if (!scope) return null
 
     const { data, error } = await supabase.rpc('buscar_conflicto_codigos_scanner', {
-      p_sucursal_id: sucursalId,
+      p_sucursal_id: scope,
       p_cod_art: codArt.trim(),
       p_ean: ean.trim(),
       p_excluir_producto_id: excluirProductoId,
@@ -118,10 +130,11 @@ export function useProductos(): UseProductosReturn {
     return data as Producto
   }
 
-  async function listarFamiliasScanner(sucursalId: string): Promise<Familia[]> {
-    if (!sucursalId) return []
+  async function listarFamiliasScanner(sucursalId?: string): Promise<Familia[]> {
+    const scope = resolverSucursal(sucursalId)
+    if (!scope) return []
     const { data, error } = await supabase.rpc('listar_familias_scanner', {
-      p_sucursal_id: sucursalId,
+      p_sucursal_id: scope,
     })
     if (error) throw new Error(error.message)
     return (data ?? []) as Familia[]
