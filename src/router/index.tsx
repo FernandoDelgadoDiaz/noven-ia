@@ -19,6 +19,7 @@ const ImportarInicio = lazy(() => import('../pages/ImportarInicio'))
 const Importar = lazy(() => import('../pages/Importar'))
 const ImportarMasivo = lazy(() => import('../pages/ImportarMasivo'))
 const PendientesCatalogo = lazy(() => import('../pages/PendientesCatalogo'))
+const AprenderPendientesCsv = lazy(() => import('../pages/AprenderPendientesCsv'))
 const Admin = lazy(() => import('../pages/Admin'))
 
 const suspenseProps = { fallback: <RouteSkeleton /> }
@@ -74,13 +75,18 @@ export const router = createBrowserRouter([
             ),
           },
           {
-            // La ruta es autenticada, pero la autorización real para clasificar
-            // es server-side y exige un rol de gestión con alcance sobre alguna
-            // sucursal donde el artículo fue detectado.
             path: 'importar/pendientes',
             element: (
               <ErrorBoundary>
                 <Suspense {...suspenseProps}><PendientesCatalogo /></Suspense>
+              </ErrorBoundary>
+            ),
+          },
+          {
+            path: 'importar/pendientes/aprender',
+            element: (
+              <ErrorBoundary>
+                <Suspense {...suspenseProps}><AprenderPendientesCsv /></Suspense>
               </ErrorBoundary>
             ),
           },
