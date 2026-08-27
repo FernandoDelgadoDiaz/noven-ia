@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import ScannerModal from '@/components/scanner/ScannerModal'
 import ProductoConfirm from '@/components/scanner/ProductoConfirm'
 import VencimientoForm from '@/components/scanner/VencimientoForm'
+import ProductIdentity from '@/components/product/ProductIdentity'
 import type { VencimientoExistente } from '@/components/scanner/VencimientoForm'
 import { calcularDiasRestantes, calcularNivelRiesgo } from '@/lib/riesgo'
 import { RISK_VISUAL } from '@/lib/risk-config'
@@ -28,6 +29,10 @@ type CategoriaProducto = 'CHOCOLATES' | 'CARAMELOS' | 'SNACKS' | 'CHICLES' | 'CE
 const CATEGORIAS: CategoriaProducto[] = ['CHOCOLATES', 'CARAMELOS', 'SNACKS', 'CHICLES', 'CEREALES', 'OTRO']
 
 const inputCls = 'w-full h-12 px-4 bg-surface-base border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150 text-sm'
+
+function identidadProductoTexto(producto: Producto): string {
+  return `"${producto.descripcion}" — ${producto.marca?.trim() || 'Sin dato'} | Gramaje: ${producto.gramaje?.trim() || 'Sin dato'} | Interno: ${producto.cod_art?.trim() || 'Sin dato'} | EAN: ${producto.codigo_barras?.trim() || 'Sin dato'}`
+}
 
 export default function Scanner() {
   const { scanBarcode, scanning, error: scanError, reset } = useScanner()
@@ -50,7 +55,6 @@ export default function Scanner() {
   const [, setEncontradoPorCodArt] = useState(false)
   const [, setGuardadoExitoso] = useState(false)
 
-  // Vencimiento activo existente del producto (regla: máximo 1 por producto/sucursal)
   const [vencimientoExistente, setVencimientoExistente] = useState<VencimientoExistente | null>(null)
 
   const [guardandoEan, setGuardandoEan] = useState(false)
@@ -68,17 +72,13 @@ export default function Scanner() {
   const [errorNuevo, setErrorNuevo] = useState<string | null>(null)
   const [modalEanNuevoAbierto, setModalEanNuevoAbierto] = useState(false)
 
-  // Errores inline de validación en tiempo real
   const [errorCodArt, setErrorCodArt] = useState<string | null>(null)
   const [errorEanNuevo, setErrorEanNuevo] = useState<string | null>(null)
 
-  // Estado para completar cod_art faltante (Caso 2 — tipeo manual de 7 dígitos)
   const [codArtCompletando, setCodArtCompletando] = useState('')
   const [guardandoCodArt, setGuardandoCodArt] = useState(false)
   const [errorCodArtCompletando, setErrorCodArtCompletando] = useState<string | null>(null)
 
-  // Familias utilizables en esta sucursal. El RPC devuelve todas para roles de
-  // gestión y solamente las asignadas para operador.
   const [familiasUsuario, setFamiliasUsuario] = useState<Familia[]>([])
 
   const inputManualRef = useRef<HTMLInputElement>(null)
@@ -101,7 +101,6 @@ export default function Scanner() {
     return () => { activo = false }
   }, [famLoading, sucursalId])
 
-  // Inicializar familia seleccionada para nuevo producto usando el scope real.
   useEffect(() => {
     if (familiasUsuario.length > 0 && !nuevoProductoFamiliaId) {
       setNuevoProductoFamiliaId(familiasUsuario[0].id)
@@ -118,7 +117,6 @@ export default function Scanner() {
     setErrorBusqueda(null)
     const resultado = await scanBarcode(codigo)
     if (resultado) {
-      // Verificar si el producto pertenece a las familias del usuario
       if (!verificarFamiliaProducto(resultado)) {
         setProductoEncontrado(resultado)
         setPaso('familia_bloqueada')
@@ -128,8 +126,6 @@ export default function Scanner() {
       const fueBarcode = esBarcode || resultado.codigo_barras === codigo.trim()
       setEncontradoPorCodArt(!fueBarcode)
 
-      // El Scanner ya no lee la tabla legacy cruda: usa el contrato operativo,
-      // cuyo join con producto_sucursal aplica scope de sucursal/familia.
       const { data: vencData, error: vencError } = await supabase
         .from('v_vencimientos_operativos')
         .select('id, cantidad, fecha_vencimiento, lote')
@@ -147,9 +143,6 @@ export default function Scanner() {
 
       setPaso('confirmando')
     } else if (!scanError) {
-      // Precarga del alta. Un código escaneado NUNCA se usa como sustituto del
-      // cod_art: si es un código de barras va a `codigo_barras` y el operador
-      // debe tipear el código interno de Glaciar aparte.
       const codigoTrim = codigo.trim()
       const clase = clasificarCodigoEscaneado(codigoTrim)
       if (clase === 'ean') {
@@ -177,8 +170,6 @@ export default function Scanner() {
     void buscarProducto(codigo, false)
   }
 
-  // Decide el siguiente paso según qué datos le falten al producto.
-  // Encadena: EAN faltante → cod_art faltante → formulario.
   function continuarDesdeProducto(p: Producto): void {
     if (!p.codigo_barras) { setPaso('capturar_ean'); return }
     if (!p.cod_art || p.cod_art.trim() === '') { setPaso('completar_cod_art'); return }
@@ -219,7 +210,6 @@ export default function Scanner() {
     resetNuevoProducto()
   }
 
-  // Validaciones en tiempo real
   function handleCodArtChange(valor: string): void {
     const soloDigitos = valor.replace(/\D/g, '').slice(0, LARGO_COD_ART)
     setNuevoProductoCodArt(soloDigitos)
@@ -267,13 +257,14 @@ export default function Scanner() {
       const conflicto = await buscarConflictoCodigos('', codigo, sucursalId, productoEncontrado.id)
       if (conflicto) {
         const { producto: existente, motivo } = conflicto
+        const ficha = identidadProductoTexto(existente)
         if (motivo === 'ean_guardado_como_cod_art') {
           setErrorEan(
-            `Existe otro producto, "${existente.descripcion}", cargado con este código de barras en el campo del código interno. ` +
+            `Existe otro producto, ${ficha}, cargado con este código de barras en el campo del código interno. ` +
               'Probablemente sean el mismo producto. Avisale al administrador antes de continuar.',
           )
         } else {
-          setErrorEan(`Este código de barras ya está registrado en "${existente.descripcion}".`)
+          setErrorEan(`Este código de barras ya está registrado en ${ficha}.`)
         }
         return
       }
@@ -327,7 +318,7 @@ export default function Scanner() {
       setGuardandoNuevo(false)
       const { producto: existente, motivo } = conflicto
       const baja = existente.activo === false ? ' (dado de baja)' : ''
-      const ficha = `"${existente.descripcion}"${baja} · código interno ${existente.cod_art}`
+      const ficha = `${identidadProductoTexto(existente)}${baja}`
       if (motivo === 'cod_art_ocupado') {
         setErrorNuevo(`El código interno ${nuevoProductoCodArt.trim()} ya lo usa ${ficha}.`)
       } else if (motivo === 'ean_ocupado') {
@@ -363,7 +354,6 @@ export default function Scanner() {
     }
   }
 
-  // ── Pantalla bloqueada por familia ─────────────────────────────────────────
   if (paso === 'familia_bloqueada' && productoEncontrado) {
     const nombresFamilias = familiasUsuario.map((f) => f.nombre).join(', ')
     return (
@@ -377,9 +367,7 @@ export default function Scanner() {
           </div>
 
           <div className="bg-white rounded-card shadow-card px-4 py-3.5">
-            <p className="text-xs text-muted-foreground mb-0.5">Producto escaneado</p>
-            <p className="text-foreground font-bold text-base leading-tight">{productoEncontrado.descripcion}</p>
-            {productoEncontrado.marca && <p className="text-muted-foreground text-sm mt-0.5">{productoEncontrado.marca}</p>}
+            <ProductIdentity producto={productoEncontrado} label="Producto escaneado" compact imageSize="sm" />
           </div>
 
           <div className="bg-amber-50 border border-amber-200 rounded-card p-4 flex gap-3 items-start">
@@ -408,23 +396,25 @@ export default function Scanner() {
     )
   }
 
-  // ── Pantalla éxito ──────────────────────────────────────────────────────────
   if (paso === 'exito') {
     return (
       <div className="min-h-screen bg-surface-base flex flex-col items-center justify-center px-4 gap-6 animate-scale-in">
-        <div className="flex flex-col items-center gap-4 text-center">
+        <div className="flex flex-col items-center gap-4 text-center w-full max-w-md">
           <div className="p-5 bg-emerald-50 rounded-full">
             <CheckCircle className="h-16 w-16 text-emerald-500" />
           </div>
           <h2 className="text-foreground text-2xl font-bold">¡Guardado!</h2>
-          <p className="text-muted-foreground text-base">{productoEncontrado?.descripcion}</p>
+          {productoEncontrado && (
+            <div className="w-full bg-white rounded-card shadow-card p-4 text-left">
+              <ProductIdentity producto={productoEncontrado} compact imageSize="sm" />
+            </div>
+          )}
           <p className="text-muted-foreground/60 text-sm">Volviendo al scanner...</p>
         </div>
       </div>
     )
   }
 
-  // ── Registro existente (actualizar, no duplicar) ────────────────────────────
   if (paso === 'vencimiento_existente' && productoEncontrado && vencimientoExistente) {
     const diasRestantes = calcularDiasRestantes(vencimientoExistente.fecha_vencimiento)
     const nivel = calcularNivelRiesgo(diasRestantes, vencimientoExistente.cantidad, productoEncontrado.venta_media_diaria)
@@ -435,18 +425,8 @@ export default function Scanner() {
       <div className="min-h-screen bg-surface-base flex flex-col">
         <SubHeader paso={2} titulo="Registro existente" subtitulo="Este producto ya tiene un vencimiento cargado" onBack={handleCancelarConfirmacion} />
         <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4 flex flex-col gap-4">
-          <div className="bg-white rounded-card shadow-card p-4 flex gap-3 items-center">
-            <div className="h-16 w-16 rounded-xl bg-muted overflow-hidden shrink-0 flex items-center justify-center">
-              {productoEncontrado.imagen_url ? (
-                <img src={productoEncontrado.imagen_url} alt={productoEncontrado.descripcion} className="h-full w-full object-cover" />
-              ) : (
-                <Package className="h-7 w-7 text-muted-foreground" aria-hidden="true" />
-              )}
-            </div>
-            <div className="min-w-0">
-              <p className="text-foreground font-bold text-base leading-tight">{productoEncontrado.descripcion}</p>
-              {productoEncontrado.marca && <p className="text-muted-foreground text-sm mt-0.5">{productoEncontrado.marca}</p>}
-            </div>
+          <div className="bg-white rounded-card shadow-card p-4">
+            <ProductIdentity producto={productoEncontrado} compact imageSize="md" />
           </div>
 
           <div className="bg-white rounded-card shadow-card p-4 flex flex-col gap-3">
@@ -486,7 +466,6 @@ export default function Scanner() {
     )
   }
 
-  // ── Formulario (paso 3) ─────────────────────────────────────────────────────
   if (paso === 'formulario' && productoEncontrado) {
     return (
       <div className="min-h-screen bg-surface-base flex flex-col">
@@ -534,7 +513,7 @@ export default function Scanner() {
     try {
       const conflicto = await buscarConflictoCodigos(codigo, '', sucursalId, productoEncontrado.id)
       if (conflicto) {
-        setErrorCodArtCompletando('Este código interno ya está registrado en otro producto.')
+        setErrorCodArtCompletando(`Este código interno ya está registrado en ${identidadProductoTexto(conflicto.producto)}.`)
         return
       }
 
@@ -548,7 +527,6 @@ export default function Scanner() {
     }
   }
 
-  // ── Capturar EAN (paso 2.5) ─────────────────────────────────────────────────
   if (paso === 'capturar_ean' && productoEncontrado) {
     return (
       <>
@@ -557,9 +535,7 @@ export default function Scanner() {
           <SubHeader paso={2} titulo="Registrar EAN del producto" subtitulo="El EAN es necesario para identificar el producto en futuras lecturas" onBack={handleCancelarConfirmacion} />
           <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4 flex flex-col gap-4">
             <div className="bg-white rounded-card shadow-card px-4 py-3.5">
-              <p className="text-xs text-muted-foreground mb-0.5">Producto seleccionado</p>
-              <p className="text-foreground font-bold text-base leading-tight">{productoEncontrado.descripcion}</p>
-              {productoEncontrado.marca && <p className="text-muted-foreground text-sm mt-0.5">{productoEncontrado.marca}</p>}
+              <ProductIdentity producto={productoEncontrado} label="Producto seleccionado" compact imageSize="sm" />
             </div>
             <div className="bg-brand-light border border-brand-muted rounded-card p-4 flex gap-3 items-start">
               <Barcode className="h-5 w-5 text-brand shrink-0 mt-0.5" />
@@ -592,7 +568,6 @@ export default function Scanner() {
     )
   }
 
-  // ── Completar cod_art faltante (Caso 2) ─────────────────────────────────────
   if (paso === 'completar_cod_art' && productoEncontrado) {
     const codArtListo = esCodArtValido(codArtCompletando)
     return (
@@ -600,9 +575,7 @@ export default function Scanner() {
         <SubHeader paso={2} titulo="Registrar código interno" subtitulo="El código de Glaciar es necesario para identificar el producto" onBack={handleCancelarConfirmacion} />
         <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4 flex flex-col gap-4">
           <div className="bg-white rounded-card shadow-card px-4 py-3.5">
-            <p className="text-xs text-muted-foreground mb-0.5">Producto seleccionado</p>
-            <p className="text-foreground font-bold text-base leading-tight">{productoEncontrado.descripcion}</p>
-            {productoEncontrado.marca && <p className="text-muted-foreground text-sm mt-0.5">{productoEncontrado.marca}</p>}
+            <ProductIdentity producto={productoEncontrado} label="Producto seleccionado" compact imageSize="sm" />
           </div>
           <div className="bg-brand-light border border-brand-muted rounded-card p-4 flex gap-3 items-start">
             <Package className="h-5 w-5 text-brand shrink-0 mt-0.5" />
@@ -660,7 +633,6 @@ export default function Scanner() {
     )
   }
 
-  // ── Confirmar producto (paso 2) ─────────────────────────────────────────────
   if (paso === 'confirmando' && productoEncontrado) {
     return (
       <div className="min-h-screen bg-surface-base flex flex-col">
@@ -676,7 +648,6 @@ export default function Scanner() {
     )
   }
 
-  // ── Nuevo producto ──────────────────────────────────────────────────────────
   if (paso === 'nuevo_producto') {
     const mostrarSelectorFamilia = familiasUsuario.length > 1
     const familiaUnica = familiasUsuario.length === 1 ? familiasUsuario[0] : null
@@ -703,7 +674,6 @@ export default function Scanner() {
               </div>
             )}
             <div className="bg-white rounded-card shadow-card p-4 flex flex-col gap-4">
-
               <div className="space-y-1.5">
                 <label htmlFor="np-codart" className="block text-xs font-semibold text-foreground uppercase tracking-wide">
                   Cod. Art. <span className="text-red-500">*</span>
@@ -846,7 +816,6 @@ export default function Scanner() {
     )
   }
 
-  // ── Pantalla principal — Paso 1: Hero Scanner ───────────────────────────────
   const errorVisible = scanError ?? errorBusqueda
 
   return (
@@ -960,8 +929,6 @@ export default function Scanner() {
     </>
   )
 }
-
-// ── Sub-componentes ───────────────────────────────────────────────────────────
 
 interface SubHeaderProps {
   paso: number
