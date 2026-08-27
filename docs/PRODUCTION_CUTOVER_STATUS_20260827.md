@@ -38,9 +38,9 @@ El despliegue no inventó ni eliminó actividad operativa histórica.
 
 El sitio `https://noven-ia.netlify.app` quedó reconectado al repositorio GitHub.
 
-El smoke `Production Deploy Smoke` confirmó:
+El smoke final `Production Deploy Smoke` run `33095498378`, sobre el HEAD `106f3f9da448c9d45611ddac0238056bb9a00040`, confirmó:
 
-- publicación del marcador exacto del commit nuevo;
+- publicación del marcador exacto `noven-multitenant-v1-deploy-check-20260827-d`;
 - respuesta válida de la SPA productiva.
 
 La rama productiva es `master`.
