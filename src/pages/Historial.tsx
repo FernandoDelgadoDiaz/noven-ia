@@ -95,6 +95,10 @@ export default function Historial() {
     () => acciones.reduce((sum, a) => sum + a.cantidad, 0),
     [acciones],
   )
+  const totalPrincipal = tipo === 'vendido' ? acciones.length : totalUnidades
+  const totalDescripcion = tipo === 'vendido'
+    ? `caso${acciones.length !== 1 ? 's' : ''} resuelto${acciones.length !== 1 ? 's' : ''} por venta este trimestre`
+    : `unidades ${config.verbo} este trimestre`
 
   const fetchData = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -120,8 +124,6 @@ export default function Historial() {
     }
 
     const rows = (data ?? []) as unknown as HistorialRow[]
-
-    // usuario_id referencia auth.users, no public.usuarios — resolvemos el nombre en una query aparte
     const ids = Array.from(new Set(rows.map((r) => r.usuario_id).filter((id): id is string => id !== null)))
     const nombrePorId = new Map<string, string>()
     if (ids.length > 0) {
@@ -152,7 +154,6 @@ export default function Historial() {
 
   return (
     <div className="min-h-screen bg-surface-base">
-      {/* Header */}
       <header className="sticky top-0 z-10 bg-white border-b border-border/40 px-4 md:px-8 py-4 md:py-5">
         <div className="flex items-center gap-3">
           <button
@@ -173,22 +174,18 @@ export default function Historial() {
       </header>
 
       <main className="px-4 md:px-8 py-5 md:py-6 space-y-4">
-        {/* Total destacado */}
         <div className="bg-white rounded-card shadow-card p-5 flex items-center gap-4">
           <div className={`h-12 w-12 rounded-full flex items-center justify-center shrink-0 ${config.iconBg}`}>
             <Icono className={`h-6 w-6 ${config.iconColor}`} aria-hidden="true" />
           </div>
           <div className="min-w-0">
             <p className={`text-4xl font-black tracking-tight leading-none tabular-nums ${config.totalColor}`}>
-              {loading ? '–' : totalUnidades}
+              {loading ? '–' : totalPrincipal}
             </p>
-            <p className="text-sm text-muted-foreground mt-1.5">
-              unidades {config.verbo} este trimestre
-            </p>
+            <p className="text-sm text-muted-foreground mt-1.5">{totalDescripcion}</p>
           </div>
         </div>
 
-        {/* Error */}
         {error && (
           <div role="alert" className="rounded-card bg-red-50 border border-red-200 px-4 py-3 flex items-center justify-between gap-3 animate-fade-in">
             <p className="text-sm text-red-600">No pudimos cargar el historial. Revisá tu conexión.</p>
@@ -202,7 +199,6 @@ export default function Historial() {
           </div>
         )}
 
-        {/* Skeletons */}
         {loading && (
           <div className="space-y-2.5">
             {[0, 1, 2].map((i) => (
@@ -211,12 +207,10 @@ export default function Historial() {
           </div>
         )}
 
-        {/* Lista */}
         {!loading && !error && acciones.length > 0 && (
           <div className="space-y-2.5">
             {acciones.map((a) => (
               <div key={a.id} className="bg-white rounded-card shadow-card p-3.5 flex gap-3">
-                {/* Foto */}
                 <div className="h-14 w-14 rounded-xl bg-muted overflow-hidden shrink-0 flex items-center justify-center">
                   {a.productos?.imagen_url ? (
                     <img
@@ -230,19 +224,24 @@ export default function Historial() {
                   )}
                 </div>
 
-                {/* Datos */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-foreground font-semibold text-sm leading-snug line-clamp-2 min-w-0">
                       {a.productos?.descripcion ?? 'Producto eliminado'}
                     </p>
                     <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full leading-tight ${config.iconBg} ${config.iconColor}`}>
-                      {a.cantidad} u.
+                      {tipo === 'vendido' ? `saldo ${a.cantidad} u.` : `${a.cantidad} u.`}
                     </span>
                   </div>
 
                   {a.productos?.marca && (
                     <p className="text-muted-foreground text-xs mt-0.5">{a.productos.marca}</p>
+                  )}
+
+                  {tipo === 'vendido' && (
+                    <p className="text-emerald-700 text-xs mt-1">
+                      Cerrado por venta antes del vencimiento. Cantidad final comprometida: 0.
+                    </p>
                   )}
 
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
@@ -269,7 +268,6 @@ export default function Historial() {
           </div>
         )}
 
-        {/* Empty state */}
         {!loading && !error && acciones.length === 0 && (
           <div className="rounded-card bg-white shadow-card px-6 py-12 flex flex-col items-center text-center gap-4">
             <div className="p-4 bg-emerald-50 rounded-full">
