@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-product-identity-deploy-check-20260827-a
+          EXPECTED_MARKER: noven-analysis-copy-deploy-check-20260827-a
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |
