@@ -12,8 +12,8 @@ export interface TrimestreInfo {
 
 export function getTrimestreActual(): TrimestreInfo {
   const hoy = new Date()
-  const mes = hoy.getMonth() + 1 // 1-12
-  const trimestre = Math.ceil(mes / 3) // 1, 2, 3, 4
+  const mes = hoy.getMonth() + 1
+  const trimestre = Math.ceil(mes / 3)
   const anio = hoy.getFullYear()
   const mesInicio = (trimestre - 1) * 3 + 1
   const desde = new Date(anio, mesInicio - 1, 1)
@@ -58,9 +58,8 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
     setError(null)
 
     const { trimestre, anio } = trimestreInfo
-
     const { data, error: fetchError } = await supabase
-      .from('acciones_operativas')
+      .from('v_acciones_operativas_historial')
       .select('tipo, cantidad')
       .eq('trimestre', trimestre)
       .eq('anio', anio)
@@ -73,17 +72,13 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
     }
 
     const rows = (data ?? []) as AccionOperativaRow[]
-    const cierresPorVenta = rows.filter((a) => a.tipo === 'vendido').length
-    const totalDonaciones = rows
-      .filter((a) => a.tipo === 'donacion')
-      .reduce((sum, a) => sum + a.cantidad, 0)
-    const totalDecomisos = rows
-      .filter((a) => a.tipo === 'decomiso')
-      .reduce((sum, a) => sum + a.cantidad, 0)
-
-    setVendidos(cierresPorVenta)
-    setDonaciones(totalDonaciones)
-    setDecomisos(totalDecomisos)
+    setVendidos(rows.filter((a) => a.tipo === 'vendido').length)
+    setDonaciones(
+      rows.filter((a) => a.tipo === 'donacion').reduce((sum, a) => sum + a.cantidad, 0),
+    )
+    setDecomisos(
+      rows.filter((a) => a.tipo === 'decomiso').reduce((sum, a) => sum + a.cantidad, 0),
+    )
     setLoading(false)
   }, [trimestreInfo, sucursalId])
 
