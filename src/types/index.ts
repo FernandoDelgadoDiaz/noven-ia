@@ -47,6 +47,8 @@ export interface Sector {
   id: string
   nombre: string
   codigo: string
+  organizacion_id?: string
+  dias_donacion?: number | null
 }
 
 export interface Familia {
@@ -184,6 +186,76 @@ export interface ProductoSnapshot {
   captured_at: string
 }
 
+export interface VencimientoObservacion {
+  id: number
+  organizacion_id: string
+  sucursal_id: string
+  producto_id: string
+  vencimiento_id: string
+  usuario_id: string
+  cantidad_comprometida: number
+  observada_at: string
+  nota: string | null
+  created_at: string
+}
+
+export interface IntervencionRag {
+  id: string
+  organizacion_id: string
+  sucursal_id: string
+  producto_id: string
+  vencimiento_id: string
+  usuario_id: string
+  porcentaje_descuento: number
+  cantidad_comprometida_al_aplicar: number
+  vmd_glaciar_al_aplicar: number | null
+  aplicado_at: string
+  nota: string | null
+  created_at: string
+}
+
+export type EstadoSeguimientoRag =
+  | 'decomiso'
+  | 'donacion'
+  | 'sin_rag'
+  | 'efectivo_por_vmd'
+  | 'pendiente_control_operador'
+  | 'dato_a_revisar'
+  | 'sin_movimiento'
+  | 'efectivo'
+  | 'insuficiente'
+
+export interface SeguimientoRagActual {
+  vencimiento_id: string
+  organizacion_id: string
+  sucursal_id: string
+  producto_id: string
+  descripcion: string
+  familia_id: string | null
+  sector_id: string | null
+  sector_nombre: string | null
+  dias_donacion: number | null
+  fecha_vencimiento: string
+  dias_hasta_vencimiento: number
+  dias_comerciales_restantes: number
+  vmd_glaciar_actual: number
+  fecha_ultima_importacion: string | null
+  rag_id: string | null
+  rag_porcentaje: number | null
+  rag_aplicado_at: string | null
+  cantidad_base_rag: number | null
+  vmd_glaciar_al_aplicar: number | null
+  observacion_id: number | null
+  observada_at: string | null
+  cantidad_observada: number | null
+  cantidad_actual_estimacion: number
+  unidades_vendidas_observadas: number | null
+  dias_observados: number | null
+  velocidad_observada: number | null
+  velocidad_necesaria: number | null
+  estado_seguimiento_rag: EstadoSeguimientoRag
+}
+
 export interface Vencimiento {
   id: string
   producto_id: string
@@ -196,11 +268,16 @@ export interface Vencimiento {
   activo: boolean
   created_at: string
   producto?: Producto
+  /** Política proveniente de sectores.dias_donacion; null/undefined durante compatibilidad legacy. */
+  dias_donacion?: number | null
 }
 
 export interface VencimientoConRiesgo extends Vencimiento {
   dias_restantes: number
   cobertura_dias: number
+  dias_donacion: number
+  dias_comerciales_restantes: number
+  velocidad_necesaria: number
   nivel_riesgo: RiesgoNivel
   acciones_sugeridas: string[]
   producto: Producto
