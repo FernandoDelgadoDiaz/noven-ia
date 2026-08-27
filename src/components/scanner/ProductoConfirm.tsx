@@ -1,8 +1,11 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Producto } from '@/types/index'
 import { Package, BarChart2, Layers, Camera, CheckCircle2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useSucursalActual } from '@/hooks/useSucursalActual'
+import { calcularDiasRestantes, calcularNivelRiesgo } from '@/lib/riesgo'
 import ProductIdentity from '@/components/product/ProductIdentity'
+import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
 
 interface ProductoConfirmProps {
   producto: Producto
@@ -14,6 +17,14 @@ interface InfoRowProps {
   label: string
   value: string
   Icon: React.ComponentType<{ className?: string }>
+}
+
+interface VencimientoActivoScanner {
+  id: string
+  producto_id: string
+  cantidad: number
+  fecha_vencimiento: string
+  dias_donacion: number | null
 }
 
 function InfoRow({ label, value, Icon }: InfoRowProps) {
@@ -44,11 +55,53 @@ async function subirFotoProducto(file: File, codArt: string): Promise<string> {
 }
 
 export default function ProductoConfirm({ producto, onConfirm, onCancel }: ProductoConfirmProps) {
+  const { sucursalId } = useSucursalActual()
   const [previewUrl, setPreviewUrl] = useState<string | null>(producto.imagen_url)
   const [subiendo, setSubiendo] = useState(false)
   const [fotoGuardada, setFotoGuardada] = useState(false)
   const [errorFoto, setErrorFoto] = useState<string | null>(null)
+  const [vencimientoActivo, setVencimientoActivo] = useState<VencimientoActivoScanner | null>(null)
+  const [verificandoVencimiento, setVerificandoVencimiento] = useState(true)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    let activo = true
+
+    async function verificarVencimientoActivo(): Promise<void> {
+      if (!sucursalId) {
+        if (activo) setVerificandoVencimiento(false)
+        return
+      }
+
+      setVerificandoVencimiento(true)
+      const { data, error } = await supabase
+        .from('v_vencimientos_operativos')
+        .select('id, producto_id, cantidad, fecha_vencimiento, dias_donacion')
+        .eq('producto_id', producto.id)
+        .eq('sucursal_id', sucursalId)
+        .eq('activo', true)
+        .order('fecha_carga', { ascending: false })
+        .limit(1)
+
+      if (!activo) return
+
+      if (error) {
+        console.error('[ProductoConfirm] No se pudo verificar vencimiento activo:', error)
+        setVencimientoActivo(null)
+        setVerificandoVencimiento(false)
+        return
+      }
+
+      const encontrado = (data?.[0] as VencimientoActivoScanner | undefined) ?? null
+      // Los sectores sin política de vencimiento quedan fuera del circuito.
+      // No inferimos un umbral de donación para ellos.
+      setVencimientoActivo(encontrado?.dias_donacion != null ? encontrado : null)
+      setVerificandoVencimiento(false)
+    }
+
+    void verificarVencimientoActivo()
+    return () => { activo = false }
+  }, [producto.id, sucursalId])
 
   const coberturaTexto =
     producto.venta_media_diaria > 0
@@ -82,6 +135,53 @@ export default function ProductoConfirm({ producto, onConfirm, onCancel }: Produ
       setSubiendo(false)
       if (inputRef.current) inputRef.current.value = ''
     }
+  }
+
+  if (verificandoVencimiento) {
+    return (
+      <div className="min-h-[280px] flex flex-col items-center justify-center gap-3">
+        <span className="h-8 w-8 border-[3px] border-brand/25 border-t-brand rounded-full animate-spin" />
+        <p className="text-sm text-muted-foreground">Abriendo control del producto…</p>
+      </div>
+    )
+  }
+
+  if (vencimientoActivo && vencimientoActivo.dias_donacion != null) {
+    const diasDonacion = vencimientoActivo.dias_donacion
+    const nivel = calcularNivelRiesgo(
+      calcularDiasRestantes(vencimientoActivo.fecha_vencimiento),
+      vencimientoActivo.cantidad,
+      producto.venta_media_diaria,
+      diasDonacion,
+    )
+
+    return (
+      <EditarVencimientoModal
+        vencimiento={{
+          id: vencimientoActivo.id,
+          producto_id: producto.id,
+          fecha_vencimiento: vencimientoActivo.fecha_vencimiento,
+          cantidad: vencimientoActivo.cantidad,
+          dias_donacion: diasDonacion,
+          nivel_riesgo: nivel,
+          productos: {
+            descripcion: producto.descripcion,
+            cod_art: producto.cod_art,
+            codigo_barras: producto.codigo_barras,
+            gramaje: producto.gramaje,
+            marca: producto.marca,
+            stock_actual: producto.stock_actual,
+            venta_media_diaria: producto.venta_media_diaria,
+            imagen_url: previewUrl,
+            imagen_thumb_url: producto.imagen_thumb_url,
+            organizacion_id: producto.organizacion_id,
+          },
+        }}
+        onClose={onCancel}
+        onGuardado={onCancel}
+        onImagenActualizada={(url) => setPreviewUrl(url)}
+      />
+    )
   }
 
   return (

@@ -1,1 +1,1 @@
-noven-analysis-policy-deploy-check-20260827-b
+noven-scanner-direct-control-deploy-check-20260827-a
