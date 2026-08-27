@@ -426,7 +426,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     bloquePatrones,
   ].join('\n')
 
-  let analisis: string
   try {
     const dsRes = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
