@@ -6,7 +6,6 @@ import { useVencimientos } from '@/hooks/useVencimientos'
 import { useAuth } from '@/hooks/useAuth'
 import { useAccionesOperativas } from '@/hooks/useAccionesOperativas'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
-import RiesgoCard from '@/components/dashboard/RiesgoCard'
 import AlertaItem from '@/components/dashboard/AlertaItem'
 import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
 import AccionOperativaModal from '@/components/dashboard/AccionOperativaModal'
@@ -131,6 +130,8 @@ export default function Dashboard() {
               stock_actual: vencimientoEditando.producto.stock_actual,
               venta_media_diaria: vencimientoEditando.producto.venta_media_diaria,
               imagen_url: vencimientoEditando.producto.imagen_url,
+              imagen_thumb_url: vencimientoEditando.producto.imagen_thumb_url,
+              organizacion_id: vencimientoEditando.producto.organizacion_id,
             },
           }}
           onClose={() => setVencimientoEditando(null)}
@@ -197,7 +198,7 @@ export default function Dashboard() {
       </header>
 
       {/* ── Content ─────────────────────────────────────────────────── */}
-      <main className="px-4 md:px-8 py-5 md:py-6 space-y-5 md:space-y-6">
+      <main className="px-4 md:px-8 py-4 md:py-6 space-y-4 md:space-y-5">
 
         {/* Error */}
         {error && (
@@ -232,114 +233,85 @@ export default function Dashboard() {
           <>
             {/* ── Critical hero banner ── */}
             {enRiesgo > 0 && (
-              <div className="flex items-center gap-4 bg-red-50 border-l-4 border-red-600 rounded-r-2xl px-5 py-4 animate-fade-in">
-                <div className="h-10 w-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
-                  <AlertTriangle className="h-5 w-5 text-red-600" aria-hidden="true" />
+              <div className="flex items-center gap-3 bg-red-50 border-l-4 border-red-600 rounded-r-2xl px-4 py-3 animate-fade-in">
+                <div className="h-9 w-9 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="h-4 w-4 text-red-600" aria-hidden="true" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-red-800 text-sm leading-snug">Atención requerida</p>
                   <p className="text-red-600 text-xs mt-0.5">
-                    {enRiesgo} producto{enRiesgo !== 1 ? 's' : ''} en estado crítico — Requieren acción inmediata para evitar pérdidas.
+                    {enRiesgo} producto{enRiesgo !== 1 ? 's' : ''} requieren acción inmediata.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => navigate('/vencimientos')}
-                  className="shrink-0 px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-xl transition-colors duration-150 active:scale-[0.97] whitespace-nowrap"
+                  className="shrink-0 px-3 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-xl transition-colors duration-150 active:scale-[0.97] whitespace-nowrap"
                 >
-                  Ver vencimientos →
+                  Ver →
                 </button>
               </div>
             )}
 
-            {/* ── KPI command center ── */}
-            <section aria-label="Resumen de riesgos">
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
-                <RiesgoCard
-                  titulo="Unidades en riesgo"
-                  valor={unidadesEnRiesgo}
-                  nivel={unidadesEnRiesgo > 0 ? 'urgente' : 'seguro'}
-                  IconoComponente={Package}
+            {/* ── KPI command center compacto ── */}
+            <section aria-label="Resumen de riesgos" className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
                   onClick={() => navigate('/vencimientos?filtro=riesgo')}
-                  subtexto={`En ${enRiesgo} producto${enRiesgo !== 1 ? 's' : ''}`}
-                  subtextoColor="text-muted-foreground"
-                />
-                <RiesgoCard
-                  titulo="En radar"
-                  valor={enRadar}
-                  nivel={enRadar > 0 ? 'radar' : 'seguro'}
+                  className="bg-white rounded-[20px] shadow-card p-3.5 text-left min-h-[94px] hover:shadow-elevated transition-all active:scale-[0.98]"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="h-8 w-8 rounded-xl bg-orange-50 flex items-center justify-center">
+                      <Package className="h-4 w-4 text-orange-600" aria-hidden="true" />
+                    </div>
+                    <span className="text-[10px] font-semibold text-muted-foreground">{enRiesgo} productos</span>
+                  </div>
+                  <div className="mt-2 flex items-end gap-2">
+                    <span className="text-3xl font-black leading-none tabular-nums text-orange-600">{unidadesEnRiesgo}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-0.5">unidades en riesgo</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => navigate('/vencimientos?filtro=radar')}
-                  subtexto="Próximos 30 días"
-                  subtextoColor="text-muted-foreground"
-                />
-
-                {/* Card VENDIDOS trimestral */}
-                <div
-                  onClick={() => navigate('/historial?tipo=vendido')}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/historial?tipo=vendido') }}
-                  className="bg-white rounded-[20px] shadow-card p-3.5 flex flex-col cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                  aria-label={`Vendidos antes del vencimiento: ${vendidos} unidades`}
+                  className="bg-white rounded-[20px] shadow-card p-3.5 text-left min-h-[94px] hover:shadow-elevated transition-all active:scale-[0.98]"
                 >
-                  <div className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 mb-2.5 bg-emerald-100">
-                    <CircleCheckBig className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="h-8 w-8 rounded-xl bg-amber-50 flex items-center justify-center">
+                      <Package className="h-4 w-4 text-amber-500" aria-hidden="true" />
+                    </div>
+                    <span className="text-[10px] font-semibold text-muted-foreground">hasta 45 días</span>
                   </div>
-                  <p className="text-[2rem] font-black tracking-tight leading-none tabular-nums text-emerald-600">
-                    {loadingAcciones ? '–' : vendidos}
-                  </p>
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5 leading-tight">
-                    Vendidos
-                  </p>
-                  <p className="text-[10px] font-medium mt-0.5 text-emerald-600">
-                    {loadingAcciones ? '...' : `Resueltos por venta · ${trimestreInfo.label}`}
-                  </p>
+                  <div className="mt-2 flex items-end gap-2">
+                    <span className="text-3xl font-black leading-none tabular-nums text-amber-600">{enRadar}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-0.5">en radar</span>
+                  </div>
+                </button>
+              </div>
+
+              <div className="bg-white rounded-[20px] shadow-card px-3.5 py-3">
+                <div className="flex items-center justify-between gap-3 mb-2.5">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Resultados</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{trimestreInfo.label}</p>
+                  </div>
+                  <button type="button" onClick={() => navigate('/historial')} className="text-[10px] font-semibold text-brand">Ver historial →</button>
                 </div>
-
-                {/* Card DONACION trimestral */}
-                <div
-                  onClick={() => navigate('/historial?tipo=donacion')}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/historial?tipo=donacion') }}
-                  className="bg-white rounded-[20px] shadow-card p-3.5 flex flex-col cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                  aria-label={`Donaciones del trimestre: ${donaciones} unidades`}
-                >
-                  <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 mb-2.5 ${donaciones > 0 ? 'bg-orange-100' : 'bg-emerald-100'}`}>
-                    <HandHeart className={`h-4 w-4 ${donaciones > 0 ? 'text-orange-600' : 'text-emerald-600'}`} aria-hidden="true" />
-                  </div>
-                  <p className={`text-[2rem] font-black tracking-tight leading-none tabular-nums ${donaciones > 0 ? 'text-orange-600' : 'text-emerald-600'}`}>
-                    {loadingAcciones ? '–' : donaciones}
-                  </p>
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5 leading-tight">
-                    Donación
-                  </p>
-                  <p className={`text-[10px] font-medium mt-0.5 ${donaciones > 0 ? 'text-orange-500' : 'text-emerald-600'}`}>
-                    {loadingAcciones ? '...' : donaciones > 0 ? trimestreInfo.label : `Sin donaciones · ${trimestreInfo.label}`}
-                  </p>
-                </div>
-
-                {/* Card DECOMISO trimestral */}
-                <div
-                  onClick={() => navigate('/historial?tipo=decomiso')}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/historial?tipo=decomiso') }}
-                  className="bg-white rounded-[20px] shadow-card p-3.5 flex flex-col cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                  aria-label={`Decomisos del trimestre: ${decomisosTrimestrales} unidades`}
-                >
-                  <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 mb-2.5 ${decomisosTrimestrales > 0 ? 'bg-red-100' : 'bg-emerald-100'}`}>
-                    <Trash2 className={`h-4 w-4 ${decomisosTrimestrales > 0 ? 'text-red-600' : 'text-emerald-600'}`} aria-hidden="true" />
-                  </div>
-                  <p className={`text-[2rem] font-black tracking-tight leading-none tabular-nums ${decomisosTrimestrales > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                    {loadingAcciones ? '–' : decomisosTrimestrales}
-                  </p>
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5 leading-tight">
-                    Decomiso
-                  </p>
-                  <p className={`text-[10px] font-medium mt-0.5 ${decomisosTrimestrales > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
-                    {loadingAcciones ? '...' : decomisosTrimestrales === 0 ? `Excelente · ${trimestreInfo.label}` : trimestreInfo.label}
-                  </p>
+                <div className="grid grid-cols-3 divide-x divide-border">
+                  <button type="button" onClick={() => navigate('/historial?tipo=vendido')} className="px-2 text-left">
+                    <div className="flex items-center gap-1.5"><CircleCheckBig className="h-3.5 w-3.5 text-emerald-600" /><span className="text-xl font-black tabular-nums text-emerald-600">{loadingAcciones ? '–' : vendidos}</span></div>
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mt-1">Vendidos</p>
+                  </button>
+                  <button type="button" onClick={() => navigate('/historial?tipo=donacion')} className="px-3 text-left">
+                    <div className="flex items-center gap-1.5"><HandHeart className="h-3.5 w-3.5 text-orange-600" /><span className="text-xl font-black tabular-nums text-orange-600">{loadingAcciones ? '–' : donaciones}</span></div>
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mt-1">Donación</p>
+                  </button>
+                  <button type="button" onClick={() => navigate('/historial?tipo=decomiso')} className="px-3 text-left">
+                    <div className="flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5 text-red-600" /><span className="text-xl font-black tabular-nums text-red-600">{loadingAcciones ? '–' : decomisosTrimestrales}</span></div>
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mt-1">Decomiso</p>
+                  </button>
                 </div>
               </div>
             </section>

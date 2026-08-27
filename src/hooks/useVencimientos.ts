@@ -38,6 +38,7 @@ interface VencimientoOperativoRow {
   sector: string | null
   precio_costo: number | null
   imagen_url: string | null
+  imagen_thumb_url: string | null
   familia_id: string | null
   sector_id: string | null
   sector_nombre: string | null
@@ -79,6 +80,7 @@ function mapOperativo(row: VencimientoOperativoRow): Vencimiento & {
     stock_actual: row.stock_actual,
     precio_costo: row.precio_costo,
     imagen_url: row.imagen_url,
+    imagen_thumb_url: row.imagen_thumb_url,
     familia_id: row.familia_id,
     activo: row.producto_activo,
     created_at: row.producto_created_at,
@@ -137,6 +139,7 @@ async function cargarLegacy(sucursalId: string): Promise<{
         precio_costo,
         familia_id,
         imagen_url,
+        imagen_thumb_url,
         activo,
         created_at,
         updated_at
@@ -177,7 +180,7 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
     const { data: operativos, error: operativoError } = await supabase
       .from('v_vencimientos_operativos')
       .select(
-        'id, producto_id, sucursal_id, usuario_id, cantidad, lote, fecha_vencimiento, fecha_carga, activo, created_at, nivel_actual, organizacion_id, cod_art, codigo_barras, descripcion, marca, gramaje, categoria, proveedor, sector, precio_costo, imagen_url, familia_id, sector_id, sector_nombre, dias_donacion, producto_activo, producto_created_at, producto_updated_at, stock_actual, venta_media_diaria',
+        'id, producto_id, sucursal_id, usuario_id, cantidad, lote, fecha_vencimiento, fecha_carga, activo, created_at, nivel_actual, organizacion_id, cod_art, codigo_barras, descripcion, marca, gramaje, categoria, proveedor, sector, precio_costo, imagen_url, imagen_thumb_url, familia_id, sector_id, sector_nombre, dias_donacion, producto_activo, producto_created_at, producto_updated_at, stock_actual, venta_media_diaria',
       )
       .eq('sucursal_id', sucursalId)
       .eq('activo', true)

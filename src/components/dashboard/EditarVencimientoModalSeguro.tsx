@@ -18,6 +18,7 @@ import {
   type NivelRiesgo,
 } from '@/lib/riesgo'
 import { RISK_VISUAL } from '@/lib/risk-config'
+import { cacheBustPublicUrl, pathImagenProducto, prepararImagenProducto } from '@/lib/image-pipeline'
 import type { EstadoSeguimientoRag } from '@/types/index'
 
 interface VencimientoParaEditar {
@@ -36,6 +37,8 @@ interface VencimientoParaEditar {
     stock_actual: number
     venta_media_diaria: number
     imagen_url?: string | null
+    imagen_thumb_url?: string | null
+    organizacion_id?: string
   }
 }
 
@@ -163,6 +166,25 @@ export default function EditarVencimientoModalSeguro({
       setErrorFoto('No hay una sucursal seleccionada.')
       return
     }
+    const organizacionId = vencimiento.productos.organizacion_id
+    if (!organizacionId) {
+      setErrorFoto('No se pudo resolver la organización del producto.')
+      return
+    }
+
+    const { data: modo, error: modoError } = await supabase.rpc('modo_imagen_producto_operador', {
+      p_sucursal_id: sucursalId,
+      p_producto_id: vencimiento.producto_id,
+    })
+    if (modoError) {
+      setErrorFoto('No se pudo validar el permiso para la foto.')
+      return
+    }
+    if (modo === 'solo_lectura') {
+      setErrorFoto('La foto ya es compartida por la organización. Para reemplazarla se requiere supervisor o gerencia.')
+      if (fotoInputRef.current) fotoInputRef.current.value = ''
+      return
+    }
 
     const localUrl = URL.createObjectURL(file)
     setFotoUrl(localUrl)
@@ -171,20 +193,30 @@ export default function EditarVencimientoModalSeguro({
     setErrorFoto(null)
 
     try {
-      const codArt = vencimiento.productos.cod_art ?? vencimiento.producto_id
-      const ext = file.name.split('.').pop() ?? 'jpg'
-      const path = `${codArt}.${ext}`
-      const { error: uploadError } = await supabase.storage
-        .from('productos-imagenes')
-        .upload(path, file, { upsert: true })
-      if (uploadError) throw uploadError
+      const preparada = await prepararImagenProducto(file)
+      const paths = pathImagenProducto(organizacionId, vencimiento.producto_id)
 
-      const { data: urlData } = supabase.storage.from('productos-imagenes').getPublicUrl(path)
-      const publicUrl = urlData.publicUrl
-      const { error: updateError } = await supabase.rpc('actualizar_imagen_producto_operador', {
+      const { error: fullError } = await supabase.storage
+        .from('productos-imagenes')
+        .upload(paths.full, preparada.full, { upsert: true, contentType: 'image/webp', cacheControl: '3600' })
+      if (fullError) throw fullError
+
+      const { error: thumbError } = await supabase.storage
+        .from('productos-imagenes')
+        .upload(paths.thumb, preparada.thumb, { upsert: true, contentType: 'image/webp', cacheControl: '3600' })
+      if (thumbError) throw thumbError
+
+      const version = Date.now()
+      const { data: fullUrlData } = supabase.storage.from('productos-imagenes').getPublicUrl(paths.full)
+      const { data: thumbUrlData } = supabase.storage.from('productos-imagenes').getPublicUrl(paths.thumb)
+      const publicUrl = cacheBustPublicUrl(fullUrlData.publicUrl, version)
+      const thumbUrl = cacheBustPublicUrl(thumbUrlData.publicUrl, version)
+
+      const { error: updateError } = await supabase.rpc('actualizar_imagen_producto_operador_v2', {
         p_sucursal_id: sucursalId,
         p_producto_id: vencimiento.producto_id,
         p_imagen_url: publicUrl,
+        p_imagen_thumb_url: thumbUrl,
       })
       if (updateError) throw updateError
 
@@ -193,10 +225,12 @@ export default function EditarVencimientoModalSeguro({
       onImagenActualizada?.(publicUrl)
       if (fotoInputRef.current) fotoInputRef.current.value = ''
     } catch (err) {
-      console.error('[EditarVencimientoModalSeguro] imagen:', err)
+      console.error('[EditarVencimientoModalSeguro] imagen V2:', err)
       setFotoUrl(vencimiento.productos.imagen_url ?? null)
-      setErrorFoto('No se pudo guardar la foto. Intentá de nuevo.')
+      const message = err instanceof Error ? err.message : ''
+      setErrorFoto(message || 'No se pudo guardar la foto. Intentá de nuevo.')
     } finally {
+      URL.revokeObjectURL(localUrl)
       setSubiendoFoto(false)
     }
   }
@@ -311,7 +345,7 @@ export default function EditarVencimientoModalSeguro({
           <div className="flex gap-3 min-w-0">
             <div className="shrink-0">
               {fotoUrl ? (
-                <img src={fotoUrl} alt={vencimiento.productos.descripcion} className="h-20 w-20 rounded-2xl object-cover" />
+                <img src={fotoUrl} alt={vencimiento.productos.descripcion} decoding="async" className="h-20 w-20 rounded-2xl object-cover" />
               ) : (
                 <div className="h-20 w-20 rounded-2xl bg-muted flex items-center justify-center text-2xl">📷</div>
               )}
