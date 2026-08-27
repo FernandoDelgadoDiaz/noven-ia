@@ -18,6 +18,7 @@ const Analisis = lazy(() => import('../pages/Analisis'))
 const ImportarInicio = lazy(() => import('../pages/ImportarInicio'))
 const Importar = lazy(() => import('../pages/Importar'))
 const ImportarMasivo = lazy(() => import('../pages/ImportarMasivo'))
+const PendientesCatalogo = lazy(() => import('../pages/PendientesCatalogo'))
 const Admin = lazy(() => import('../pages/Admin'))
 
 const suspenseProps = { fallback: <RouteSkeleton /> }
@@ -73,9 +74,19 @@ export const router = createBrowserRouter([
             ),
           },
           {
-            // Importar y Admin son exclusivos de rol admin.
-            // La importación reescribe stock, venta media y clasificación del
-            // catálogo; el guard de ruta es la primera barrera y las operaciones
+            // La ruta es autenticada, pero la autorización real para clasificar
+            // es server-side y exige un rol de gestión con alcance sobre alguna
+            // sucursal donde el artículo fue detectado.
+            path: 'importar/pendientes',
+            element: (
+              <ErrorBoundary>
+                <Suspense {...suspenseProps}><PendientesCatalogo /></Suspense>
+              </ErrorBoundary>
+            ),
+          },
+          {
+            // El flujo de importación todavía conserva el guard legacy de admin
+            // mientras terminamos el cutover de roles multitenant. Las operaciones
             // masivas vuelven a validar usuario/sucursal en servidor y DB.
             element: <AdminRoute />,
             children: [
