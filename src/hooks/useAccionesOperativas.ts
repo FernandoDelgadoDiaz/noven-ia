@@ -33,6 +33,7 @@ interface AccionOperativaRow {
 }
 
 interface UseAccionesOperativasReturn {
+  vendidos: number
   donaciones: number
   decomisos: number
   loading: boolean
@@ -42,6 +43,7 @@ interface UseAccionesOperativasReturn {
 }
 
 export function useAccionesOperativas(): UseAccionesOperativasReturn {
+  const [vendidos, setVendidos] = useState(0)
   const [donaciones, setDonaciones] = useState(0)
   const [decomisos, setDecomisos] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -71,6 +73,9 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
     }
 
     const rows = (data ?? []) as AccionOperativaRow[]
+    const totalVendidos = rows
+      .filter((a) => a.tipo === 'vendido')
+      .reduce((sum, a) => sum + a.cantidad, 0)
     const totalDonaciones = rows
       .filter((a) => a.tipo === 'donacion')
       .reduce((sum, a) => sum + a.cantidad, 0)
@@ -78,6 +83,7 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
       .filter((a) => a.tipo === 'decomiso')
       .reduce((sum, a) => sum + a.cantidad, 0)
 
+    setVendidos(totalVendidos)
     setDonaciones(totalDonaciones)
     setDecomisos(totalDecomisos)
     setLoading(false)
@@ -92,6 +98,7 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
   }, [fetchData])
 
   return {
+    vendidos,
     donaciones,
     decomisos,
     loading,
