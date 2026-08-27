@@ -1,20 +1,26 @@
 # NOVEN · ESTADO DE CUTOVER PRODUCTIVO · 2026-08-27
 
-## Estado actual
+## Estado
 
-La arquitectura multitenant validada fue mergeada a `master` y la **Fase A** de base de datos fue aplicada en Supabase producción hasta `20260827000260_operational_private_writers_v1` inclusive.
+**CUTOVER MULTITENANT COMPLETADO EN PRODUCCIÓN.**
 
-La **Fase C NO está aplicada**. No ejecutar todavía:
+La arquitectura validada fue mergeada a `master`, Netlify quedó nuevamente vinculado al repositorio `FernandoDelgadoDiaz/noven-ia` y el smoke de despliegue exacto confirmó que producción publica los commits actuales.
+
+Supabase producción tiene aplicado el bloque multitenant completo, incluido el cierre de RLS y el hardening posterior.
+
+## Migraciones productivas finales
+
+Aplicadas correctamente:
 
 1. `20260827000270_rls_cutover_v1.sql`
 2. `20260827000275_rls_grants_hardening_v1.sql`
 3. `20260827000280_advisor_hardening_v1.sql`
+4. `20260827000290_post_cutover_security_v1.sql`
+5. `20260827000300_index_cleanup_v1.sql`
 
-El motivo es exclusivamente el gate de frontend/hosting: el sitio `https://noven-ia.netlify.app` continúa sirviendo un build anterior y no recibe los pushes actuales del repositorio.
+Las versiones remotas quedaron registradas en `supabase_migrations.schema_migrations` con nombres `prod_*`.
 
-## Checkpoint de producción
-
-Última verificación antes del cutover final:
+## Checkpoint de datos después del cutover
 
 - productos: 659
 - estados `producto_sucursal` para 091: 659
@@ -24,54 +30,59 @@ El motivo es exclusivamente el gate de frontend/hosting: el sitio `https://noven
 - pendientes globales: 0
 - observaciones nuevas: 0
 - intervenciones RAG nuevas: 0
+- policies críticas Noven con `SELECT USING(true)`: 0
 
-Las migraciones de Fase A no inventaron actividad operativa.
+El despliegue no inventó ni eliminó actividad operativa histórica.
 
-## Diagnóstico Netlify
+## Netlify
 
-Se probó despliegue desde `master` y desde una rama `main` espejo.
+El sitio `https://noven-ia.netlify.app` quedó reconectado al repositorio GitHub.
 
-En ambos casos el smoke test falló porque `https://noven-ia.netlify.app/deploy-marker.txt` no publicó el marcador del commit nuevo y devolvió la SPA existente por el redirect catch-all.
+El smoke `Production Deploy Smoke` confirmó:
 
-El sitio responde HTTP 200 y sigue sirviendo estos assets del build anterior:
+- publicación del marcador exacto del commit nuevo;
+- respuesta válida de la SPA productiva.
 
-- `/assets/index-CSHDhrnD.js`
-- `/assets/index-nMJ8265m.css`
+La rama productiva es `master`.
 
-El site ID observado en headers es:
+## Seguridad Noven
 
-`1e8b0a22-0e86-4d43-8d38-58740f2b8a7a`
+El navegador ya no tiene escritura directa sobre las tablas operativas. Los writes pasan por RPC/endpoints endurecidos y el estado de stock/VMD vive por sucursal.
 
-La API de Netlify para ese sitio responde `401 Access Denied` sin autenticación.
+El catálogo `productos` no expone al browser las columnas legacy `stock_actual` ni `venta_media_diaria` de 091.
 
-El repositorio GitHub no tiene configurado `NETLIFY_AUTH_TOKEN`, por lo que GitHub Actions no puede forzar el deploy por API.
+No quedan policies críticas Noven de lectura abierta `USING(true)`.
 
-## Acción necesaria en Netlify
+El webhook secret de push fue retirado del cuerpo de `notify_push_urgente()` y almacenado en Supabase Vault bajo `noven_push_webhook_secret`. La función ahora lee Vault en runtime y no es ejecutable por `anon` ni `authenticated` como RPC.
 
-Dentro de la cuenta propietaria del sitio `noven-ia`:
+Se eliminaron índices legacy duplicados sin tocar índices que respaldaran constraints.
 
-1. Abrir el sitio `noven-ia`.
-2. Ir a la configuración de **Build & deploy / Continuous deployment**.
-3. Confirmar o reconectar el repositorio `FernandoDelgadoDiaz/noven-ia`.
-4. Usar rama de producción `master`.
-5. Build command: `npm run build`.
-6. Publish directory: `dist`.
-7. Las Functions siguen definidas por `netlify.toml` en `netlify/functions`.
-8. Disparar un deploy del HEAD actual de `master`.
+## Advisors posteriores
 
-No pegar tokens o secretos en GitHub, issues, chats o archivos del repositorio.
+Los hallazgos Noven críticos que motivaron el cutover quedaron resueltos.
 
-## Gate para continuar
+Los avisos restantes se dividen en:
 
-Sólo después de comprobar que el build nuevo está efectivamente publicado:
+- tablas Noven deliberadamente server-only con RLS y sin policies browser (`importaciones`, snapshots y pendientes);
+- índices nuevos marcados como `unused` inmediatamente después del despliegue, que no deben eliminarse por esa señal temprana;
+- configuración/plataforma Supabase (`pg_net`, estrategia de conexiones Auth y leaked-password protection);
+- hallazgos `desafio5s_*`, pertenecientes al sistema 5S y fuera del alcance de este cutover.
 
-1. smoke test de login / Dashboard / Scanner / cierre vendido / Importar / Historial / Admin;
-2. aplicar `00270`;
-3. aplicar `00275`;
-4. aplicar `00280`;
-5. ejecutar advisors Supabase nuevamente;
-6. smoke test final con RLS cerrado.
+No modificar `desafio5s_*` como parte de Noven.
 
-## Nota Supabase
+## Arquitectura productiva resultante
 
-Los advisors antes del cutover muestran warnings esperables de policies legacy duplicadas/permisivas que Fase C elimina. También muestran advertencias de tablas/funciones `desafio5s_*`, que pertenecen a otro sistema y no deben modificarse como parte del cutover Noven.
+- catálogo de producto compartido por organización;
+- stock y VMD independientes por sucursal;
+- vencimientos y acciones scoped por sucursal/familia;
+- clasificación `cod_art → familia` compartida por organización;
+- detecciones pendientes conservadas por sucursal/importación;
+- RAG con histórico de intervenciones y observaciones;
+- cierre terminal auditable `vendido / donacion / decomiso`;
+- administración de usuarios y asignaciones por sucursal;
+- importadores Glaciar con escritura server-side/transaccional;
+- browser sin DML directo sobre tablas operativas.
+
+## Próximo paso operativo
+
+El cutover técnico está cerrado. Antes de incorporar una segunda sucursal real, conviene realizar una prueba operativa corta en 091 con las pantallas productivas: Dashboard, Scanner, cierre vendido, Historial, importación por familia/masiva y Admin.
