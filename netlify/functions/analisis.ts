@@ -4,57 +4,62 @@ import { getCorsHeaders } from './_auth'
 
 /**
  * analisis — genera un reporte en lenguaje natural (DeepSeek) sobre los
- * vencimientos del usuario. El rol y las familias se derivan server-side
- * desde el JWT (no se confía en lo que manda el cliente).
+ * vencimientos del usuario. La clasificación y los cálculos son determinísticos;
+ * el modelo sólo interpreta/prioriza los datos ya calculados.
  */
 
 const SUCURSAL_LEGACY = '00000000-0000-0000-0000-000000000001'
 
-const SYSTEM_OPERADOR = `Usted es un consultor especializado en gestión de vencimientos y control de merma para comercios minoristas de alimentación.
-Analiza los datos históricos y actuales de vencimientos para proporcionar recomendaciones constructivas y fundamentadas.
+const SYSTEM_OPERADOR = `Usted es un consultor especializado en gestión de vencimientos y control de pérdidas para comercios minoristas de alimentación.
+Analiza datos actuales, históricos y seguimiento de acciones RAG para proporcionar recomendaciones constructivas y fundamentadas.
 
 REGLAS:
 - Utilice un tono formal y profesional en todo momento
-- Base sus recomendaciones SIEMPRE en los cálculos de merma estimada provistos
+- Base sus recomendaciones SIEMPRE en los cálculos determinísticos provistos
+- La ventana comercial termina cuando el producto debe retirarse para DONACIÓN, no el día de vencimiento
+- RAG significa Retiro Anticipado de Góndola y el porcentaje lo sugiere Glaciar
+- NUNCA invente ni recomiende un porcentaje de descuento específico
+- Si un RAG figura sin movimiento o insuficiente, indique que debe revisarse nuevamente en Glaciar
+- Diferencie VMD histórica de Glaciar de velocidad observada por controles físicos del operador
 - Identifique patrones históricos: productos que se repiten en donaciones o decomisos
 - Compare el período actual con el anterior cuando haya datos disponibles
-- No invente porcentajes de descuento sin respaldo en datos
 - Explique el razonamiento detrás de cada recomendación
 - Máximo 350 palabras
 
 Estructura del informe:
-1. Situación actual (datos concretos de merma estimada)
-2. Análisis histórico (patrones detectados en trimestres anteriores)
-3. Productos que requieren acción inmediata (con justificación basada en cálculos)
-4. Recomendaciones constructivas (acciones específicas y medibles)`
+1. Situación actual (datos concretos de unidades en riesgo antes de donación)
+2. Seguimiento RAG (qué acciones están funcionando y cuáles requieren revisión)
+3. Análisis histórico (patrones detectados en trimestres anteriores)
+4. Productos que requieren acción inmediata
+5. Recomendaciones específicas y medibles sin inventar descuentos`
 
-const SYSTEM_ADMIN = `Usted es un consultor estratégico especializado en gestión de merma y control de vencimientos para cadenas de supermercados.
-Analiza el desempeño operativo de toda la sucursal comparando datos históricos y actuales.
+const SYSTEM_ADMIN = `Usted es un consultor estratégico especializado en gestión de pérdidas y vencimientos para cadenas de supermercados.
+Analiza el desempeño operativo de la sucursal comparando riesgo actual, seguimiento RAG e histórico.
 
 REGLAS:
 - Utilice un tono formal y profesional en todo momento
-- Base sus análisis en los cálculos de merma estimada y datos históricos provistos
-- Identifique tendencias entre trimestres
-- Señale familias o sectores con merma estructural (problema recurrente)
+- Base sus análisis en cálculos determinísticos y datos históricos provistos
+- La ventana comercial termina en el umbral obligatorio de DONACIÓN del sector
+- RAG significa Retiro Anticipado de Góndola y el porcentaje lo determina Glaciar
+- NUNCA invente ni recomiende un porcentaje de descuento específico
+- Destaque RAG sin movimiento o insuficientes y falta de seguimiento operativo
+- Diferencie VMD histórica de Glaciar de velocidad observada por el operador
+- Identifique tendencias entre trimestres y familias con problemas recurrentes
 - Cuantifique el impacto en unidades cuando sea posible
-- Proporcione recomendaciones estratégicas accionables
 - Máximo 450 palabras
 
 Estructura del informe:
-1. Estado general de la sucursal (métricas clave)
-2. Comparativa trimestral (evolución de merma)
-3. Familias con mayor riesgo estructural
-4. Análisis de patrones históricos
+1. Estado general de la sucursal
+2. Seguimiento RAG y productos que requieren nueva intervención
+3. Comparativa trimestral
+4. Familias con mayor riesgo estructural
 5. Recomendaciones estratégicas con fundamento`
 
-// ── Motor de riesgo (inline) ───────────────────────────────────────────
-// NOTA: src/lib/riesgo.ts es exclusivamente frontend y no puede importarse
-// aquí en build time de Netlify Functions. Esta copia inline se extiende
-// (no se agrega una cuarta copia) para incluir el cálculo de merma estimada.
-// Si en el futuro se extrae a shared/, borrar estas funciones y redirigir.
+// ── Motor determinístico inline ───────────────────────────────────────────────
+// Mientras frontend y Netlify Function no compartan un paquete común, esta copia
+// debe mantenerse semánticamente alineada con src/lib/riesgo.ts y el cron SQL.
 const UMBRAL_RADAR = 45
 const UMBRAL_URGENTE = 20
-const UMBRAL_DONACION = 10
 
 function diasRestantes(fecha: string): number {
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
@@ -62,52 +67,84 @@ function diasRestantes(fecha: string): number {
   return Math.floor((v.getTime() - hoy.getTime()) / 86400000)
 }
 
-function calcularNivel(dias: number, cantidad: number, venta: number): string {
-  const diasStock = venta <= 0 ? Infinity : Math.floor(cantidad / venta)
-  const hayRiesgo = diasStock > dias
+function diasComerciales(dias: number, diasDonacion: number): number {
+  return Math.max(0, dias - diasDonacion)
+}
+
+function calcularNivel(dias: number, cantidad: number, venta: number, diasDonacion: number): string {
   if (dias <= 0) return 'decomiso'
-  if (dias <= UMBRAL_DONACION) return 'donacion'
+  if (dias <= diasDonacion) return 'donacion'
+
+  const disponibles = diasComerciales(dias, diasDonacion)
+  const diasStock = venta <= 0 ? Infinity : cantidad / venta
+  const hayRiesgo = diasStock > disponibles
+
   if (dias <= UMBRAL_URGENTE && hayRiesgo) return 'urgente'
   if (dias <= UMBRAL_RADAR && hayRiesgo) return 'radar'
   return 'seguro'
 }
 
-interface MermaCalc {
-  unidadesVenderANormal: number
-  mermaUnidades: number
-  mermaPorcentaje: number
-  accion: string
+interface RiesgoCalc {
+  unidadesVendiblesAntesRetiro: number
+  unidadesEnRiesgo: number
+  riesgoPorcentaje: number
+  diasComercialesRestantes: number
+  velocidadNecesaria: number
 }
 
-function calcularMerma(cantidad: number, ventaMedia: number, dias: number): MermaCalc {
-  const unidadesVenderANormal = ventaMedia * Math.max(0, dias)
-  const mermaUnidades = Math.max(0, cantidad - unidadesVenderANormal)
-  const mermaPorcentaje = cantidad > 0 ? (mermaUnidades / cantidad) * 100 : 100
+function calcularRiesgoComercial(
+  cantidad: number,
+  ventaMedia: number,
+  dias: number,
+  diasDonacion: number,
+): RiesgoCalc {
+  const comerciales = diasComerciales(dias, diasDonacion)
+  const unidadesVendiblesAntesRetiro = ventaMedia * comerciales
+  const unidadesEnRiesgo = Math.max(0, cantidad - unidadesVendiblesAntesRetiro)
+  const riesgoPorcentaje = cantidad > 0 ? (unidadesEnRiesgo / cantidad) * 100 : 0
+  const velocidadNecesaria = comerciales > 0 && cantidad > 0 ? cantidad / comerciales : Infinity
 
-  let accion: string
-  if (mermaPorcentaje <= 20) {
-    accion = 'MONITOREAR — merma estimada baja, precio normal'
-  } else if (mermaPorcentaje <= 50) {
-    accion = 'OFERTA LEVE — merma estimada media, reubicación + descuento leve'
-  } else if (mermaPorcentaje <= 80) {
-    accion = 'PROMOCIÓN AGRESIVA — merma estimada alta, descuento fuerte + punta de góndola'
-  } else {
-    accion = 'DONACIÓN INEVITABLE — merma >80%, no hay rebaja que lo salve'
+  return {
+    unidadesVendiblesAntesRetiro,
+    unidadesEnRiesgo,
+    riesgoPorcentaje,
+    diasComercialesRestantes: comerciales,
+    velocidadNecesaria,
   }
+}
 
-  return { unidadesVenderANormal, mermaUnidades, mermaPorcentaje, accion }
+function accionDeterministica(nivel: string): string {
+  switch (nivel) {
+    case 'decomiso': return 'Retirar inmediatamente y registrar decomiso'
+    case 'donacion': return 'Retirar de venta y gestionar donación según política'
+    case 'urgente': return 'Revisar RAG en Glaciar y controlar cantidad comprometida'
+    case 'radar': return 'Gestionar RAG en Glaciar y monitorear cantidad comprometida'
+    default: return 'Monitorear; la proyección actual llega antes de la ventana de donación'
+  }
 }
 
 interface VencRow {
+  id: string
   cantidad: number
   fecha_vencimiento: string
-  productos: {
-    descripcion: string
-    marca: string | null
-    venta_media_diaria: number
-    familia_id: string | null
-    categoria: string | null
-  } | null
+  descripcion: string
+  marca: string | null
+  venta_media_diaria: number
+  familia_id: string | null
+  categoria: string | null
+  sector_nombre: string | null
+  dias_donacion: number | null
+}
+
+interface RagRow {
+  vencimiento_id: string
+  familia_id: string | null
+  rag_porcentaje: number | null
+  estado_seguimiento_rag: string
+  velocidad_observada: number | null
+  velocidad_necesaria: number | null
+  cantidad_observada: number | null
+  unidades_vendidas_observadas: number | null
 }
 
 interface AccionRow {
@@ -123,8 +160,6 @@ function getTrimestre(): { trimestre: number; anio: number } {
   return { trimestre: Math.ceil((hoy.getMonth() + 1) / 3), anio: hoy.getFullYear() }
 }
 
-// Resume las acciones de un trimestre por tipo, agrupando por producto para
-// exponer cuántas veces se repite cada uno (base de "patrones repetidos").
 function resumirAcciones(acciones: AccionRow[], tipo: string) {
   const items = acciones.filter((a) => a.tipo === tipo)
   const total = items.reduce((s, a) => s + (a.cantidad ?? 0), 0)
@@ -137,7 +172,6 @@ function resumirAcciones(acciones: AccionRow[], tipo: string) {
   return { total, registros: items.length, porProducto }
 }
 
-// Top N productos de un resumen, ordenados por cantidad total descendente.
 function topProductos(porProducto: Map<string, { cantidad: number; veces: number }>, n = 5) {
   return Array.from(porProducto.entries())
     .sort((a, b) => b[1].cantidad - a[1].cantidad)
@@ -150,6 +184,11 @@ function comparativa(actual: number, anterior: number): string {
   const pct = ((delta / anterior) * 100).toFixed(0)
   const signo = delta > 0 ? '+' : ''
   return `${signo}${delta} u (${signo}${pct}% vs. período anterior)`
+}
+
+function fmtVelocidad(v: number | null): string {
+  if (v == null || !Number.isFinite(v)) return '—'
+  return `${v.toFixed(2)} u/día`
 }
 
 const ORDEN: Record<string, number> = { decomiso: 0, donacion: 1, urgente: 2, radar: 3, seguro: 4 }
@@ -175,7 +214,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     return json(500, { success: false, error: 'Config de servidor incompleta' })
   }
 
-  // 1. Auth: validar token → uid
   const authHeader = event.headers['authorization'] ?? event.headers['Authorization'] ?? ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
   if (!token) return json(401, { success: false, error: 'No autorizado: token ausente' })
@@ -195,7 +233,8 @@ const handler: Handler = async (event: HandlerEvent) => {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
 
-  // 2. Rol, sucursal y familias — autoritativo desde la DB
+  // Compatibilidad de rol actual de 091. El cutover multitenant migrará esta
+  // resolución a usuario_accesos antes de habilitar varias sucursales reales.
   const { data: perfil } = await supabase
     .from('usuarios')
     .select('rol, sucursal_id')
@@ -215,35 +254,46 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (familiaIds.length === 0) {
       return json(200, {
         success: true,
-        analisis:
-          'Todavía no tenés familias asignadas, así que no hay datos para analizar. Pedile al administrador que te asigne tus sectores.',
+        analisis: 'Todavía no tenés familias asignadas, así que no hay datos para analizar. Pedile al administrador que te asigne tus sectores.',
         generado_en: new Date().toISOString(),
       })
     }
   }
 
-  // 3. Vencimientos activos de la sucursal (+ productos)
+  // Contrato nuevo: estado de vencimiento + VMD de la sucursal exacta + política
+  // de donación del sector.
   const { data: rows, error: vErr } = await supabase
-    .from('vencimientos')
-    .select('cantidad, fecha_vencimiento, productos(descripcion, marca, venta_media_diaria, familia_id, categoria)')
+    .from('v_vencimientos_operativos')
+    .select('id, cantidad, fecha_vencimiento, descripcion, marca, venta_media_diaria, familia_id, categoria, sector_nombre, dias_donacion')
     .eq('activo', true)
     .eq('sucursal_id', sucursalId)
   if (vErr) return json(502, { success: false, error: `Error al leer vencimientos: ${vErr.message}` })
 
-  let vencs = ((rows ?? []) as unknown as VencRow[]).filter((r) => r.productos !== null)
+  let vencs = ((rows ?? []) as unknown as VencRow[])
   if (!esAdmin) {
-    vencs = vencs.filter((r) => r.productos!.familia_id !== null && familiaIds.includes(r.productos!.familia_id))
+    vencs = vencs.filter((r) => r.familia_id !== null && familiaIds.includes(r.familia_id))
   }
 
-  // Nombres de familia para el prompt
-  const famIds = Array.from(new Set(vencs.map((r) => r.productos!.familia_id).filter((x): x is string => !!x)))
+  const famIds = Array.from(new Set(vencs.map((r) => r.familia_id).filter((x): x is string => !!x)))
   const famNombre = new Map<string, string>()
   if (famIds.length > 0) {
     const { data: fams } = await supabase.from('familias').select('id, nombre').in('id', famIds)
     for (const f of fams ?? []) famNombre.set(f.id as string, f.nombre as string)
   }
 
-  // Histórico de acciones_operativas: trimestre actual + anterior
+  // Seguimiento RAG: la señal de corto plazo viene de controles físicos del
+  // operador; la VMD sigue siendo tendencia histórica de Glaciar.
+  const { data: ragRaw } = await supabase
+    .from('v_seguimiento_rag_actual')
+    .select('vencimiento_id, familia_id, rag_porcentaje, estado_seguimiento_rag, velocidad_observada, velocidad_necesaria, cantidad_observada, unidades_vendidas_observadas')
+    .eq('sucursal_id', sucursalId)
+
+  let rags = ((ragRaw ?? []) as unknown as RagRow[])
+  if (!esAdmin) {
+    rags = rags.filter((r) => r.familia_id !== null && familiaIds.includes(r.familia_id))
+  }
+  const ragPorVencimiento = new Map(rags.map((r) => [r.vencimiento_id, r]))
+
   const { trimestre: trimestreActual, anio: anioActual } = getTrimestre()
   const trimestreAnterior = trimestreActual === 1 ? 4 : trimestreActual - 1
   const anioAnterior = trimestreActual === 1 ? anioActual - 1 : anioActual
@@ -256,8 +306,6 @@ const handler: Handler = async (event: HandlerEvent) => {
       .eq('sucursal_id', sucursalId).eq('trimestre', trimestreAnterior).eq('anio', anioAnterior),
   ])
 
-  // El operador solo ve el histórico de sus familias asignadas (mismo criterio
-  // de scope que los vencimientos activos). El admin ve toda la sucursal.
   const scope = (a: AccionRow) =>
     esAdmin || (a.productos?.familia_id != null && familiaIds.includes(a.productos.familia_id))
   const accActual = ((accActualRaw ?? []) as unknown as AccionRow[]).filter(scope)
@@ -268,8 +316,6 @@ const handler: Handler = async (event: HandlerEvent) => {
   const donAnterior = resumirAcciones(accAnterior, 'donacion')
   const decAnterior = resumirAcciones(accAnterior, 'decomiso')
 
-  // Patrones repetidos: mismo producto+tipo que aparece en ≥2 registros a lo
-  // largo de ambos trimestres (señal de merma estructural / recurrente).
   const patronMap = new Map<string, { tipo: string; producto: string; veces: number; cantidad: number }>()
   for (const a of [...accActual, ...accAnterior]) {
     const producto = a.productos?.descripcion ?? '(sin producto)'
@@ -282,37 +328,51 @@ const handler: Handler = async (event: HandlerEvent) => {
     .sort((a, b) => b.veces - a.veces || b.cantidad - a.cantidad)
     .slice(0, 8)
 
-  // 4. Construir prompt con datos reales + cálculo de merma estimada
   const procesados = vencs
     .map((r) => {
       const dias = diasRestantes(r.fecha_vencimiento)
-      const nivel = calcularNivel(dias, r.cantidad, r.productos!.venta_media_diaria)
-      const merma = calcularMerma(r.cantidad, r.productos!.venta_media_diaria, dias)
-      return { ...r, dias, nivel, merma }
+      const umbral = r.dias_donacion ?? 10
+      const nivel = calcularNivel(dias, r.cantidad, r.venta_media_diaria, umbral)
+      const riesgo = calcularRiesgoComercial(r.cantidad, r.venta_media_diaria, dias, umbral)
+      const rag = ragPorVencimiento.get(r.id) ?? null
+      return { ...r, dias, umbral, nivel, riesgo, rag }
     })
     .sort((a, b) => (ORDEN[a.nivel] - ORDEN[b.nivel]) || (a.dias - b.dias))
     .slice(0, 60)
 
   const hoyStr = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date())
   const lineas = procesados.map((r) => {
-    const p = r.productos!
-    const fam = p.familia_id ? (famNombre.get(p.familia_id) ?? '—') : '—'
-    const ventaStr = p.venta_media_diaria > 0 ? `${p.venta_media_diaria} u/día` : 'sin rotación'
+    const fam = r.familia_id ? (famNombre.get(r.familia_id) ?? '—') : '—'
+    const ventaStr = r.venta_media_diaria > 0 ? `${r.venta_media_diaria} u/día` : 'sin rotación'
     const vence = r.dias < 0 ? `vencido hace ${Math.abs(r.dias)} días` : r.dias === 0 ? 'vence hoy' : `vence en ${r.dias} días`
-    const m = r.merma
+    const riesgo = r.riesgo
+    const rag = r.rag
+
+    const detallesRag = rag?.rag_porcentaje != null
+      ? [
+          `  RAG vigente: ${rag.rag_porcentaje}% (porcentaje registrado desde Glaciar, no recomendado por Noven)`,
+          `  Estado seguimiento RAG: ${rag.estado_seguimiento_rag}`,
+          `  Velocidad observada operador: ${fmtVelocidad(rag.velocidad_observada)}`,
+          `  Velocidad necesaria actual: ${fmtVelocidad(rag.velocidad_necesaria)}`,
+          rag.unidades_vendidas_observadas != null ? `  Reducción observada desde RAG: ${rag.unidades_vendidas_observadas} unidades` : null,
+        ].filter(Boolean)
+      : ['  RAG: sin intervención registrada']
+
     return [
-      `Producto: ${p.descripcion}${p.marca ? ` (${p.marca})` : ''}`,
-      `  Familia: ${fam} | Nivel de riesgo: ${r.nivel}`,
-      `  Días restantes: ${vence}`,
-      `  Stock actual: ${r.cantidad} unidades`,
-      `  Venta media: ${ventaStr}`,
-      `  Unidades que se venderían a precio normal: ${Math.round(m.unidadesVenderANormal)}`,
-      `  Merma estimada: ${Math.round(m.mermaUnidades)} unidades (${m.mermaPorcentaje.toFixed(1)}%)`,
-      `  Acción calculada: ${m.accion}`,
+      `Producto: ${r.descripcion}${r.marca ? ` (${r.marca})` : ''}`,
+      `  Familia: ${fam} | Sector: ${r.sector_nombre ?? '—'} | Nivel: ${r.nivel}`,
+      `  ${vence} | Retiro para donación: ${r.umbral} días antes`,
+      `  Días comerciales restantes: ${riesgo.diasComercialesRestantes}`,
+      `  Cantidad comprometida: ${r.cantidad} unidades`,
+      `  VMD histórica Glaciar: ${ventaStr}`,
+      `  Velocidad necesaria para llegar antes de donación: ${fmtVelocidad(riesgo.velocidadNecesaria)}`,
+      `  Vendibles a VMD actual antes del retiro: ${Math.round(riesgo.unidadesVendiblesAntesRetiro)}`,
+      `  Unidades en riesgo de no venderse: ${Math.round(riesgo.unidadesEnRiesgo)} (${riesgo.riesgoPorcentaje.toFixed(1)}%)`,
+      `  Acción determinística: ${accionDeterministica(r.nivel)}`,
+      ...detallesRag,
     ].join('\n')
   })
 
-  // Formateo del histórico por trimestre (con top de productos por acción)
   const fmtTop = (top: Array<[string, { cantidad: number; veces: number }]>) =>
     top.length > 0
       ? top.map(([n, v]) => `    · ${n}: ${v.cantidad} u (${v.veces} ${v.veces === 1 ? 'registro' : 'registros'})`).join('\n')
@@ -344,7 +404,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     `Vencimientos activos (${procesados.length}${vencs.length > procesados.length ? ` de ${vencs.length}` : ''}):`,
     lineas.length > 0 ? lineas.join('\n\n') : '(sin vencimientos activos)',
     '',
-    '=== ANÁLISIS HISTÓRICO DE ACCIONES OPERATIVAS ===',
+    '=== HISTÓRICO DE ACCIONES OPERATIVAS ===',
     '',
     bloqueTrimestre(`Trimestre ACTUAL (Q${trimestreActual} ${anioActual}):`, donActual, decActual),
     '',
@@ -358,7 +418,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     bloquePatrones,
   ].join('\n')
 
-  // 5. Llamar a DeepSeek
   let analisis: string
   try {
     const dsRes = await fetch('https://api.deepseek.com/chat/completions', {
