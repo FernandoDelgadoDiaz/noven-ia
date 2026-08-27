@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
-import { BellRing, CalendarDays, Check, Clock3, Package, RefreshCw, Store, X } from 'lucide-react'
+import { BellRing, CalendarDays, Check, Clock3, RefreshCw, Store, X } from 'lucide-react'
 import type { AlertaRadarZonal, RespuestaRadarZonal } from '@/hooks/useRadarZonal'
+import ProductIdentity from '@/components/product/ProductIdentity'
 
 interface RadarZonalModalProps {
   alertas: AlertaRadarZonal[]
@@ -42,6 +43,17 @@ function labelNivel(nivel: AlertaRadarZonal['nivel_origen']): string {
   if (nivel === 'donacion') return 'Donación'
   if (nivel === 'urgente') return 'Urgente'
   return 'Radar'
+}
+
+function productoAlerta(alerta: AlertaRadarZonal) {
+  return {
+    descripcion: alerta.descripcion,
+    marca: alerta.marca,
+    gramaje: alerta.gramaje,
+    cod_art: alerta.cod_art,
+    codigo_barras: alerta.codigo_barras,
+    imagen_thumb_url: alerta.imagen_thumb_url,
+  }
 }
 
 export default function RadarZonalModal({
@@ -152,24 +164,16 @@ export default function RadarZonalModal({
             const busy = guardandoId === alerta.destino_id
             return (
               <article key={alerta.destino_id} className="bg-white rounded-[22px] shadow-card overflow-hidden">
-                <div className="p-4 flex gap-3">
-                  <div className="h-14 w-14 rounded-2xl overflow-hidden bg-amber-50 flex items-center justify-center shrink-0">
-                    {alerta.imagen_thumb_url ? (
-                      <img src={alerta.imagen_thumb_url} alt={alerta.descripcion} className="h-full w-full object-cover" loading="lazy" decoding="async" />
-                    ) : (
-                      <Package className="h-6 w-6 text-amber-600" />
-                    )}
+                <div className="p-4 flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <ProductIdentity
+                      producto={productoAlerta(alerta)}
+                      label={`Detectado en Suc. ${alerta.sucursal_origen_codigo}`}
+                      compact
+                      imageSize="sm"
+                    />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-brand">Detectado en Suc. {alerta.sucursal_origen_codigo}</p>
-                        <p className="font-bold text-sm text-foreground leading-snug line-clamp-2 mt-0.5">{alerta.descripcion}</p>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-orange-50 text-orange-700 px-2 py-0.5 text-[9px] font-bold uppercase">{labelNivel(alerta.nivel_origen)}</span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-1">SKU {alerta.cod_art}</p>
-                  </div>
+                  <span className="shrink-0 rounded-full bg-orange-50 text-orange-700 px-2 py-0.5 text-[9px] font-bold uppercase">{labelNivel(alerta.nivel_origen)}</span>
                 </div>
 
                 <div className="px-4 pb-3 grid grid-cols-2 gap-2">
@@ -207,9 +211,9 @@ export default function RadarZonalModal({
           <div className="absolute inset-0 bg-black/35 flex items-end md:items-center md:justify-center z-10">
             <div className="bg-white w-full md:max-w-md rounded-t-[26px] md:rounded-[26px] p-5 shadow-elevated">
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-brand">{confirmacion.respuesta === 'misma_fecha' ? 'Confirmar misma fecha' : 'Registrar otra fecha'}</p>
-                  <p className="font-bold text-foreground mt-1">{confirmacion.alerta.descripcion}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-brand mb-2">{confirmacion.respuesta === 'misma_fecha' ? 'Confirmar misma fecha' : 'Registrar otra fecha'}</p>
+                  <ProductIdentity producto={productoAlerta(confirmacion.alerta)} compact imageSize="sm" />
                 </div>
                 <button type="button" onClick={() => setConfirmacion(null)} className="h-8 w-8 rounded-xl flex items-center justify-center hover:bg-muted text-muted-foreground"><X className="h-4 w-4" /></button>
               </div>
