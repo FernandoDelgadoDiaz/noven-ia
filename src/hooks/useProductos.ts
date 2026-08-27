@@ -31,16 +31,12 @@ interface UseProductosReturn {
   completarCodArtScanner: (sucursalId: string, productoId: string, codArt: string) => Promise<Producto>
   crearProductoScanner: (input: NuevoProductoScannerInput) => Promise<Producto>
   listarFamiliasScanner: (sucursalId?: string) => Promise<Familia[]>
-  /** Compatibilidad temporal para flujos no migrados del catálogo. */
-  upsertProducto: (p: Partial<Producto>) => Promise<void>
 }
 
 /**
- * Acceso al catálogo. El Scanner usa RPCs con scope de sucursal: la organización
- * se deriva en PostgreSQL y nunca se decide en el navegador. Para no obligar a
- * cada consumidor a repetir el mismo parámetro, el hook usa la sucursal actual
- * como contexto por defecto; los flujos zonales pueden pasar otra sucursal de
- * forma explícita una vez que exista el selector de contexto.
+ * Acceso al catálogo del Scanner exclusivamente mediante RPCs con scope de
+ * sucursal. No expone ningún escritor genérico sobre `productos`: un nuevo flujo
+ * que necesite modificar catálogo debe tener un contrato SQL explícito y acotado.
  */
 export function useProductos(): UseProductosReturn {
   const { sucursalId: sucursalActual } = useSucursalActual()
@@ -140,24 +136,6 @@ export function useProductos(): UseProductosReturn {
     return (data ?? []) as Familia[]
   }
 
-  /**
-   * Compatibilidad temporal. No usar desde Scanner V2.
-   */
-  async function upsertProducto(p: Partial<Producto>): Promise<void> {
-    if (p.id) {
-      const { id, created_at: _created, ...fields } = p as Partial<Producto> & { id: string }
-      void _created
-      const { error } = await supabase
-        .from('productos')
-        .update({ ...fields, updated_at: new Date().toISOString() })
-        .eq('id', id)
-      if (error) throw new Error(error.message)
-    } else {
-      const { error } = await supabase.from('productos').insert(p)
-      if (error) throw new Error(error.message)
-    }
-  }
-
   return {
     searchByBarcode,
     buscarConflictoCodigos,
@@ -165,6 +143,5 @@ export function useProductos(): UseProductosReturn {
     completarCodArtScanner,
     crearProductoScanner,
     listarFamiliasScanner,
-    upsertProducto,
   }
 }
