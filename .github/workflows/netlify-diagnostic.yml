@@ -1,0 +1,51 @@
+name: Netlify Connection Diagnostic
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/netlify-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check Netlify token availability
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${NETLIFY_AUTH_TOKEN}" ]; then
+            echo "::error::NETLIFY_AUTH_TOKEN is not configured in this GitHub repository."
+            exit 1
+          fi
+          echo "NETLIFY_AUTH_TOKEN is configured."
+
+      - name: Inspect safe Netlify site metadata
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: 1e8b0a22-0e86-4d43-8d38-58740f2b8a7a
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS \
+            -H "Authorization: Bearer ${NETLIFY_AUTH_TOKEN}" \
+            "https://api.netlify.com/api/v1/sites/${NETLIFY_SITE_ID}" \
+            > site.json
+
+          jq '{
+            name: .name,
+            url: .url,
+            repo_url: (.build_settings.repo_url // null),
+            repo_branch: (.build_settings.repo_branch // null),
+            build_command: (.build_settings.cmd // null),
+            publish_dir: (.build_settings.dir // null),
+            published_commit: (.published_deploy.commit_ref // null),
+            published_at: (.published_deploy.published_at // null)
+          }' site.json
