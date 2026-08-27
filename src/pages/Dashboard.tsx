@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Package, ScanLine, RefreshCw, AlertTriangle, Bell, FolderX, HandHeart, Trash2, CircleCheckBig } from 'lucide-react'
+import { Package, ScanLine, RefreshCw, AlertTriangle, FolderX, HandHeart, Trash2, CircleCheckBig } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useVencimientos } from '@/hooks/useVencimientos'
 import { useAuth } from '@/hooks/useAuth'
@@ -9,6 +9,7 @@ import { useSucursalActual } from '@/hooks/useSucursalActual'
 import AlertaItem from '@/components/dashboard/AlertaItem'
 import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
 import AccionOperativaModal from '@/components/dashboard/AccionOperativaModal'
+import RadarZonalBell from '@/components/dashboard/RadarZonalBell'
 import type { VencimientoConRiesgo } from '@/types/index'
 
 const ORDEN_RIESGO: Record<string, number> = {
@@ -176,16 +177,7 @@ export default function Dashboard() {
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
 
-            <button
-              type="button"
-              className="relative h-9 w-9 flex items-center justify-center rounded-xl hover:bg-muted text-muted-foreground transition-colors duration-150 active:scale-[0.94]"
-              aria-label="Notificaciones"
-            >
-              <Bell className="h-4 w-4" />
-              {hayCriticos && (
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 border-2 border-white" />
-              )}
-            </button>
+            <RadarZonalBell sucursalId={sucursalId} hayCriticos={hayCriticos} />
 
             <div
               className="h-9 w-9 rounded-full bg-brand flex items-center justify-center text-white font-bold text-sm shadow-brand shrink-0 select-none"
