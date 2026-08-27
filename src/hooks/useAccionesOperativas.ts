@@ -33,6 +33,7 @@ interface AccionOperativaRow {
 }
 
 interface UseAccionesOperativasReturn {
+  /** Cantidad de vencimientos cerrados por venta; no unidades inferidas. */
   vendidos: number
   donaciones: number
   decomisos: number
@@ -50,7 +51,6 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
   const [error, setError] = useState<string | null>(null)
   const { sucursalId } = useSucursalActual()
 
-  // useMemo garantiza referencia estable mientras trimestre/anio no cambien
   const trimestreInfo = useMemo(() => getTrimestreActual(), [])
 
   const fetchData = useCallback(async (): Promise<void> => {
@@ -73,9 +73,7 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
     }
 
     const rows = (data ?? []) as AccionOperativaRow[]
-    const totalVendidos = rows
-      .filter((a) => a.tipo === 'vendido')
-      .reduce((sum, a) => sum + a.cantidad, 0)
+    const cierresPorVenta = rows.filter((a) => a.tipo === 'vendido').length
     const totalDonaciones = rows
       .filter((a) => a.tipo === 'donacion')
       .reduce((sum, a) => sum + a.cantidad, 0)
@@ -83,15 +81,13 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
       .filter((a) => a.tipo === 'decomiso')
       .reduce((sum, a) => sum + a.cantidad, 0)
 
-    setVendidos(totalVendidos)
+    setVendidos(cierresPorVenta)
     setDonaciones(totalDonaciones)
     setDecomisos(totalDecomisos)
     setLoading(false)
   }, [trimestreInfo, sucursalId])
 
-  const refetch = useCallback((): Promise<void> => {
-    return fetchData()
-  }, [fetchData])
+  const refetch = useCallback((): Promise<void> => fetchData(), [fetchData])
 
   useEffect(() => {
     void fetchData()
