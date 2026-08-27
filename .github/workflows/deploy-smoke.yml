@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-multitenant-v1-deploy-check-20260827-c
+          EXPECTED_MARKER: noven-multitenant-v1-deploy-check-20260827-d
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |
