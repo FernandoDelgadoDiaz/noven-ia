@@ -13,7 +13,7 @@ interface UseScannerReturn extends ScannerState {
   reset: () => void
 }
 
-export function useScanner(): UseScannerReturn {
+export function useScanner(sucursalId: string): UseScannerReturn {
   const { searchByBarcode } = useProductos()
   const [state, setState] = useState<ScannerState>({
     scanning: false,
@@ -26,11 +26,15 @@ export function useScanner(): UseScannerReturn {
       setState((prev) => ({ ...prev, error: 'Código de barras vacío', lastResult: null }))
       return null
     }
+    if (!sucursalId) {
+      setState((prev) => ({ ...prev, error: 'Seleccioná una sucursal antes de escanear.', lastResult: null }))
+      return null
+    }
 
     setState({ scanning: true, error: null, lastResult: null })
 
     try {
-      const producto = await searchByBarcode(barcode)
+      const producto = await searchByBarcode(barcode, sucursalId)
       setState({ scanning: false, error: null, lastResult: producto })
       return producto
     } catch (err) {
