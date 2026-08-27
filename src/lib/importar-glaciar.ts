@@ -1,11 +1,23 @@
 import { parsearCsvGlaciar, type ResultadoParser } from './importar-csv'
 import { extraerMetadataGlaciar, type MetadataGlaciar } from './glaciar-metadata'
 
+export type ModoImportacionGlaciar = 'familia' | 'masiva'
+
 export interface AnalisisReporteGlaciar {
   parser: ResultadoParser
   metadata: MetadataGlaciar
+  modo: ModoImportacionGlaciar
   /** Errores que impiden siquiera ofrecer el botón de confirmar importación. */
   erroresBloqueantes: string[]
+}
+
+export interface OpcionesAnalisisGlaciar {
+  /**
+   * `familia`: exige Cód.Familia y habilita aprendizaje/reconciliación asistida.
+   * `masiva`: el ruteo sale del cod_art ya aprendido en el catálogo y por eso no
+   * exige una familia global en el encabezado del archivo.
+   */
+  modo?: ModoImportacionGlaciar
 }
 
 /**
@@ -15,7 +27,11 @@ export interface AnalisisReporteGlaciar {
  * la capa de metadata agrega identidad de sucursal, necesaria en multitenancy.
  * Separarlos evita arriesgar el parser que ya está probado con archivos reales.
  */
-export function analizarReporteGlaciar(textoCompleto: string): AnalisisReporteGlaciar {
+export function analizarReporteGlaciar(
+  textoCompleto: string,
+  opciones: OpcionesAnalisisGlaciar = {},
+): AnalisisReporteGlaciar {
+  const modo = opciones.modo ?? 'familia'
   const parser = parsearCsvGlaciar(textoCompleto)
   const metadata = extraerMetadataGlaciar(textoCompleto)
   const erroresBloqueantes: string[] = []
@@ -32,11 +48,15 @@ export function analizarReporteGlaciar(textoCompleto: string): AnalisisReporteGl
     erroresBloqueantes.push(`Faltan columnas requeridas: ${parser.faltantes.join(', ')}.`)
   }
 
-  if (parser.codigoFamilia === null) {
+  // El modo por familia usa el encabezado como fuente explícita de clasificación.
+  // El modo masivo NO necesita una familia global: cada SKU conocido conserva su
+  // familia aprendida en el catálogo y los desconocidos quedan en cola sin mapear.
+  if (modo === 'familia' && parser.codigoFamilia === null) {
     erroresBloqueantes.push('No se pudo identificar Cód.Familia en el reporte.')
   }
 
   if (
+    modo === 'familia' &&
     parser.codigoFamilia !== null &&
     metadata.codigoFamilia !== null &&
     parser.codigoFamilia !== metadata.codigoFamilia
@@ -50,5 +70,5 @@ export function analizarReporteGlaciar(textoCompleto: string): AnalisisReporteGl
     erroresBloqueantes.push('El reporte tiene estructura válida pero no contiene productos importables.')
   }
 
-  return { parser, metadata, erroresBloqueantes }
+  return { parser, metadata, modo, erroresBloqueantes }
 }
