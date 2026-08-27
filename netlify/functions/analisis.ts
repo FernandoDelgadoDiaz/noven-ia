@@ -9,6 +9,7 @@ import { getCorsHeaders } from './_auth'
  */
 
 const SUCURSAL_LEGACY = '00000000-0000-0000-0000-000000000001'
+const IDENTIDAD_REGLA = '- Siempre que nombre un artículo, identifíquelo como: Descripción — Marca | Gramaje: ... | Interno: ... | EAN: ...; no omita ninguno de esos datos aunque figure "Sin dato"'
 
 const SYSTEM_OPERADOR = `Usted es un consultor especializado en gestión de vencimientos y control de pérdidas para comercios minoristas de alimentación.
 Analiza datos actuales, históricos y seguimiento de acciones RAG para proporcionar recomendaciones constructivas y fundamentadas.
@@ -24,6 +25,7 @@ REGLAS:
 - Identifique patrones históricos: productos que se repiten en donaciones o decomisos
 - Compare el período actual con el anterior cuando haya datos disponibles
 - Explique el razonamiento detrás de cada recomendación
+${IDENTIDAD_REGLA}
 - Máximo 350 palabras
 
 Estructura del informe:
@@ -46,6 +48,7 @@ REGLAS:
 - Diferencie VMD histórica de Glaciar de velocidad observada por el operador
 - Identifique tendencias entre trimestres y familias con problemas recurrentes
 - Cuantifique el impacto en unidades cuando sea posible
+${IDENTIDAD_REGLA}
 - Máximo 450 palabras
 
 Estructura del informe:
@@ -55,9 +58,6 @@ Estructura del informe:
 4. Familias con mayor riesgo estructural
 5. Recomendaciones estratégicas con fundamento`
 
-// ── Motor determinístico inline ───────────────────────────────────────────────
-// Mientras frontend y Netlify Function no compartan un paquete común, esta copia
-// debe mantenerse semánticamente alineada con src/lib/riesgo.ts y el cron SQL.
 const UMBRAL_RADAR = 45
 const UMBRAL_URGENTE = 20
 
@@ -123,12 +123,23 @@ function accionDeterministica(nivel: string): string {
   }
 }
 
-interface VencRow {
+interface IdentidadArticulo {
+  descripcion: string
+  marca: string | null
+  gramaje: string | null
+  cod_art: string | null
+  codigo_barras: string | null
+}
+
+function identidadArticulo(p: IdentidadArticulo | null | undefined): string {
+  if (!p) return '(sin producto) — Sin dato | Gramaje: Sin dato | Interno: Sin dato | EAN: Sin dato'
+  return `${p.descripcion} — ${p.marca?.trim() || 'Sin dato'} | Gramaje: ${p.gramaje?.trim() || 'Sin dato'} | Interno: ${p.cod_art?.trim() || 'Sin dato'} | EAN: ${p.codigo_barras?.trim() || 'Sin dato'}`
+}
+
+interface VencRow extends IdentidadArticulo {
   id: string
   cantidad: number
   fecha_vencimiento: string
-  descripcion: string
-  marca: string | null
   venta_media_diaria: number
   familia_id: string | null
   categoria: string | null
@@ -152,7 +163,7 @@ interface AccionRow {
   cantidad: number
   trimestre: number
   anio: number
-  productos: { descripcion: string; familia_id: string | null } | null
+  productos: (IdentidadArticulo & { familia_id: string | null }) | null
 }
 
 function getTrimestre(): { trimestre: number; anio: number } {
@@ -165,7 +176,7 @@ function resumirAcciones(acciones: AccionRow[], tipo: string) {
   const total = items.reduce((s, a) => s + (a.cantidad ?? 0), 0)
   const porProducto = new Map<string, { cantidad: number; veces: number }>()
   for (const a of items) {
-    const nombre = a.productos?.descripcion ?? '(sin producto)'
+    const nombre = identidadArticulo(a.productos)
     const prev = porProducto.get(nombre) ?? { cantidad: 0, veces: 0 }
     porProducto.set(nombre, { cantidad: prev.cantidad + (a.cantidad ?? 0), veces: prev.veces + 1 })
   }
@@ -233,8 +244,6 @@ const handler: Handler = async (event: HandlerEvent) => {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
 
-  // Compatibilidad de rol actual de 091. El cutover multitenant migrará esta
-  // resolución a usuario_accesos antes de habilitar varias sucursales reales.
   const { data: perfil } = await supabase
     .from('usuarios')
     .select('rol, sucursal_id')
@@ -260,11 +269,9 @@ const handler: Handler = async (event: HandlerEvent) => {
     }
   }
 
-  // Contrato nuevo: estado de vencimiento + VMD de la sucursal exacta + política
-  // de donación del sector.
   const { data: rows, error: vErr } = await supabase
     .from('v_vencimientos_operativos')
-    .select('id, cantidad, fecha_vencimiento, descripcion, marca, venta_media_diaria, familia_id, categoria, sector_nombre, dias_donacion')
+    .select('id, cantidad, fecha_vencimiento, descripcion, marca, gramaje, cod_art, codigo_barras, venta_media_diaria, familia_id, categoria, sector_nombre, dias_donacion')
     .eq('activo', true)
     .eq('sucursal_id', sucursalId)
   if (vErr) return json(502, { success: false, error: `Error al leer vencimientos: ${vErr.message}` })
@@ -281,8 +288,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     for (const f of fams ?? []) famNombre.set(f.id as string, f.nombre as string)
   }
 
-  // Seguimiento RAG: la señal de corto plazo viene de controles físicos del
-  // operador; la VMD sigue siendo tendencia histórica de Glaciar.
   const { data: ragRaw } = await supabase
     .from('v_seguimiento_rag_actual')
     .select('vencimiento_id, familia_id, rag_porcentaje, estado_seguimiento_rag, velocidad_observada, velocidad_necesaria, cantidad_observada, unidades_vendidas_observadas')
@@ -298,7 +303,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const trimestreAnterior = trimestreActual === 1 ? 4 : trimestreActual - 1
   const anioAnterior = trimestreActual === 1 ? anioActual - 1 : anioActual
 
-  const accionSelect = 'tipo, cantidad, trimestre, anio, productos(descripcion, familia_id)'
+  const accionSelect = 'tipo, cantidad, trimestre, anio, productos(descripcion, marca, gramaje, cod_art, codigo_barras, familia_id)'
   const [{ data: accActualRaw }, { data: accAnteriorRaw }] = await Promise.all([
     supabase.from('acciones_operativas').select(accionSelect)
       .eq('sucursal_id', sucursalId).eq('trimestre', trimestreActual).eq('anio', anioActual),
@@ -318,7 +323,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
   const patronMap = new Map<string, { tipo: string; producto: string; veces: number; cantidad: number }>()
   for (const a of [...accActual, ...accAnterior]) {
-    const producto = a.productos?.descripcion ?? '(sin producto)'
+    const producto = identidadArticulo(a.productos)
     const key = `${a.tipo}::${producto}`
     const prev = patronMap.get(key) ?? { tipo: a.tipo, producto, veces: 0, cantidad: 0 }
     patronMap.set(key, { ...prev, veces: prev.veces + 1, cantidad: prev.cantidad + (a.cantidad ?? 0) })
@@ -328,10 +333,13 @@ const handler: Handler = async (event: HandlerEvent) => {
     .sort((a, b) => b.veces - a.veces || b.cantidad - a.cantidad)
     .slice(0, 8)
 
+  // NULL significa sector fuera del circuito (Electro/Insumos u otro no
+  // configurado). No inferir 10 días tampoco en el análisis IA.
   const procesados = vencs
+    .filter((r): r is VencRow & { dias_donacion: number } => r.dias_donacion !== null)
     .map((r) => {
       const dias = diasRestantes(r.fecha_vencimiento)
-      const umbral = r.dias_donacion ?? 10
+      const umbral = r.dias_donacion
       const nivel = calcularNivel(dias, r.cantidad, r.venta_media_diaria, umbral)
       const riesgo = calcularRiesgoComercial(r.cantidad, r.venta_media_diaria, dias, umbral)
       const rag = ragPorVencimiento.get(r.id) ?? null
@@ -359,7 +367,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       : ['  RAG: sin intervención registrada']
 
     return [
-      `Producto: ${r.descripcion}${r.marca ? ` (${r.marca})` : ''}`,
+      `Producto: ${identidadArticulo(r)}`,
       `  Familia: ${fam} | Sector: ${r.sector_nombre ?? '—'} | Nivel: ${r.nivel}`,
       `  ${vence} | Retiro para donación: ${r.umbral} días antes`,
       `  Días comerciales restantes: ${riesgo.diasComercialesRestantes}`,
@@ -439,13 +447,12 @@ const handler: Handler = async (event: HandlerEvent) => {
       return json(502, { success: false, error: `Error del modelo de análisis (${dsRes.status})` })
     }
     const dsData = (await dsRes.json()) as { choices?: Array<{ message?: { content?: string } }> }
-    analisis = dsData.choices?.[0]?.message?.content?.trim() ?? ''
-    if (!analisis) return json(502, { success: false, error: 'El modelo no devolvió contenido' })
+    const contenido = dsData.choices?.[0]?.message?.content?.trim() ?? ''
+    if (!contenido) return json(502, { success: false, error: 'El modelo no devolvió contenido' })
+    return json(200, { success: true, analisis: contenido, generado_en: new Date().toISOString() })
   } catch (e: unknown) {
     return json(502, { success: false, error: `Error al contactar el modelo: ${(e as Error).message}` })
   }
-
-  return json(200, { success: true, analisis, generado_en: new Date().toISOString() })
 }
 
 export { handler }
