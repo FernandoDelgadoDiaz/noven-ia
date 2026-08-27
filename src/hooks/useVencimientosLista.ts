@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { calcularDiasRestantes, calcularNivelRiesgo } from '@/lib/riesgo'
+import {
+  calcularDiasRestantes,
+  calcularNivelRiesgo,
+  diasDonacionLegacyPorSector,
+} from '@/lib/riesgo'
 export type { NivelRiesgo } from '@/lib/riesgo'
 import type { NivelRiesgo } from '@/lib/riesgo'
 import { useUsuarioFamilias } from '@/hooks/useUsuarioFamilias'
@@ -20,6 +24,7 @@ export interface VencimientoConProducto {
   activo: boolean
   created_at: string
   familia_id: string | null
+  dias_donacion: number
   productos: {
     descripcion: string
     cod_art: string | null
@@ -27,6 +32,7 @@ export interface VencimientoConProducto {
     gramaje: string | null
     marca: string | null
     categoria: string | null
+    sector: string | null
     stock_actual: number
     venta_media_diaria: number
     imagen_url: string | null
@@ -53,6 +59,7 @@ interface RawLegacyRow {
     gramaje: string | null
     marca: string | null
     categoria: string | null
+    sector: string | null
     stock_actual: number
     venta_media_diaria: number
     familia_id: string | null
@@ -77,6 +84,9 @@ interface RawOperativoRow {
   gramaje: string | null
   marca: string | null
   categoria: string | null
+  sector: string | null
+  sector_nombre: string | null
+  dias_donacion: number | null
   stock_actual: number
   venta_media_diaria: number
   familia_id: string | null
@@ -104,20 +114,24 @@ function vistaOperativaNoDisponible(error: { code?: string } | null): boolean {
 }
 
 function procesarFila(
-  row: Omit<VencimientoConProducto, 'dias_restantes' | 'nivel_riesgo' | 'familia_id'> & {
+  row: Omit<VencimientoConProducto, 'dias_restantes' | 'nivel_riesgo' | 'familia_id' | 'dias_donacion'> & {
     familia_id?: string | null
+    dias_donacion?: number | null
   },
 ): VencimientoConProducto {
   const diasRestantes = calcularDiasRestantes(row.fecha_vencimiento)
+  const diasDonacion = row.dias_donacion ?? diasDonacionLegacyPorSector(row.productos.sector)
   const nivelRiesgo = calcularNivelRiesgo(
     diasRestantes,
     row.cantidad,
     row.productos.venta_media_diaria,
+    diasDonacion,
   )
 
   return {
     ...row,
     familia_id: row.productos ? (row.familia_id ?? null) : null,
+    dias_donacion: diasDonacion,
     dias_restantes: diasRestantes,
     nivel_riesgo: nivelRiesgo,
   }
@@ -144,7 +158,6 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
     setFetchLoading(true)
     setError(null)
 
-    // Filtro temporal: no traer vencimientos con fecha anterior a hoy - 90 días
     const desde = new Date()
     desde.setDate(desde.getDate() - 90)
     const desdeIso = desde.toISOString().slice(0, 10)
@@ -152,7 +165,7 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
     const { data: operativos, error: operativoError } = await supabase
       .from('v_vencimientos_operativos')
       .select(
-        'id, producto_id, sucursal_id, usuario_id, cantidad, lote, fecha_vencimiento, fecha_carga, activo, created_at, descripcion, cod_art, codigo_barras, gramaje, marca, categoria, stock_actual, venta_media_diaria, familia_id, imagen_url',
+        'id, producto_id, sucursal_id, usuario_id, cantidad, lote, fecha_vencimiento, fecha_carga, activo, created_at, descripcion, cod_art, codigo_barras, gramaje, marca, categoria, sector, sector_nombre, dias_donacion, stock_actual, venta_media_diaria, familia_id, imagen_url',
       )
       .eq('activo', true)
       .eq('sucursal_id', sucursalId)
@@ -174,6 +187,7 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
             activo: row.activo,
             created_at: row.created_at,
             familia_id: row.familia_id,
+            dias_donacion: row.dias_donacion,
             productos: {
               descripcion: row.descripcion,
               cod_art: row.cod_art,
@@ -181,6 +195,7 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
               gramaje: row.gramaje,
               marca: row.marca,
               categoria: row.categoria,
+              sector: row.sector_nombre ?? row.sector,
               stock_actual: row.stock_actual,
               venta_media_diaria: row.venta_media_diaria,
               imagen_url: row.imagen_url,
@@ -195,20 +210,18 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
     }
 
     if (!vistaOperativaNoDisponible(operativoError)) {
-      // Un error de RLS/permisos nunca cae al esquema legacy.
       setError(operativoError.message)
       setFetchLoading(false)
       return
     }
 
-    // Compatibilidad pre-migración de 091.
     const { data: rows, error: fetchError } = await supabase
       .from('vencimientos')
       .select(`
         id, producto_id, sucursal_id, usuario_id, cantidad, lote,
         fecha_vencimiento, fecha_carga, activo, created_at,
         productos (
-          descripcion, cod_art, codigo_barras, gramaje, marca, categoria,
+          descripcion, cod_art, codigo_barras, gramaje, marca, categoria, sector,
           stock_actual, venta_media_diaria, familia_id, imagen_url
         )
       `)
