@@ -119,8 +119,8 @@ export default function VencimientoForm({ producto, sucursalId, onSuccess, venci
     const lote = form.lote.trim() || null
 
     if (vencimientoExistente) {
-      // Una sola transacción DB: actualiza estado actual y agrega la nueva
-      // observación, incluso si la cantidad sigue igual (señal de no movimiento).
+      // Una sola transacción DB para el vencimiento: actualiza estado actual y
+      // agrega una observación incluso si la cantidad sigue igual.
       const { error: updateError } = await supabase.rpc('actualizar_vencimiento_operador', {
         p_vencimiento_id: vencimientoExistente.id,
         p_cantidad: cantidadNum,
@@ -133,8 +133,7 @@ export default function VencimientoForm({ producto, sucursalId, onSuccess, venci
         return
       }
     } else {
-      // Alta + primera observación física en una sola transacción. Esto conserva
-      // el punto inicial del operador desde el primer día.
+      // Alta + primera observación física en una sola transacción.
       const { error: supabaseError } = await supabase.rpc('crear_vencimiento_operador', {
         p_producto_id: producto.id,
         p_sucursal_id: sucursalId,
@@ -153,17 +152,18 @@ export default function VencimientoForm({ producto, sucursalId, onSuccess, venci
       }
     }
 
-    // Compatibilidad temporal: stock total de Glaciar todavía vive en productos.
-    // La cantidad comprometida del vencimiento ya quedó persistida por RPC.
+    // Stock total es estado local SKU×sucursal. Nunca vuelve a escribirse en el
+    // catálogo global `productos` desde Scanner.
     const nuevoStock = parseInt(form.stockActual, 10)
     if (!isNaN(nuevoStock) && nuevoStock !== producto.stock_actual) {
-      const { error: stockError } = await supabase
-        .from('productos')
-        .update({ stock_actual: nuevoStock, updated_at: new Date().toISOString() })
-        .eq('id', producto.id)
+      const { error: stockError } = await supabase.rpc('actualizar_stock_producto_sucursal_scanner', {
+        p_sucursal_id: sucursalId,
+        p_producto_id: producto.id,
+        p_stock_actual: nuevoStock,
+      })
       if (stockError) {
         setGuardando(false)
-        setError(`Vencimiento guardado, pero error al actualizar stock: ${stockError.message}`)
+        setError(`Vencimiento guardado, pero error al actualizar stock local: ${stockError.message}`)
         return
       }
     }
