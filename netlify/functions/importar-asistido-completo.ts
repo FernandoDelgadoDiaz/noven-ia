@@ -36,7 +36,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     return json(500, { success: false, error: 'Configuración de servidor incompleta' })
   }
 
-  // JWT real del caller. El uid nunca se acepta desde el body.
   const authHeader = event.headers['authorization'] ?? event.headers['Authorization'] ?? ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
   if (!token) return json(401, { success: false, error: 'No autorizado: token ausente' })
@@ -77,7 +76,6 @@ const handler: Handler = async (event: HandlerEvent) => {
   }
 
   if (raw.length === 0) return json(400, { success: false, error: 'El archivo está vacío' })
-  // Protección operativa. Un asistido completo normal queda muy por debajo.
   if (raw.length > 4_500_000) {
     return json(413, {
       success: false,
@@ -110,13 +108,16 @@ const handler: Handler = async (event: HandlerEvent) => {
   const archivoSha256 = createHash('sha256').update(raw).digest('hex')
   const items = analisis.parser.filas.map((f) => ({
     cod_art: f.cod_art,
+    descripcion: f.descripcion,
+    marca: f.marca,
+    gramaje: f.gramaje,
     stock: f.stockCsv,
     venta_media_diaria: f.ventaMediaCsv,
     fila_origen: f.linea,
   }))
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
-  const { data, error } = await supabase.rpc('aplicar_importacion_glaciar_masiva', {
+  const { data, error } = await supabase.rpc('aplicar_importacion_glaciar_masiva_v2', {
     p_sucursal_id: sucursalId,
     p_usuario_id: uid,
     p_codigo_sucursal_fuente: codigoSucursal,
