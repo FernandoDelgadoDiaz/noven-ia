@@ -18,7 +18,7 @@ CREATE OR REPLACE FUNCTION noven_private.upsert_stock_producto_sucursal_scanner(
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, noven_private, pg_temp
+SET search_path = ''
 AS $$
 DECLARE
   v_uid uuid := (SELECT auth.uid());
