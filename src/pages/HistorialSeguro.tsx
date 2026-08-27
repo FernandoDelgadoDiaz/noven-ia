@@ -5,13 +5,13 @@ import {
   CircleCheckBig,
   Clock,
   HandHeart,
-  PackageOpen,
   Trash2,
   User,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getTrimestreActual } from '@/hooks/useAccionesOperativas'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
+import ProductIdentity from '@/components/product/ProductIdentity'
 
 type TipoAccion = 'vendido' | 'donacion' | 'decomiso'
 
@@ -25,6 +25,9 @@ interface AccionHistorial {
   usuario_nombre: string | null
   producto_descripcion: string
   producto_marca: string | null
+  producto_gramaje: string | null
+  producto_cod_art: string | null
+  producto_codigo_barras: string | null
   producto_imagen_url: string | null
 }
 
@@ -110,7 +113,7 @@ export default function HistorialSeguro() {
 
     const { data, error: fetchError } = await supabase
       .from('v_acciones_operativas_historial')
-      .select('id, tipo, cantidad, created_at, observaciones, usuario_id, usuario_nombre, producto_descripcion, producto_marca, producto_imagen_url')
+      .select('id, tipo, cantidad, created_at, observaciones, usuario_id, usuario_nombre, producto_descripcion, producto_marca, producto_gramaje, producto_cod_art, producto_codigo_barras, producto_imagen_url')
       .eq('tipo', tipo)
       .eq('trimestre', trimestreInfo.trimestre)
       .eq('anio', trimestreInfo.anio)
@@ -184,38 +187,35 @@ export default function HistorialSeguro() {
 
         {loading && (
           <div className="space-y-2.5">
-            {[0, 1, 2].map((i) => <div key={i} className="bg-white rounded-card shadow-card h-20 animate-pulse" />)}
+            {[0, 1, 2].map((i) => <div key={i} className="bg-white rounded-card shadow-card h-24 animate-pulse" />)}
           </div>
         )}
 
         {!loading && !error && acciones.length > 0 && (
           <div className="space-y-2.5">
             {acciones.map((a) => (
-              <div key={a.id} className="bg-white rounded-card shadow-card p-3.5 flex gap-3">
-                <div className="h-14 w-14 rounded-xl bg-muted overflow-hidden shrink-0 flex items-center justify-center">
-                  {a.producto_imagen_url ? (
-                    <img src={a.producto_imagen_url} alt={a.producto_descripcion} className="h-full w-full object-cover" loading="lazy" />
-                  ) : (
-                    <PackageOpen className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
-                  )}
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-foreground font-semibold text-sm leading-snug line-clamp-2 min-w-0">{a.producto_descripcion}</p>
-                    <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${config.iconBg} ${config.iconColor}`}>
+              <div key={a.id} className="bg-white rounded-card shadow-card p-3.5">
+                <ProductIdentity
+                  producto={{
+                    descripcion: a.producto_descripcion,
+                    marca: a.producto_marca,
+                    gramaje: a.producto_gramaje,
+                    cod_art: a.producto_cod_art,
+                    codigo_barras: a.producto_codigo_barras,
+                    imagen_url: a.producto_imagen_url,
+                  }}
+                  compact
+                  imageSize="sm"
+                >
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-muted-foreground">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${config.iconBg} ${config.iconColor}`}>
                       {tipo === 'vendido' ? `saldo ${a.cantidad} u.` : `${a.cantidad} u.`}
                     </span>
-                  </div>
-                  {a.producto_marca && <p className="text-muted-foreground text-xs mt-0.5">{a.producto_marca}</p>}
-
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{formatFechaHora(a.created_at)}</span>
                     {a.usuario_nombre && <span className="flex items-center gap-1"><User className="h-3 w-3" />{a.usuario_nombre}</span>}
                   </div>
-
                   {a.observaciones && <p className="text-muted-foreground text-xs mt-1.5 italic border-l-2 border-border pl-2">{a.observaciones}</p>}
-                </div>
+                </ProductIdentity>
               </div>
             ))}
           </div>
