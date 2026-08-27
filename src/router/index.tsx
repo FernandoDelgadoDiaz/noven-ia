@@ -16,7 +16,7 @@ const Vencimientos = lazy(() => import('../pages/Vencimientos'))
 const Historial = lazy(() => import('../pages/Historial'))
 const Analisis = lazy(() => import('../pages/Analisis'))
 const ImportarInicio = lazy(() => import('../pages/ImportarInicio'))
-const Importar = lazy(() => import('../pages/Importar'))
+const ImportarFamilia = lazy(() => import('../pages/ImportarFamiliaSeguro'))
 const ImportarMasivo = lazy(() => import('../pages/ImportarMasivo'))
 const PendientesCatalogo = lazy(() => import('../pages/PendientesCatalogo'))
 const AprenderPendientesCsv = lazy(() => import('../pages/AprenderPendientesCsv'))
@@ -108,7 +108,7 @@ export const router = createBrowserRouter([
                 path: 'importar/familia',
                 element: (
                   <ErrorBoundary>
-                    <Suspense {...suspenseProps}><Importar /></Suspense>
+                    <Suspense {...suspenseProps}><ImportarFamilia /></Suspense>
                   </ErrorBoundary>
                 ),
               },
