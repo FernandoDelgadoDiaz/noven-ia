@@ -1,0 +1,37 @@
+name: Production HTTP Diagnostic
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/site-http-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Inspect production responses
+        env:
+          SITE_URL: https://noven-ia.netlify.app
+        shell: bash
+        run: |
+          set -u
+          echo '=== ROOT ==='
+          curl -sS -L -D root.headers -o root.html -w 'HTTP_STATUS=%{http_code}\nFINAL_URL=%{url_effective}\n' "${SITE_URL}/" || true
+          sed -n '1,20p' root.headers || true
+          echo 'ROOT_ASSETS:'
+          grep -oE '/assets/[^" ]+' root.html | head -n 10 || true
+          echo 'ROOT_PREFIX:'
+          head -c 300 root.html || true
+          echo
+
+          echo '=== MARKER A ==='
+          curl -sS -L -o marker.txt -w 'HTTP_STATUS=%{http_code}\nFINAL_URL=%{url_effective}\n' "${SITE_URL}/deploy-marker.txt" || true
+          echo 'MARKER_BODY:'
+          cat marker.txt 2>/dev/null || true
+          echo
