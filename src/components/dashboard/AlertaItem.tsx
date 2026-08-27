@@ -26,7 +26,9 @@ function formatDiasRestantes(dias: number): string {
   return `Vence en ${dias} días`
 }
 
-function formatMotivo(cantidadLote: number, ventaMediaDiaria: number, diasRestantes: number): string {
+function formatMotivo(cantidadLote: number, ventaMediaDiaria: number, diasRestantes: number, nivel: string): string {
+  if (nivel === 'decomiso') return 'Vencido · decomiso requerido'
+  if (nivel === 'donacion') return 'Retiro obligatorio'
   if (ventaMediaDiaria <= 0) return 'Sin rotación'
   const diasStock = calcularDiasStock(cantidadLote, ventaMediaDiaria)
   if (diasStock > diasRestantes) return 'Rotación baja'
@@ -46,11 +48,13 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
 
   const titulo = formatTitulo(producto.descripcion, producto.gramaje, producto.marca)
   const diasLabel = formatDiasRestantes(vencimiento.dias_restantes)
-  const motivo = formatMotivo(vencimiento.cantidad, producto.venta_media_diaria, vencimiento.dias_restantes)
+  const motivo = formatMotivo(vencimiento.cantidad, producto.venta_media_diaria, vencimiento.dias_restantes, vencimiento.nivel_riesgo)
   const isDecomiso = vencimiento.nivel_riesgo === 'decomiso'
   const isDonacion = vencimiento.nivel_riesgo === 'donacion'
   const showPulse = cfg.dotPulse
   const showAccionBtn = (isDecomiso || isDonacion) && Boolean(onRegistrarAccion)
+  const accionesVisibles = (isDecomiso || isDonacion) ? [] : vencimiento.acciones_sugeridas.slice(0, 2)
+  const accionesRestantes = Math.max(vencimiento.acciones_sugeridas.length - accionesVisibles.length, 0)
 
   function handleAccionClick(e: React.MouseEvent): void {
     e.stopPropagation()
@@ -102,7 +106,7 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick() } : undefined}
     >
-      <div className="p-4 md:p-5 flex items-start gap-4">
+      <div className="p-3.5 md:p-4 flex items-start gap-3">
 
         {/* Left: product thumbnail 60x60 */}
         <div className="relative shrink-0">
@@ -110,18 +114,20 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setLightboxAbierto(true) }}
-              className="block h-[60px] w-[60px] rounded-2xl overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-brand cursor-pointer touch-manipulation"
+              className="block h-[52px] w-[52px] rounded-2xl overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-brand cursor-pointer touch-manipulation"
               style={{ WebkitTapHighlightColor: 'transparent' }}
               aria-label={`Ver foto de ${producto.descripcion}`}
             >
               <img
-                src={producto.imagen_url}
+                src={producto.imagen_thumb_url ?? producto.imagen_url}
                 alt={producto.descripcion}
+                loading="lazy"
+                decoding="async"
                 className="h-full w-full object-cover"
               />
             </button>
           ) : (
-            <div className={`h-[60px] w-[60px] rounded-2xl ${cfg.statIconBg} flex items-center justify-center`}>
+            <div className={`h-[52px] w-[52px] rounded-2xl ${cfg.statIconBg} flex items-center justify-center`}>
               <Package className={`h-6 w-6 ${cfg.statIconColor}`} aria-hidden="true" />
             </div>
           )}
@@ -161,40 +167,35 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
         </div>
       </div>
 
-      {/* Operative row: SKU · Familia · Cantidad · Estado */}
-      <div className="grid grid-cols-2 gap-x-3 gap-y-2 px-4 md:px-5 pb-3 pt-1">
-        {producto.cod_art && (
-          <DatoOperativo label="SKU" valor={producto.cod_art} mono />
-        )}
-        {familiaNombre && (
-          <DatoOperativo label="Familia" valor={familiaNombre} />
-        )}
-        <DatoOperativo label="Cantidad" valor={`${vencimiento.cantidad} un`} />
-        <DatoOperativo label="Estado" valor="Sin gestionar" />
+      {/* Identificación operativa compacta */}
+      <div className="px-3.5 md:px-4 pb-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
+        {producto.cod_art && <span className="font-mono font-semibold text-foreground/70">SKU {producto.cod_art}</span>}
+        {producto.cod_art && <span aria-hidden="true">·</span>}
+        <span className="font-semibold text-foreground/70">{vencimiento.cantidad} un</span>
+        {familiaNombre && <span aria-hidden="true">·</span>}
+        {familiaNombre && <span className="font-medium truncate max-w-[190px]">{familiaNombre}</span>}
       </div>
 
-      {/* Bottom: smart action chips — compactos */}
-      {vencimiento.acciones_sugeridas.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 px-4 md:px-5 pb-3">
-          {vencimiento.acciones_sugeridas.map((accion) => (
-            <span
-              key={accion}
-              className="text-[11px] px-2 py-0.5 rounded-full font-semibold border bg-orange-50 text-orange-700 border-orange-200"
-            >
+      {/* Próximos pasos: máximo dos para evitar competencia visual */}
+      {accionesVisibles.length > 0 && (
+        <div className="flex items-center gap-1.5 px-3.5 md:px-4 pb-2 overflow-hidden">
+          {accionesVisibles.map((accion) => (
+            <span key={accion} className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-orange-50 text-orange-700 border border-orange-100 truncate max-w-[190px]">
               {accion}
             </span>
           ))}
+          {accionesRestantes > 0 && <span className="text-[10px] text-muted-foreground shrink-0">+{accionesRestantes}</span>}
         </div>
       )}
 
       {/* Accion operativa: donacion o decomiso */}
       {showAccionBtn && (
-        <div className="px-4 md:px-5 pb-4 pt-0">
+        <div className="px-3.5 md:px-4 pb-3 pt-0">
           <button
             type="button"
             onClick={handleAccionClick}
             className={[
-              'w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold border-2 transition-all duration-150 active:scale-[0.97]',
+              'w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold border transition-all duration-150 active:scale-[0.97]',
               isDonacion
                 ? 'border-orange-500 text-orange-600 hover:bg-orange-50'
                 : 'border-red-600 text-red-600 hover:bg-red-50',
@@ -209,20 +210,5 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
       )}
     </div>
     </>
-  )
-}
-
-interface DatoOperativoProps {
-  label: string
-  valor: string
-  mono?: boolean
-}
-
-function DatoOperativo({ label, valor, mono }: DatoOperativoProps) {
-  return (
-    <div className="min-w-0">
-      <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60 leading-none">{label}</p>
-      <p className={`text-xs font-semibold text-foreground/80 truncate mt-0.5 ${mono ? 'font-mono' : ''}`}>{valor}</p>
-    </div>
   )
 }

@@ -116,6 +116,7 @@ export interface Producto {
   stock_actual: number
   precio_costo: number | null
   imagen_url: string | null
+  imagen_thumb_url?: string | null
   familia_id: string | null
   activo: boolean
   created_at: string
