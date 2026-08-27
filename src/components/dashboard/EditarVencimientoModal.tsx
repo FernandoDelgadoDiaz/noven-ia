@@ -14,10 +14,9 @@ import type { EstadoSeguimientoRag } from '@/types/index'
 interface VencimientoParaEditar {
   id: string
   producto_id: string
-  sucursal_id: string
   fecha_vencimiento: string
   cantidad: number
-  dias_donacion: number
+  dias_donacion?: number
   nivel_riesgo: string
   productos: {
     descripcion: string
@@ -25,7 +24,6 @@ interface VencimientoParaEditar {
     codigo_barras: string | null
     gramaje: string | null
     marca: string | null
-    sector: string | null
     stock_actual: number
     venta_media_diaria: number
     imagen_url?: string | null
@@ -33,6 +31,7 @@ interface VencimientoParaEditar {
 }
 
 interface SeguimientoRagRow {
+  dias_donacion: number | null
   rag_porcentaje: number | null
   rag_aplicado_at: string | null
   cantidad_base_rag: number | null
@@ -72,6 +71,7 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
   const [stockActual, setStockActual] = useState(vencimiento.productos.stock_actual)
   const [fechaVencimiento, setFechaVencimiento] = useState(vencimiento.fecha_vencimiento)
   const [cantidad, setCantidad] = useState(vencimiento.cantidad)
+  const [diasDonacion, setDiasDonacion] = useState(vencimiento.dias_donacion ?? 10)
   const [guardando, setGuardando] = useState(false)
   const [eliminando, setEliminando] = useState(false)
   const [confirmarEliminar, setConfirmarEliminar] = useState(false)
@@ -81,7 +81,7 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
       calcularDiasRestantes(vencimiento.fecha_vencimiento),
       vencimiento.cantidad,
       vencimiento.productos.venta_media_diaria,
-      vencimiento.dias_donacion,
+      vencimiento.dias_donacion ?? 10,
     ),
   )
 
@@ -103,14 +103,13 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
       const { data, error: ragError } = await supabase
         .from('v_seguimiento_rag_actual')
         .select(
-          'rag_porcentaje, rag_aplicado_at, cantidad_base_rag, cantidad_observada, unidades_vendidas_observadas, velocidad_observada, velocidad_necesaria, dias_comerciales_restantes, estado_seguimiento_rag',
+          'dias_donacion, rag_porcentaje, rag_aplicado_at, cantidad_base_rag, cantidad_observada, unidades_vendidas_observadas, velocidad_observada, velocidad_necesaria, dias_comerciales_restantes, estado_seguimiento_rag',
         )
         .eq('vencimiento_id', vencimiento.id)
         .maybeSingle()
 
       if (!activo) return
 
-      // Compatibilidad mientras producción todavía no tenga las nuevas vistas.
       if (ragError?.code === '42P01' || ragError?.code === 'PGRST205') {
         setSeguimientoRag(null)
         setCargandoRag(false)
@@ -126,6 +125,7 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
 
       const row = (data ?? null) as SeguimientoRagRow | null
       setSeguimientoRag(row)
+      if (row?.dias_donacion != null) setDiasDonacion(row.dias_donacion)
       setRagPorcentaje(row?.rag_porcentaje != null ? String(row.rag_porcentaje) : '')
       setCargandoRag(false)
     }
@@ -176,17 +176,17 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
         calcularDiasRestantes(fechaVencimiento),
         cantidad,
         vencimiento.productos.venta_media_diaria,
-        vencimiento.dias_donacion,
+        diasDonacion,
       ),
     )
-  }, [fechaVencimiento, cantidad, vencimiento.productos.venta_media_diaria, vencimiento.dias_donacion])
+  }, [fechaVencimiento, cantidad, vencimiento.productos.venta_media_diaria, diasDonacion])
 
   const diasRestantes = calcularDiasRestantes(fechaVencimiento)
   const metricas = calcularMetricasRiesgo(
     diasRestantes,
     cantidad,
     vencimiento.productos.venta_media_diaria,
-    vencimiento.dias_donacion,
+    diasDonacion,
   )
   const puedeGestionarRag = nivelCalculado === 'radar' || nivelCalculado === 'urgente'
 
@@ -194,7 +194,6 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
     setError(null)
     setGuardando(true)
 
-    // 1. Fecha: sigue siendo edición del registro actual.
     if (fechaVencimiento !== vencimiento.fecha_vencimiento) {
       const { error: errFecha } = await supabase
         .from('vencimientos')
@@ -207,8 +206,6 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
       }
     }
 
-    // 2. Control físico del operador: SIEMPRE append-only, incluso 10 → 10.
-    // De esa forma "no se vendió nada" se convierte en una señal medible.
     const { error: errControl } = await supabase.rpc('registrar_control_vencimiento', {
       p_vencimiento_id: vencimiento.id,
       p_cantidad_comprometida: cantidad,
@@ -220,8 +217,6 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
       return
     }
 
-    // 3. Un porcentaje distinto crea una NUEVA intervención RAG. Mantener 30%
-    // al día siguiente sólo registra el control físico; no duplica el RAG.
     if (puedeGestionarRag && ragPorcentaje.trim() !== '') {
       const porcentaje = Number(ragPorcentaje)
       if (!Number.isFinite(porcentaje) || porcentaje <= 0 || porcentaje > 100) {
@@ -245,7 +240,6 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
       }
     }
 
-    // Compatibilidad legacy de stock total; el stock comprometido es `cantidad`.
     if (stockActual !== vencimiento.productos.stock_actual) {
       const { error: errProd } = await supabase
         .from('productos')
@@ -283,10 +277,6 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
   if (vencimiento.productos.gramaje) partes.push(vencimiento.productos.gramaje)
   const tituloBase = partes.join(' ')
   const titulo = vencimiento.productos.marca ? `${tituloBase} — ${vencimiento.productos.marca}` : tituloBase
-
-  const diasStock = vencimiento.productos.venta_media_diaria > 0
-    ? `${metricas.dias_stock.toFixed(1)} días`
-    : 'Sin rotación'
 
   const inputCls = 'w-full h-11 px-3 bg-surface-base border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150'
 
@@ -366,7 +356,7 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground px-1">
-            Retiro para donación: {vencimiento.dias_donacion} días antes del vencimiento.
+            Retiro para donación: {diasDonacion} días antes del vencimiento.
           </p>
         </div>
 
