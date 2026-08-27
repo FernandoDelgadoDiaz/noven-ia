@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, CheckCircle, Loader2, RefreshCw, Tags, TriangleAlert } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
+import ProductIdentity from '@/components/product/ProductIdentity'
 
 interface SucursalPendiente {
   id: string
@@ -310,14 +311,19 @@ export default function PendientesCatalogo() {
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
-                        <div>
-                          <p className="font-mono text-brand text-xs font-bold">{p.cod_art}</p>
-                          <h2 className="text-sm font-bold text-foreground mt-0.5">{p.descripcion}</h2>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {[p.marca, p.gramaje].filter(Boolean).join(' · ') || 'Sin marca/gramaje informado'}
-                          </p>
-                        </div>
-                        <div className="md:text-right">
+                        <ProductIdentity
+                          producto={{
+                            descripcion: p.descripcion,
+                            marca: p.marca,
+                            gramaje: p.gramaje,
+                            cod_art: p.cod_art,
+                            codigo_barras: null,
+                          }}
+                          showImage={false}
+                          compact
+                          className="flex-1"
+                        />
+                        <div className="md:text-right shrink-0">
                           <p className="text-xs font-semibold text-foreground">{p.sucursales.length} sucursal(es)</p>
                           <p className="text-[11px] text-muted-foreground">{p.detecciones} detección(es)</p>
                         </div>
