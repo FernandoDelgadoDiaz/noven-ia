@@ -202,22 +202,13 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
     }
 
     const hoyDate = new Date()
-
-    const transiciones: string[] = []
     const conRiesgo: VencimientoConRiesgo[] = typed
-      .map((row) => {
-        const resultado = calcularRiesgo(row, row.producto, hoyDate)
-        if (resultado.nivel_riesgo === 'urgente' && row.nivel_actual !== 'urgente') {
-          transiciones.push(row.id)
-        }
-        return resultado
-      })
+      .map((row) => calcularRiesgo(row, row.producto, hoyDate))
       .sort((a, b) => a.dias_restantes - b.dias_restantes)
 
-    if (transiciones.length > 0) {
-      void supabase.from('vencimientos').update({ nivel_actual: 'urgente' }).in('id', transiciones)
-    }
-
+    // `nivel_actual` es estado persistido de servidor. El cliente sólo calcula la
+    // presentación inmediata; el cron/RPC de PostgreSQL es quien persiste cambios
+    // usando VMD de producto_sucursal. No hay DML browser sobre vencimientos.
     setRawData(conRiesgo)
     setFetchLoading(false)
   }, [sucursalId])
