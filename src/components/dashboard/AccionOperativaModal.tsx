@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { X, HandHeart, Trash2, AlertTriangle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import ProductIdentity from '@/components/product/ProductIdentity'
 import type { VencimientoConRiesgo } from '@/types/index'
 
 type TipoAccion = 'donacion' | 'decomiso'
@@ -92,7 +93,6 @@ export default function AccionOperativaModal({
     >
       <div className="w-full sm:max-w-md bg-white rounded-t-[28px] sm:rounded-[28px] shadow-2xl overflow-hidden">
 
-        {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/40">
           <div className="flex items-center gap-3">
             <div className={`h-10 w-10 rounded-xl ${iconBg} flex items-center justify-center shrink-0`}>
@@ -116,32 +116,22 @@ export default function AccionOperativaModal({
           </button>
         </div>
 
-        {/* Body */}
         <div className="px-5 py-5 space-y-4">
-
-          {/* Producto info */}
-          <div className="rounded-2xl bg-muted/50 px-4 py-3 space-y-1">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Producto
-            </p>
-            <p className="font-bold text-foreground text-sm leading-snug">{nombreProducto}</p>
-            {vencimiento.producto.marca && (
-              <p className="text-xs text-muted-foreground">{vencimiento.producto.marca}</p>
-            )}
-            <div className="flex items-center gap-2 pt-1">
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${esDonacion ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
-                {vencimiento.cantidad} unidad{vencimiento.cantidad !== 1 ? 'es' : ''}
-              </span>
-            </div>
+          <div className="rounded-2xl bg-muted/50 px-4 py-3">
+            <ProductIdentity producto={vencimiento.producto} compact imageSize="sm">
+              <div className="pt-2">
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${esDonacion ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
+                  {vencimiento.cantidad} unidad{vencimiento.cantidad !== 1 ? 'es' : ''}
+                </span>
+              </div>
+            </ProductIdentity>
           </div>
 
-          {/* Mensaje de advertencia */}
           <div className="flex items-start gap-3 rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3">
             <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
             <p className="text-sm text-amber-800 leading-snug">{mensaje}</p>
           </div>
 
-          {/* Observaciones */}
           <div className="space-y-1.5">
             <label htmlFor="obs-input" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Observaciones <span className="font-normal normal-case">(opcional)</span>
@@ -158,7 +148,6 @@ export default function AccionOperativaModal({
             />
           </div>
 
-          {/* Error */}
           {error && (
             <div role="alert" className="rounded-xl bg-red-50 border border-red-200 px-4 py-2.5 text-sm text-red-700">
               {error}
@@ -166,7 +155,6 @@ export default function AccionOperativaModal({
           )}
         </div>
 
-        {/* Footer */}
         <div className="flex gap-3 px-5 pb-6 pt-0">
           <button
             type="button"

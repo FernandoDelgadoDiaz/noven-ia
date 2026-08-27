@@ -19,6 +19,7 @@ import {
 } from '@/lib/riesgo'
 import { RISK_VISUAL } from '@/lib/risk-config'
 import { cacheBustPublicUrl, pathImagenProducto, prepararImagenProducto } from '@/lib/image-pipeline'
+import ProductIdentity from '@/components/product/ProductIdentity'
 import type { EstadoSeguimientoRag } from '@/types/index'
 
 interface VencimientoParaEditar {
@@ -332,8 +333,6 @@ export default function EditarVencimientoModalSeguro({
 
   const badge = BADGE_CONFIG[nivelCalculado]
   const riskViz = RISK_VISUAL[nivelCalculado]
-  const tituloBase = [vencimiento.productos.descripcion, vencimiento.productos.gramaje].filter(Boolean).join(' ')
-  const titulo = vencimiento.productos.marca ? `${tituloBase} — ${vencimiento.productos.marca}` : tituloBase
   const ocupado = guardando || cerrandoVendido || anulando
   const inputCls = 'w-full h-11 px-3 bg-surface-base border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150'
 
@@ -342,7 +341,7 @@ export default function EditarVencimientoModalSeguro({
       <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={ocupado ? undefined : onClose} />
       <div className="relative z-10 w-full sm:max-w-md bg-white sm:rounded-modal rounded-t-modal shadow-modal overflow-hidden max-h-[92vh] overflow-y-auto animate-slide-up">
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4 border-b border-border">
-          <div className="flex gap-3 min-w-0">
+          <div className="flex gap-3 min-w-0 flex-1">
             <div className="shrink-0">
               {fotoUrl ? (
                 <img src={fotoUrl} alt={vencimiento.productos.descripcion} decoding="async" className="h-20 w-20 rounded-2xl object-cover" />
@@ -356,12 +355,12 @@ export default function EditarVencimientoModalSeguro({
               {fotoGuardada && <p className="text-[10px] text-emerald-600 text-center mt-1">Guardada</p>}
               {errorFoto && <p className="text-[10px] text-red-500 text-center mt-1 max-w-20">{errorFoto}</p>}
             </div>
-            <div className="min-w-0">
-              <p className="text-xs text-muted-foreground font-medium">Control del producto</p>
-              <h2 className="font-bold text-sm text-foreground leading-snug mt-1">{titulo}</h2>
-              <p className="text-xs text-muted-foreground mt-2">Cod. <span className="font-mono">{vencimiento.productos.cod_art ?? '—'}</span></p>
-              <p className="text-xs text-muted-foreground">VMD Glaciar: <span className="font-semibold text-foreground/80">{vencimiento.productos.venta_media_diaria} un/día</span></p>
-            </div>
+            <ProductIdentity producto={vencimiento.productos} showImage={false} label="Control del producto" compact>
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                <span className="font-semibold text-foreground/70">VMD Glaciar:</span>{' '}
+                <span className="font-semibold text-foreground/80">{vencimiento.productos.venta_media_diaria} un/día</span>
+              </p>
+            </ProductIdentity>
           </div>
           <button type="button" onClick={onClose} disabled={ocupado} className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted disabled:opacity-40" aria-label="Cerrar"><X className="h-5 w-5" /></button>
         </div>

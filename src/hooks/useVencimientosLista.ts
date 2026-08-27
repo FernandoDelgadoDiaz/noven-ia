@@ -279,14 +279,21 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
   }, [vencimientosTodos])
 
   const vencimientos = useMemo(() => {
+    const termino = busqueda.trim().toLowerCase()
     return vencimientosTodos
       .filter((v) => {
         if (filtroNivel !== 'todos' && v.nivel_riesgo !== filtroNivel) return false
         if (filtroCategoria && v.productos.categoria !== filtroCategoria) return false
-        if (
-          busqueda.trim() !== '' &&
-          !v.productos.descripcion.toLowerCase().includes(busqueda.trim().toLowerCase())
-        ) return false
+        if (termino !== '') {
+          const campos = [
+            v.productos.descripcion,
+            v.productos.marca,
+            v.productos.gramaje,
+            v.productos.cod_art,
+            v.productos.codigo_barras,
+          ]
+          if (!campos.some((valor) => valor?.toLowerCase().includes(termino))) return false
+        }
         return true
       })
       .sort((a, b) => a.dias_restantes - b.dias_restantes)

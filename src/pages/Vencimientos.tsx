@@ -5,8 +5,7 @@ import { useVencimientosLista } from '@/hooks/useVencimientosLista'
 import type { VencimientoConProducto, FiltroNivel, NivelRiesgo } from '@/hooks/useVencimientosLista'
 import { RISK_VISUAL } from '@/lib/risk-config'
 import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
+import ProductIdentity from '@/components/product/ProductIdentity'
 
 function textoFecha(diasRestantes: number): { texto: string; cls: string } {
   if (diasRestantes < 0) {
@@ -22,13 +21,9 @@ function formatearFecha(isoDate: string): string {
   return `${day}/${month}/${year}`
 }
 
-// ── Skeleton ──────────────────────────────────────────────────────────────────
-
 function SkeletonCard() {
-  return <div className="bg-white rounded-card shadow-card h-24 animate-pulse" aria-hidden="true" />
+  return <div className="bg-white rounded-card shadow-card h-32 animate-pulse" aria-hidden="true" />
 }
-
-// ── VencimientoCard ───────────────────────────────────────────────────────────
 
 interface VencimientoCardProps {
   vencimiento: VencimientoConProducto
@@ -51,49 +46,32 @@ function VencimientoCard({ vencimiento, onClick }: VencimientoCardProps) {
         v.cardGradient,
       ].join(' ')}
     >
-      {/* Left accent */}
       <div className={`w-1.5 shrink-0 ${v.accentBar}`} />
-
-      {/* Content */}
       <div className="flex-1 px-4 py-3.5 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            {v.dotPulse ? (
-              <span className="relative flex h-2.5 w-2.5 shrink-0">
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${v.dot} opacity-60`} />
-                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${v.dot}`} />
-              </span>
-            ) : (
-              <span className={`shrink-0 h-2.5 w-2.5 rounded-full ${v.dot}`} aria-label={v.label} />
-            )}
-            <p className="text-foreground font-semibold text-sm leading-snug line-clamp-2 min-w-0">
-              {vencimiento.productos.descripcion}
-            </p>
+        <div className="flex items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <ProductIdentity
+              producto={vencimiento.productos}
+              compact
+              imageSize="sm"
+            />
           </div>
           <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full leading-tight ${v.badge}`}>
             {v.label.toUpperCase()}
           </span>
         </div>
 
-        {(vencimiento.productos.marca || vencimiento.productos.categoria) && (
-          <p className="text-muted-foreground text-xs mt-0.5 ml-[18px]">
-            {[vencimiento.productos.marca, vencimiento.productos.categoria].filter(Boolean).join(' · ')}
-          </p>
-        )}
-
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-2 text-xs ml-[18px]">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-2 text-xs ml-[60px]">
           <span className="text-muted-foreground">{fechaFormateada}</span>
           <span className="text-border">·</span>
           <span className={clsDias}>{textoDias}</span>
           <span className="text-border">·</span>
-          <span className="text-muted-foreground">Cant: {vencimiento.cantidad}</span>
+          <span className="text-muted-foreground">Comprometido: {vencimiento.cantidad} un.</span>
         </div>
       </div>
     </button>
   )
 }
-
-// ── ChipFiltro ────────────────────────────────────────────────────────────────
 
 interface ChipFiltroProps {
   activo: boolean
@@ -115,19 +93,13 @@ function ChipFiltro({ activo, onClick, children, claseInactivo, claseActivo }: C
   )
 }
 
-// ── Niveles de filtro ─────────────────────────────────────────────────────────
-
 const NIVELES_FILTRO: NivelRiesgo[] = ['decomiso', 'donacion', 'urgente', 'radar', 'seguro']
-
-// Filtro vía query param desde las cards del Dashboard
 const NIVELES_RIESGO_CRITICO: NivelRiesgo[] = ['urgente', 'donacion', 'decomiso']
 type FiltroUrl = 'riesgo' | 'radar'
 const FILTRO_URL_LABEL: Record<FiltroUrl, string> = {
   riesgo: 'productos en riesgo crítico',
   radar: 'productos en radar',
 }
-
-// ── Página principal ──────────────────────────────────────────────────────────
 
 export default function Vencimientos() {
   const navigate = useNavigate()
@@ -157,7 +129,6 @@ export default function Vencimientos() {
 
   const hayFiltrosActivos = filtroNivel !== 'todos' || filtroCategoria !== '' || busqueda.trim() !== ''
 
-  // Aplica el filtro de la URL (cards del Dashboard) sobre el resultado ya filtrado por chips/búsqueda
   const vencimientosMostrados = useMemo(() => {
     if (filtroUrl === 'riesgo') return vencimientos.filter((v) => NIVELES_RIESGO_CRITICO.includes(v.nivel_riesgo))
     if (filtroUrl === 'radar') return vencimientos.filter((v) => v.nivel_riesgo === 'radar')
@@ -177,7 +148,6 @@ export default function Vencimientos() {
 
   return (
     <div className="min-h-screen bg-surface-base">
-      {/* Modal */}
       {vencimientoEditando !== null && (
         <EditarVencimientoModal
           vencimiento={{
@@ -203,7 +173,6 @@ export default function Vencimientos() {
         />
       )}
 
-      {/* Header */}
       <header className="sticky top-0 z-10 bg-white border-b border-border/40 px-4 md:px-8 py-4 md:py-5">
         <div className="flex items-center justify-between">
           <div>
@@ -238,8 +207,6 @@ export default function Vencimientos() {
       </header>
 
       <main className="px-4 md:px-8 py-5 md:py-6 space-y-4">
-
-        {/* Error */}
         {error && (
           <div role="alert" className="rounded-card bg-red-50 border border-red-200 px-4 py-3 flex items-center justify-between gap-3 animate-fade-in">
             <p className="text-sm text-red-600">No pudimos cargar los datos. Revisá tu conexión.</p>
@@ -253,7 +220,6 @@ export default function Vencimientos() {
           </div>
         )}
 
-        {/* Sin familias asignadas */}
         {!loading && sinFamilias && (
           <div role="alert" className="rounded-card bg-amber-50 border border-amber-200 px-5 py-4 flex items-center gap-4 animate-fade-in">
             <div className="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
@@ -266,23 +232,20 @@ export default function Vencimientos() {
           </div>
         )}
 
-        {/* Search bar */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <input
             type="search"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar producto..."
+            placeholder="Buscar descripción, interno o EAN..."
             className="w-full h-10 pl-9 pr-4 bg-white border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 shadow-card transition-all duration-150"
-            aria-label="Buscar por descripción"
+            aria-label="Buscar producto por descripción, código interno o EAN"
           />
         </div>
 
-        {/* Filtros expandibles */}
         {mostrarFiltros && (
           <div className="space-y-2.5 animate-fade-in">
-            {/* Chips de nivel */}
             <div className="flex gap-2 overflow-x-auto pb-0.5 no-scrollbar">
               <ChipFiltro
                 activo={filtroNivel === 'todos'}
@@ -308,7 +271,6 @@ export default function Vencimientos() {
               })}
             </div>
 
-            {/* Selector categoría */}
             <select
               value={filtroCategoria}
               onChange={(e) => setFiltroCategoria(e.target.value)}
@@ -321,7 +283,6 @@ export default function Vencimientos() {
           </div>
         )}
 
-        {/* Filtros activos: limpiar */}
         {hayFiltrosActivos && (
           <div className="flex items-center justify-between animate-fade-in">
             <span className="text-xs text-muted-foreground">{vencimientosMostrados.length} resultado{vencimientosMostrados.length !== 1 ? 's' : ''}</span>
@@ -335,7 +296,6 @@ export default function Vencimientos() {
           </div>
         )}
 
-        {/* Banner de filtro desde Dashboard */}
         {filtroUrl && (
           <div className="flex items-center justify-between gap-3 rounded-card bg-brand-light border border-brand-muted px-4 py-3 animate-fade-in">
             <p className="text-sm text-brand font-medium min-w-0">
@@ -352,14 +312,12 @@ export default function Vencimientos() {
           </div>
         )}
 
-        {/* Skeletons */}
         {loading && (
           <div className="space-y-2.5">
             <SkeletonCard /><SkeletonCard /><SkeletonCard />
           </div>
         )}
 
-        {/* Lista */}
         {!loading && !error && vencimientosMostrados.length > 0 && (
           <div className="space-y-2.5">
             {vencimientosMostrados.map((v) => (
@@ -368,7 +326,6 @@ export default function Vencimientos() {
           </div>
         )}
 
-        {/* Vacío */}
         {!loading && !error && vencimientosMostrados.length === 0 && (
           <div className="rounded-card bg-white shadow-card px-6 py-12 flex flex-col items-center text-center gap-4">
             <div className="p-4 bg-muted rounded-full">

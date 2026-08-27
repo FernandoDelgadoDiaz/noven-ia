@@ -9,8 +9,10 @@ export interface AlertaRadarZonal {
   estado: 'pendiente' | 'revisar_despues'
   producto_id: string
   cod_art: string
+  codigo_barras: string | null
   descripcion: string
   marca: string | null
+  gramaje: string | null
   imagen_thumb_url: string | null
   familia_id: string
   fecha_vencimiento: string

@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react'
 import { Package, ChevronRight, HandHeart, Trash2, X } from 'lucide-react'
 import { RISK_VISUAL } from '@/lib/risk-config'
 import { calcularDiasStock } from '@/lib/riesgo'
+import { ProductIdentityMeta } from '@/components/product/ProductIdentity'
 import type { VencimientoConRiesgo } from '@/types/index'
 
 interface AlertaItemProps {
   vencimiento: VencimientoConRiesgo
-  /** Nombre de la familia del producto (display-only). Si es null/undefined no se muestra el bloque. */
   familiaNombre?: string | null
   onClick?: () => void
   onRegistrarAccion?: (vencimiento: VencimientoConRiesgo, tipo: 'donacion' | 'decomiso') => void
@@ -47,7 +47,6 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
   const { producto } = vencimiento
   const [lightboxAbierto, setLightboxAbierto] = useState(false)
 
-  // Bloquear scroll del body mientras el lightbox está abierto
   useEffect(() => {
     document.body.style.overflow = lightboxAbierto ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
@@ -77,7 +76,6 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
 
   return (
     <>
-    {/* Lightbox — div en lugar de button para HTML válido en iOS Safari */}
     {lightboxAbierto && producto.imagen_url && (
       <div
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 cursor-pointer"
@@ -119,8 +117,6 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
       onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick() } : undefined}
     >
       <div className="p-3.5 md:p-4 flex items-start gap-3">
-
-        {/* Left: product thumbnail 60x60 */}
         <div className="relative shrink-0">
           {producto.imagen_url ? (
             <button
@@ -153,7 +149,6 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
           )}
         </div>
 
-        {/* Center: product info */}
         <div className="flex-1 min-w-0">
           <p
             className={[
@@ -164,13 +159,11 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
           >
             {titulo}
           </p>
-
+          <p className="text-[11px] text-muted-foreground mt-0.5"><span className="font-semibold text-foreground/70">Marca:</span> {producto.marca ?? 'Sin dato'}</p>
           <p className={`text-sm font-semibold mt-1 ${cfg.daysText}`}>{diasLabel}</p>
-
           <p className="text-xs text-muted-foreground mt-0.5">{motivo}</p>
         </div>
 
-        {/* Right: badge + arrow */}
         <div className="flex flex-col items-end gap-2 shrink-0 pt-0.5">
           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full text-white ${cfg.badgeSolid}`}>
             {cfg.label.toUpperCase()}
@@ -179,16 +172,15 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
         </div>
       </div>
 
-      {/* Identificación operativa compacta */}
-      <div className="px-3.5 md:px-4 pb-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
-        {producto.cod_art && <span className="font-mono font-semibold text-foreground/70">SKU {producto.cod_art}</span>}
-        {producto.cod_art && <span aria-hidden="true">·</span>}
-        <span className="font-semibold text-foreground/70">{vencimiento.cantidad} un</span>
-        {familiaNombre && <span aria-hidden="true">·</span>}
-        {familiaNombre && <span className="font-medium truncate max-w-[190px]">{familiaNombre}</span>}
+      <div className="px-3.5 md:px-4 pb-2 space-y-1.5">
+        <ProductIdentityMeta producto={producto} compact />
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
+          <span className="font-semibold text-foreground/70">Comprometido: {vencimiento.cantidad} un</span>
+          {familiaNombre && <span aria-hidden="true">·</span>}
+          {familiaNombre && <span className="font-medium truncate max-w-[190px]">{familiaNombre}</span>}
+        </div>
       </div>
 
-      {/* Próximos pasos: máximo dos para evitar competencia visual */}
       {accionesVisibles.length > 0 && (
         <div className="flex items-center gap-1.5 px-3.5 md:px-4 pb-2 overflow-hidden">
           {accionesVisibles.map((accion) => (
@@ -200,7 +192,6 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
         </div>
       )}
 
-      {/* Accion operativa: donacion o decomiso */}
       {showAccionBtn && (
         <div className="px-3.5 md:px-4 pb-3 pt-0">
           <button

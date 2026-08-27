@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { calcularRiesgo } from '@/lib/predictive'
 import { RISK_VISUAL } from '@/lib/risk-config'
+import ProductIdentity from '@/components/product/ProductIdentity'
 import type { Producto, RiesgoNivel, Vencimiento } from '@/types/index'
 import { AlertTriangle, CheckCircle, ShieldCheck, AlertCircle } from 'lucide-react'
 
@@ -15,9 +16,8 @@ export interface VencimientoExistente {
 interface VencimientoFormProps {
   producto: Producto
   sucursalId: string
-  usuarioId: string // compatibilidad del caller; la DB deriva auth.uid() al guardar
+  usuarioId: string
   onSuccess: () => void
-  /** Si se provee, el formulario actualiza este vencimiento y agrega una observación histórica. */
   vencimientoExistente?: VencimientoExistente | null
 }
 
@@ -119,8 +119,6 @@ export default function VencimientoForm({ producto, sucursalId, onSuccess, venci
     const lote = form.lote.trim() || null
 
     if (vencimientoExistente) {
-      // Una sola transacción DB para el vencimiento: actualiza estado actual y
-      // agrega una observación incluso si la cantidad sigue igual.
       const { error: updateError } = await supabase.rpc('actualizar_vencimiento_operador', {
         p_vencimiento_id: vencimientoExistente.id,
         p_cantidad: cantidadNum,
@@ -133,7 +131,6 @@ export default function VencimientoForm({ producto, sucursalId, onSuccess, venci
         return
       }
     } else {
-      // Alta + primera observación física en una sola transacción.
       const { error: supabaseError } = await supabase.rpc('crear_vencimiento_operador', {
         p_producto_id: producto.id,
         p_sucursal_id: sucursalId,
@@ -152,8 +149,6 @@ export default function VencimientoForm({ producto, sucursalId, onSuccess, venci
       }
     }
 
-    // Stock total es estado local SKU×sucursal. Nunca vuelve a escribirse en el
-    // catálogo global `productos` desde Scanner.
     const nuevoStock = parseInt(form.stockActual, 10)
     if (!isNaN(nuevoStock) && nuevoStock !== producto.stock_actual) {
       const { error: stockError } = await supabase.rpc('actualizar_stock_producto_sucursal_scanner', {
@@ -175,9 +170,12 @@ export default function VencimientoForm({ producto, sucursalId, onSuccess, venci
   return (
     <div className="flex flex-col gap-4">
       <div className="bg-white rounded-card shadow-card px-4 py-3.5">
-        <p className="text-xs text-muted-foreground mb-0.5">{esEdicion ? 'Actualizando vencimiento de' : 'Cargando vencimiento para'}</p>
-        <p className="text-foreground font-bold text-base leading-tight">{producto.descripcion}</p>
-        {producto.marca && <p className="text-muted-foreground text-sm mt-0.5">{producto.marca}</p>}
+        <ProductIdentity
+          producto={producto}
+          label={esEdicion ? 'Actualizando vencimiento de' : 'Cargando vencimiento para'}
+          imageSize="sm"
+          compact
+        />
       </div>
 
       <div className="bg-white rounded-card shadow-card p-4 flex flex-col gap-4">
