@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Trash2, Save, AlertTriangle, Percent, Activity } from 'lucide-react'
+import { X, Trash2, Save, AlertTriangle, Percent, Activity, CircleCheckBig } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
   BADGE_CONFIG,
@@ -73,6 +73,8 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
   const [cantidad, setCantidad] = useState(vencimiento.cantidad)
   const [diasDonacion, setDiasDonacion] = useState(vencimiento.dias_donacion ?? 10)
   const [guardando, setGuardando] = useState(false)
+  const [cerrandoVendido, setCerrandoVendido] = useState(false)
+  const [confirmarVendido, setConfirmarVendido] = useState(false)
   const [eliminando, setEliminando] = useState(false)
   const [confirmarEliminar, setConfirmarEliminar] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -190,8 +192,37 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
   )
   const puedeGestionarRag = nivelCalculado === 'radar' || nivelCalculado === 'urgente'
 
+  async function handleCerrarVendido(): Promise<void> {
+    setError(null)
+    setCerrandoVendido(true)
+
+    const { error: errCierre } = await supabase.rpc('cerrar_vencimiento_operativo', {
+      p_vencimiento_id: vencimiento.id,
+      p_resultado: 'vendido',
+      p_observaciones: null,
+    })
+
+    if (errCierre) {
+      setError(`No se pudo registrar como vendido: ${errCierre.message}`)
+      setCerrandoVendido(false)
+      return
+    }
+
+    setCerrandoVendido(false)
+    onGuardado()
+    onClose()
+  }
+
   async function handleGuardar(): Promise<void> {
     setError(null)
+
+    // Un control en cero no debe quedar activo. Cero significa que el stock
+    // comprometido se agotó por venta y requiere un resultado terminal auditable.
+    if (cantidad === 0) {
+      setConfirmarVendido(true)
+      return
+    }
+
     setGuardando(true)
 
     if (fechaVencimiento !== vencimiento.fecha_vencimiento) {
@@ -279,6 +310,7 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
   const titulo = vencimiento.productos.marca ? `${tituloBase} — ${vencimiento.productos.marca}` : tituloBase
 
   const inputCls = 'w-full h-11 px-3 bg-surface-base border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150'
+  const ocupado = guardando || cerrandoVendido || eliminando
 
   return (
     <div
@@ -372,7 +404,11 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
           <div className="space-y-1.5">
             <label htmlFor="modal-cantidad" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Cantidad comprometida observada hoy</label>
             <input id="modal-cantidad" type="number" min={0} value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} className={inputCls} />
-            <p className="text-[11px] text-muted-foreground">Se guarda como un nuevo control aunque la cantidad sea igual al control anterior.</p>
+            <p className="text-[11px] text-muted-foreground">
+              {cantidad === 0
+                ? 'Cantidad 0: Noven te pedirá confirmar el cierre como vendido.'
+                : 'Se guarda como un nuevo control aunque la cantidad sea igual al control anterior.'}
+            </p>
           </div>
 
           {(puedeGestionarRag || seguimientoRag?.rag_porcentaje != null) && (
@@ -439,29 +475,58 @@ export default function EditarVencimientoModal({ vencimiento, onClose, onGuardad
           <button
             type="button"
             onClick={() => void handleGuardar()}
-            disabled={guardando || eliminando}
+            disabled={ocupado}
             className="w-full h-11 flex items-center justify-center gap-2 bg-brand hover:bg-brand-hover text-white font-semibold text-sm rounded-lg shadow-brand transition-all duration-150 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {guardando ? (
               <><span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Guardando...</>
             ) : (
-              <><Save className="h-4 w-4" />Registrar control</>
+              <><Save className="h-4 w-4" />{cantidad === 0 ? 'Continuar con cierre vendido' : 'Registrar control'}</>
             )}
           </button>
+
+          {!confirmarVendido ? (
+            <button
+              type="button"
+              onClick={() => { setConfirmarEliminar(false); setConfirmarVendido(true) }}
+              disabled={ocupado}
+              className="w-full h-11 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm rounded-lg transition-all duration-150 active:scale-[0.98] disabled:opacity-50"
+            >
+              <CircleCheckBig className="h-4 w-4" />
+              Marcar como vendido
+            </button>
+          ) : (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2">
+              <p className="text-xs text-emerald-800 font-medium">
+                Se registrará que el saldo comprometido de {vencimiento.cantidad} un se resolvió por venta, se guardará un control final en 0 y el vencimiento saldrá de la lista activa.
+              </p>
+              <p className="text-[11px] text-emerald-700">
+                Si necesitás registrar una reducción intermedia antes del cierre, cancelá y guardá primero ese control.
+              </p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setConfirmarVendido(false)} disabled={cerrandoVendido} className="flex-1 h-11 bg-white border border-emerald-200 hover:bg-emerald-100 text-emerald-800 font-medium text-sm rounded-lg transition-colors disabled:opacity-50">Cancelar</button>
+                <button type="button" onClick={() => void handleCerrarVendido()} disabled={cerrandoVendido} className="flex-1 h-11 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm rounded-lg transition-colors active:scale-[0.98] disabled:opacity-50">
+                  {cerrandoVendido ? <><span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Cerrando...</> : 'Sí, vendido'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {!confirmarEliminar ? (
             <button
               type="button"
-              onClick={() => setConfirmarEliminar(true)}
-              disabled={guardando || eliminando}
+              onClick={() => { setConfirmarVendido(false); setConfirmarEliminar(true) }}
+              disabled={ocupado}
               className="w-full h-11 flex items-center justify-center gap-2 bg-transparent hover:bg-red-50 border border-red-200 text-red-600 hover:text-red-700 font-medium text-sm rounded-lg transition-all duration-150 disabled:opacity-50"
             >
               <Trash2 className="h-4 w-4" />
-              Eliminar registro
+              Eliminar carga incorrecta
             </button>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs text-center text-muted-foreground">Esta acción no se puede deshacer.</p>
+              <p className="text-xs text-center text-muted-foreground">
+                Usá esta opción sólo si el registro fue cargado por error. Si el producto se vendió, usá “Marcar como vendido” para conservar el resultado.
+              </p>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setConfirmarEliminar(false)} disabled={eliminando} className="flex-1 h-11 bg-muted hover:bg-muted/70 text-foreground font-medium text-sm rounded-lg transition-colors disabled:opacity-50">Cancelar</button>
                 <button type="button" onClick={() => void handleEliminar()} disabled={eliminando} className="flex-1 h-11 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold text-sm rounded-lg transition-colors active:scale-[0.98] disabled:opacity-50">
