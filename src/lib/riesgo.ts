@@ -24,16 +24,30 @@ const UMBRAL_RADAR = 45
 const UMBRAL_URGENTE = 20
 export const UMBRAL_DONACION_LEGACY = 10
 
+const SECTORES_PERECEDEROS_DOS_DIAS = new Set([
+  'VERDULERIA',
+  'VERDULERÍA',
+  'CARNICERIA',
+  'CARNICERÍA',
+  'LACTEOS',
+  'LÁCTEOS',
+  'PANADERIA',
+  'PANADERÍA',
+  'ROTISERIA',
+  'ROTISERÍA',
+])
+
 /**
  * Compatibilidad temporal mientras producción todavía no expone
  * sectores.dias_donacion. El origen autoritativo futuro es la DB.
+ *
+ * Congelados y todo no perecedero confirmado conservan 10 días. FIAMBRES e
+ * INSUMOS también caen en 10 sólo como fallback técnico mientras su política
+ * concreta no esté configurada en DB; no se persiste esa inferencia.
  */
 export function diasDonacionLegacyPorSector(sector: string | null | undefined): number {
   const normalizado = (sector ?? '').trim().toUpperCase()
-  if (normalizado === 'LACTEOS' || normalizado === 'LÁCTEOS' || normalizado === 'PANADERIA' || normalizado === 'PANADERÍA') {
-    return 2
-  }
-  return UMBRAL_DONACION_LEGACY
+  return SECTORES_PERECEDEROS_DOS_DIAS.has(normalizado) ? 2 : UMBRAL_DONACION_LEGACY
 }
 
 export function calcularDiasRestantes(fechaVencimiento: string): number {
