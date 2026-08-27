@@ -1,7 +1,7 @@
-import type { Handler, HandlerEvent, HandlerContext } from '@netlify/functions'
+import type { Handler, HandlerEvent } from '@netlify/functions'
 import { verificarAdmin, getCorsHeaders } from './_auth'
 
-const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) => {
+const handler: Handler = async (event: HandlerEvent) => {
   const corsHeaders = getCorsHeaders(event)
 
   if (event.httpMethod === 'OPTIONS') {

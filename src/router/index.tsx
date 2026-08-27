@@ -15,7 +15,11 @@ const Scanner = lazy(() => import('../pages/Scanner'))
 const Vencimientos = lazy(() => import('../pages/Vencimientos'))
 const Historial = lazy(() => import('../pages/Historial'))
 const Analisis = lazy(() => import('../pages/Analisis'))
-const Importar = lazy(() => import('../pages/Importar'))
+const ImportarInicio = lazy(() => import('../pages/ImportarInicio'))
+const ImportarFamilia = lazy(() => import('../pages/ImportarFamiliaSeguro'))
+const ImportarMasivo = lazy(() => import('../pages/ImportarMasivoSeguro'))
+const PendientesCatalogo = lazy(() => import('../pages/PendientesCatalogo'))
+const AprenderPendientesCsv = lazy(() => import('../pages/AprenderPendientesCsv'))
 const Admin = lazy(() => import('../pages/Admin'))
 
 const suspenseProps = { fallback: <RouteSkeleton /> }
@@ -71,18 +75,48 @@ export const router = createBrowserRouter([
             ),
           },
           {
-            // Importar y Admin son exclusivos de rol admin.
-            // La importación reescribe stock, venta media y familia de productos
-            // que pertenecen a otros operadores: no puede quedar al alcance de
-            // un operador. El guard de ruta es la primera barrera; la segunda es
-            // la confirmación explícita de familia dentro de Importar.
+            path: 'importar/pendientes',
+            element: (
+              <ErrorBoundary>
+                <Suspense {...suspenseProps}><PendientesCatalogo /></Suspense>
+              </ErrorBoundary>
+            ),
+          },
+          {
+            path: 'importar/pendientes/aprender',
+            element: (
+              <ErrorBoundary>
+                <Suspense {...suspenseProps}><AprenderPendientesCsv /></Suspense>
+              </ErrorBoundary>
+            ),
+          },
+          {
+            // El flujo de importación todavía conserva el guard legacy de admin
+            // mientras terminamos el cutover de roles multitenant. Las operaciones
+            // masivas vuelven a validar usuario/sucursal en servidor y DB.
             element: <AdminRoute />,
             children: [
               {
                 path: 'importar',
                 element: (
                   <ErrorBoundary>
-                    <Suspense {...suspenseProps}><Importar /></Suspense>
+                    <Suspense {...suspenseProps}><ImportarInicio /></Suspense>
+                  </ErrorBoundary>
+                ),
+              },
+              {
+                path: 'importar/familia',
+                element: (
+                  <ErrorBoundary>
+                    <Suspense {...suspenseProps}><ImportarFamilia /></Suspense>
+                  </ErrorBoundary>
+                ),
+              },
+              {
+                path: 'importar/masivo',
+                element: (
+                  <ErrorBoundary>
+                    <Suspense {...suspenseProps}><ImportarMasivo /></Suspense>
                   </ErrorBoundary>
                 ),
               },

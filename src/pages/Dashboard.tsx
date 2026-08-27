@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Package, ScanLine, RefreshCw, AlertTriangle, Bell, FolderX, HandHeart, Trash2 } from 'lucide-react'
+import { Package, ScanLine, RefreshCw, AlertTriangle, Bell, FolderX, HandHeart, Trash2, CircleCheckBig } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useVencimientos } from '@/hooks/useVencimientos'
 import { useAuth } from '@/hooks/useAuth'
@@ -47,6 +47,7 @@ export default function Dashboard() {
   const { data, loading, error, refetch, sinFamilias } = useVencimientos(sucursalId)
   const { user } = useAuth()
   const {
+    vendidos,
     donaciones,
     decomisos: decomisosTrimestrales,
     loading: loadingAcciones,
@@ -133,7 +134,7 @@ export default function Dashboard() {
             },
           }}
           onClose={() => setVencimientoEditando(null)}
-          onGuardado={() => { setVencimientoEditando(null); void refetch() }}
+          onGuardado={() => { setVencimientoEditando(null); void refetch(); void refetchAcciones() }}
           onImagenActualizada={() => void refetch()}
         />
       )}
@@ -220,8 +221,8 @@ export default function Dashboard() {
 
         {/* Skeleton — se muestra mientras loading sin importar si hay data o no */}
         {loading && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-            {[0, 1, 2, 3].map((i) => (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
+            {[0, 1, 2, 3, 4].map((i) => (
               <div key={i} className="rounded-[24px] bg-white shadow-card h-[136px] animate-pulse" />
             ))}
           </div>
@@ -253,7 +254,7 @@ export default function Dashboard() {
 
             {/* ── KPI command center ── */}
             <section aria-label="Resumen de riesgos">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
                 <RiesgoCard
                   titulo="Unidades en riesgo"
                   valor={unidadesEnRiesgo}
@@ -271,6 +272,29 @@ export default function Dashboard() {
                   subtexto="Próximos 30 días"
                   subtextoColor="text-muted-foreground"
                 />
+
+                {/* Card VENDIDOS trimestral */}
+                <div
+                  onClick={() => navigate('/historial?tipo=vendido')}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate('/historial?tipo=vendido') }}
+                  className="bg-white rounded-[20px] shadow-card p-3.5 flex flex-col cursor-pointer hover:shadow-elevated hover:-translate-y-0.5 transition-all duration-200 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  aria-label={`Vendidos antes del vencimiento: ${vendidos} unidades`}
+                >
+                  <div className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 mb-2.5 bg-emerald-100">
+                    <CircleCheckBig className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                  </div>
+                  <p className="text-[2rem] font-black tracking-tight leading-none tabular-nums text-emerald-600">
+                    {loadingAcciones ? '–' : vendidos}
+                  </p>
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5 leading-tight">
+                    Vendidos
+                  </p>
+                  <p className="text-[10px] font-medium mt-0.5 text-emerald-600">
+                    {loadingAcciones ? '...' : `Resueltos por venta · ${trimestreInfo.label}`}
+                  </p>
+                </div>
 
                 {/* Card DONACION trimestral */}
                 <div

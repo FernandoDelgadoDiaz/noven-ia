@@ -1,134 +1,147 @@
 import { supabase } from '@/lib/supabase'
-import type { Producto } from '@/types/index'
+import { useSucursalActual } from '@/hooks/useSucursalActual'
+import type { Familia, Producto } from '@/types/index'
 
-/**
- * Producto preexistente que impide dar de alta uno nuevo con estos códigos.
- * `motivo` explica cuál es el choque, para poder mostrarle al operador algo
- * accionable en vez de un error crudo de constraint.
- */
 export interface ConflictoCodigos {
   producto: Producto
   motivo: 'cod_art_ocupado' | 'ean_ocupado' | 'ean_guardado_como_cod_art'
 }
 
+export interface NuevoProductoScannerInput {
+  sucursalId: string
+  codArt: string
+  ean: string
+  descripcion: string
+  marca: string | null
+  categoria: string | null
+  stockActual: number
+  ventaMediaDiaria: number
+  familiaId: string
+}
+
 interface UseProductosReturn {
-  searchByBarcode: (barcode: string) => Promise<Producto | null>
-  buscarConflictoCodigos: (codArt: string, ean: string) => Promise<ConflictoCodigos | null>
-  upsertProducto: (p: Partial<Producto>) => Promise<void>
+  searchByBarcode: (barcode: string, sucursalId?: string) => Promise<Producto | null>
+  buscarConflictoCodigos: (
+    codArt: string,
+    ean: string,
+    sucursalId?: string,
+    excluirProductoId?: string | null,
+  ) => Promise<ConflictoCodigos | null>
+  vincularEanScanner: (sucursalId: string, productoId: string, ean: string) => Promise<Producto>
+  completarCodArtScanner: (sucursalId: string, productoId: string, codArt: string) => Promise<Producto>
+  crearProductoScanner: (input: NuevoProductoScannerInput) => Promise<Producto>
+  listarFamiliasScanner: (sucursalId?: string) => Promise<Familia[]>
 }
 
 /**
- * Hook de acceso al catálogo de productos.
- *
- * NO descarga la tabla completa al montar. Cada operación hace una query
- * puntual contra Supabase. Si en el futuro se necesita listar el catálogo
- * completo (ej. página Maestro), crear un hook dedicado con paginación.
+ * Acceso al catálogo del Scanner exclusivamente mediante RPCs con scope de
+ * sucursal. No expone ningún escritor genérico sobre `productos`: un nuevo flujo
+ * que necesite modificar catálogo debe tener un contrato SQL explícito y acotado.
  */
 export function useProductos(): UseProductosReturn {
-  /**
-   * Busca un producto por código de barras. Si no encuentra resultado,
-   * intenta con cod_art como fallback (útil cuando el barcode coincide
-   * con el código de artículo interno).
-   */
-  async function searchByBarcode(barcode: string): Promise<Producto | null> {
-    if (!barcode.trim()) return null
+  const { sucursalId: sucursalActual } = useSucursalActual()
 
-    // Intento 1: buscar por codigo_barras
-    const { data: byBarcode, error: err1 } = await supabase
-      .from('productos')
-      .select('*')
-      .eq('codigo_barras', barcode.trim())
-      .eq('activo', true)
-      .maybeSingle()
-
-    if (err1) {
-      throw new Error(err1.message)
-    }
-
-    if (byBarcode) return byBarcode as Producto
-
-    // Intento 2: fallback a cod_art
-    const { data: byCodArt, error: err2 } = await supabase
-      .from('productos')
-      .select('*')
-      .eq('cod_art', barcode.trim())
-      .eq('activo', true)
-      .maybeSingle()
-
-    if (err2) {
-      throw new Error(err2.message)
-    }
-
-    return (byCodArt as Producto | null) ?? null
+  function resolverSucursal(sucursalId?: string): string {
+    return (sucursalId ?? sucursalActual).trim()
   }
 
-  /**
-   * Verifica, ANTES de insertar, si algún producto ya ocupa estos códigos.
-   *
-   * A diferencia de `searchByBarcode`, NO filtra por `activo`: los índices únicos
-   * `productos_cod_art_key` y `productos_codigo_barras_key` aplican también a los
-   * productos dados de baja. Sin este chequeo, intentar reutilizar el código de
-   * un producto desactivado devolvía una violación de constraint cruda, sin
-   * ninguna pista de qué producto lo estaba ocupando.
-   *
-   * El tercer caso —`ean_guardado_como_cod_art`— es el vínculo duro: existe un
-   * producto cuyo `cod_art` es exactamente el EAN que se está por registrar. Eso
-   * significa que ese producto es el MISMO objeto físico, cargado antes con el
-   * código en el campo equivocado. Insertar uno nuevo crearía el duplicado que
-   * el importador después no puede resolver.
-   */
+  async function searchByBarcode(barcode: string, sucursalId?: string): Promise<Producto | null> {
+    const codigo = barcode.trim()
+    const scope = resolverSucursal(sucursalId)
+    if (!codigo || !scope) return null
+
+    const { data, error } = await supabase.rpc('buscar_producto_scanner', {
+      p_sucursal_id: scope,
+      p_codigo: codigo,
+    })
+
+    if (error) throw new Error(error.message)
+    return (data as Producto | null) ?? null
+  }
+
   async function buscarConflictoCodigos(
     codArt: string,
     ean: string,
+    sucursalId?: string,
+    excluirProductoId: string | null = null,
   ): Promise<ConflictoCodigos | null> {
-    const c = codArt.trim()
-    const e = ean.trim()
+    const scope = resolverSucursal(sucursalId)
+    if (!scope) return null
 
-    if (c !== '') {
-      const { data, error } = await supabase.from('productos').select('*').eq('cod_art', c).maybeSingle()
-      if (error) throw new Error(error.message)
-      if (data) return { producto: data as Producto, motivo: 'cod_art_ocupado' }
-    }
+    const { data, error } = await supabase.rpc('buscar_conflicto_codigos_scanner', {
+      p_sucursal_id: scope,
+      p_cod_art: codArt.trim(),
+      p_ean: ean.trim(),
+      p_excluir_producto_id: excluirProductoId,
+    })
 
-    if (e !== '') {
-      const { data, error } = await supabase.from('productos').select('*').eq('codigo_barras', e).maybeSingle()
-      if (error) throw new Error(error.message)
-      if (data) return { producto: data as Producto, motivo: 'ean_ocupado' }
-
-      // Vínculo duro: el EAN escaneado quedó guardado como cod_art en otro registro.
-      const { data: legacy, error: errLegacy } = await supabase
-        .from('productos').select('*').eq('cod_art', e).maybeSingle()
-      if (errLegacy) throw new Error(errLegacy.message)
-      if (legacy) return { producto: legacy as Producto, motivo: 'ean_guardado_como_cod_art' }
-    }
-
-    return null
+    if (error) throw new Error(error.message)
+    return (data as ConflictoCodigos | null) ?? null
   }
 
-  /**
-   * Inserta o actualiza un producto.
-   * Si `p.id` está presente se hace update; si no, se hace insert.
-   * Requiere que el usuario tenga el rol "admin" (el RLS lo valida en servidor).
-   */
-  async function upsertProducto(p: Partial<Producto>): Promise<void> {
-    if (p.id) {
-      const { id, created_at: _created, ...fields } = p as Partial<Producto> & { id: string }
-      void _created
-      const { error } = await supabase
-        .from('productos')
-        .update({ ...fields, updated_at: new Date().toISOString() })
-        .eq('id', id)
+  async function vincularEanScanner(
+    sucursalId: string,
+    productoId: string,
+    ean: string,
+  ): Promise<Producto> {
+    const { data, error } = await supabase.rpc('vincular_ean_producto_scanner', {
+      p_sucursal_id: sucursalId,
+      p_producto_id: productoId,
+      p_ean: ean.trim(),
+    })
+    if (error) throw new Error(error.message)
+    if (!data) throw new Error('No se pudo recuperar el producto actualizado.')
+    return data as Producto
+  }
 
-      if (error) throw new Error(error.message)
-    } else {
-      const { error } = await supabase.from('productos').insert(p)
-      if (error) throw new Error(error.message)
-    }
+  async function completarCodArtScanner(
+    sucursalId: string,
+    productoId: string,
+    codArt: string,
+  ): Promise<Producto> {
+    const { data, error } = await supabase.rpc('completar_cod_art_producto_scanner', {
+      p_sucursal_id: sucursalId,
+      p_producto_id: productoId,
+      p_cod_art: codArt.trim(),
+    })
+    if (error) throw new Error(error.message)
+    if (!data) throw new Error('No se pudo recuperar el producto actualizado.')
+    return data as Producto
+  }
+
+  async function crearProductoScanner(input: NuevoProductoScannerInput): Promise<Producto> {
+    const { data, error } = await supabase.rpc('crear_producto_scanner', {
+      p_sucursal_id: input.sucursalId,
+      p_cod_art: input.codArt.trim(),
+      p_ean: input.ean.trim(),
+      p_descripcion: input.descripcion.trim(),
+      p_marca: input.marca,
+      p_categoria: input.categoria,
+      p_stock_actual: input.stockActual,
+      p_venta_media_diaria: input.ventaMediaDiaria,
+      p_familia_id: input.familiaId,
+    })
+    if (error) throw new Error(error.message)
+    if (!data) throw new Error('No se pudo recuperar el producto creado.')
+    return data as Producto
+  }
+
+  async function listarFamiliasScanner(sucursalId?: string): Promise<Familia[]> {
+    const scope = resolverSucursal(sucursalId)
+    if (!scope) return []
+    const { data, error } = await supabase.rpc('listar_familias_scanner', {
+      p_sucursal_id: scope,
+    })
+    if (error) throw new Error(error.message)
+    return (data ?? []) as Familia[]
   }
 
   return {
     searchByBarcode,
     buscarConflictoCodigos,
-    upsertProducto,
+    vincularEanScanner,
+    completarCodArtScanner,
+    crearProductoScanner,
+    listarFamiliasScanner,
   }
 }

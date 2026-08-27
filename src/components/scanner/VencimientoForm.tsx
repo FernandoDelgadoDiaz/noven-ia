@@ -15,9 +15,9 @@ export interface VencimientoExistente {
 interface VencimientoFormProps {
   producto: Producto
   sucursalId: string
-  usuarioId: string
+  usuarioId: string // compatibilidad del caller; la DB deriva auth.uid() al guardar
   onSuccess: () => void
-  /** Si se provee, el formulario opera en modo edición (UPDATE) sobre este vencimiento en lugar de crear uno nuevo. */
+  /** Si se provee, el formulario actualiza este vencimiento y agrega una observación histórica. */
   vencimientoExistente?: VencimientoExistente | null
 }
 
@@ -31,6 +31,8 @@ interface FormData {
 interface RiesgoPreview {
   nivel: RiesgoNivel
   diasRestantes: number
+  diasDonacion: number
+  diasComerciales: number
   coberturaTexto: string
 }
 
@@ -54,8 +56,14 @@ function calcularPreview(
   const resultado = calcularRiesgo(vencimientoFake, productoConStock, new Date())
   const coberturaTexto = resultado.cobertura_dias === Infinity
     ? 'Sin rotación'
-    : `${Math.round(resultado.cobertura_dias)} días de cobertura`
-  return { nivel: resultado.nivel_riesgo, diasRestantes: resultado.dias_restantes, coberturaTexto }
+    : `${resultado.cobertura_dias.toFixed(1)} días necesarios`
+  return {
+    nivel: resultado.nivel_riesgo,
+    diasRestantes: resultado.dias_restantes,
+    diasDonacion: resultado.dias_donacion,
+    diasComerciales: resultado.dias_comerciales_restantes,
+    coberturaTexto,
+  }
 }
 
 function getPreviewIcon(nivel: RiesgoNivel): React.ComponentType<{ className?: string }> {
@@ -71,7 +79,7 @@ function todayIso(): string {
 
 const inputCls = 'w-full h-14 px-4 bg-surface-base border border-border rounded-lg text-foreground text-base font-medium placeholder:text-muted-foreground focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150'
 
-export default function VencimientoForm({ producto, sucursalId, usuarioId, onSuccess, vencimientoExistente }: VencimientoFormProps) {
+export default function VencimientoForm({ producto, sucursalId, onSuccess, vencimientoExistente }: VencimientoFormProps) {
   const esEdicion = Boolean(vencimientoExistente)
   const [form, setForm] = useState<FormData>({
     cantidad: vencimientoExistente ? String(vencimientoExistente.cantidad) : '',
@@ -103,27 +111,38 @@ export default function VencimientoForm({ producto, sucursalId, usuarioId, onSuc
   async function handleGuardar(): Promise<void> {
     const validationError = validar()
     if (validationError) { setError(validationError); return }
+
     setGuardando(true)
     setError(null)
+
+    const cantidadNum = parseInt(form.cantidad, 10)
+    const lote = form.lote.trim() || null
+
     if (vencimientoExistente) {
-      // Modo edición: actualizar el vencimiento activo existente (regla: 1 vencimiento activo por producto)
-      const { error: updateError } = await supabase.from('vencimientos').update({
-        cantidad: parseInt(form.cantidad, 10),
-        fecha_vencimiento: form.fechaVencimiento,
-        lote: form.lote.trim() || null,
-        updated_at: new Date().toISOString(),
-      }).eq('id', vencimientoExistente.id)
-      if (updateError) { setGuardando(false); setError(`Error al actualizar: ${updateError.message}`); return }
+      // Una sola transacción DB para el vencimiento: actualiza estado actual y
+      // agrega una observación incluso si la cantidad sigue igual.
+      const { error: updateError } = await supabase.rpc('actualizar_vencimiento_operador', {
+        p_vencimiento_id: vencimientoExistente.id,
+        p_cantidad: cantidadNum,
+        p_fecha_vencimiento: form.fechaVencimiento,
+        p_lote: lote,
+      })
+      if (updateError) {
+        setGuardando(false)
+        setError(`Error al actualizar: ${updateError.message}`)
+        return
+      }
     } else {
-      const { error: supabaseError } = await supabase.from('vencimientos').insert({
-        producto_id: producto.id, sucursal_id: sucursalId, usuario_id: usuarioId,
-        cantidad: parseInt(form.cantidad, 10), lote: form.lote.trim() || null,
-        fecha_vencimiento: form.fechaVencimiento, fecha_carga: todayIso(), activo: true,
+      // Alta + primera observación física en una sola transacción.
+      const { error: supabaseError } = await supabase.rpc('crear_vencimiento_operador', {
+        p_producto_id: producto.id,
+        p_sucursal_id: sucursalId,
+        p_cantidad: cantidadNum,
+        p_fecha_vencimiento: form.fechaVencimiento,
+        p_lote: lote,
       })
       if (supabaseError) {
         setGuardando(false)
-        // 23505 = unique_violation: el índice único parcial detectó otro vencimiento activo
-        // para este producto/sucursal (carrera entre clientes). Mensaje amigable.
         if (supabaseError.code === '23505') {
           setError('Este producto ya tiene un vencimiento activo. Volvé a escanearlo para actualizarlo.')
         } else {
@@ -132,36 +151,43 @@ export default function VencimientoForm({ producto, sucursalId, usuarioId, onSuc
         return
       }
     }
+
+    // Stock total es estado local SKU×sucursal. Nunca vuelve a escribirse en el
+    // catálogo global `productos` desde Scanner.
     const nuevoStock = parseInt(form.stockActual, 10)
     if (!isNaN(nuevoStock) && nuevoStock !== producto.stock_actual) {
-      const { error: stockError } = await supabase
-        .from('productos')
-        .update({ stock_actual: nuevoStock, updated_at: new Date().toISOString() })
-        .eq('id', producto.id)
-      if (stockError) { setGuardando(false); setError(`Vencimiento guardado, pero error al actualizar stock: ${stockError.message}`); return }
+      const { error: stockError } = await supabase.rpc('actualizar_stock_producto_sucursal_scanner', {
+        p_sucursal_id: sucursalId,
+        p_producto_id: producto.id,
+        p_stock_actual: nuevoStock,
+      })
+      if (stockError) {
+        setGuardando(false)
+        setError(`Vencimiento guardado, pero error al actualizar stock local: ${stockError.message}`)
+        return
+      }
     }
+
     setGuardando(false)
     onSuccess()
   }
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Producto header */}
       <div className="bg-white rounded-card shadow-card px-4 py-3.5">
         <p className="text-xs text-muted-foreground mb-0.5">{esEdicion ? 'Actualizando vencimiento de' : 'Cargando vencimiento para'}</p>
         <p className="text-foreground font-bold text-base leading-tight">{producto.descripcion}</p>
         {producto.marca && <p className="text-muted-foreground text-sm mt-0.5">{producto.marca}</p>}
       </div>
 
-      {/* Form fields */}
       <div className="bg-white rounded-card shadow-card p-4 flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="vf-stock" className="text-xs font-semibold text-foreground uppercase tracking-wide">Stock actual</label>
+          <label htmlFor="vf-stock" className="text-xs font-semibold text-foreground uppercase tracking-wide">Stock total Glaciar</label>
           <input id="vf-stock" type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={form.stockActual} onChange={(e) => handleChange('stockActual', e.target.value)} placeholder="Ej: 48" className={inputCls} />
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="vf-cantidad" className="text-xs font-semibold text-foreground uppercase tracking-wide">
-            Cantidad <span className="text-red-400 font-normal normal-case">*</span>
+            Cantidad comprometida <span className="text-red-400 font-normal normal-case">*</span>
           </label>
           <input id="vf-cantidad" type="number" inputMode="numeric" pattern="[0-9]*" min="1" value={form.cantidad} onChange={(e) => handleChange('cantidad', e.target.value)} placeholder="Ej: 24" className={inputCls} />
         </div>
@@ -179,7 +205,6 @@ export default function VencimientoForm({ producto, sucursalId, usuarioId, onSuc
         </div>
       </div>
 
-      {/* Risk preview */}
       {preview && riskViz && PreviewIcon && (
         <div className={`rounded-card border p-4 flex items-start gap-3 ${riskViz.rowBg} ${riskViz.badge.split(' ').find(c => c.startsWith('border')) ?? 'border-border'} animate-fade-in`}>
           <PreviewIcon className={`h-5 w-5 mt-0.5 shrink-0 ${riskViz.daysText}`} />
@@ -192,11 +217,13 @@ export default function VencimientoForm({ producto, sucursalId, usuarioId, onSuc
               {' — '}
               {preview.coberturaTexto}
             </p>
+            <p className="text-muted-foreground text-xs mt-1">
+              {preview.diasComerciales} días comerciales antes del retiro para donación ({preview.diasDonacion} días).
+            </p>
           </div>
         </div>
       )}
 
-      {/* Error */}
       {error && (
         <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 animate-fade-in">
           <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
@@ -204,7 +231,6 @@ export default function VencimientoForm({ producto, sucursalId, usuarioId, onSuc
         </div>
       )}
 
-      {/* Submit */}
       <button
         type="button"
         onClick={() => void handleGuardar()}
@@ -214,7 +240,7 @@ export default function VencimientoForm({ producto, sucursalId, usuarioId, onSuc
         {guardando ? (
           <><span className="h-5 w-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Guardando...</>
         ) : (
-          <><CheckCircle className="h-5 w-5" />{esEdicion ? 'Actualizar vencimiento' : 'Guardar vencimiento'}</>
+          <><CheckCircle className="h-5 w-5" />{esEdicion ? 'Registrar nuevo control' : 'Guardar vencimiento'}</>
         )}
       </button>
     </div>

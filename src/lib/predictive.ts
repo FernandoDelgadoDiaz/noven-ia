@@ -1,5 +1,10 @@
 import type { Producto, RiesgoNivel, Vencimiento, VencimientoConRiesgo } from '@/types/index'
-import { calcularNivelRiesgo, sugerirAcciones } from '@/lib/riesgo'
+import {
+  calcularMetricasRiesgo,
+  calcularNivelRiesgo,
+  diasDonacionLegacyPorSector,
+  sugerirAcciones,
+} from '@/lib/riesgo'
 
 const MS_POR_DIA = 1000 * 60 * 60 * 24
 
@@ -14,17 +19,14 @@ function diasHastaVencimiento(fechaVencimiento: string, hoy: Date): number {
 }
 
 /**
- * Calcula el riesgo de merma para un vencimiento dado.
+ * El riesgo se evalúa contra la ventana comercial real, no contra el día cero:
+ *   - RADAR: <=45 días y la venta proyectada no llega antes del retiro/donación.
+ *   - URGENTE: <=20 días y el riesgo persiste.
+ *   - DONACIÓN: umbral obligatorio del sector (2 o 10 días actualmente).
+ *   - DECOMISO: vencido.
  *
- * cobertura_dias = stock_actual / venta_media_diaria
- * Si venta_media_diaria === 0, la cobertura es Infinity (no hay rotación).
- *
- * Semáforo de 5 niveles:
- *   decomiso  → diasRestantes <= 0
- *   donacion  → diasRestantes <= 10
- *   urgente   → diasRestantes <= 20 Y hayRiesgoMerma
- *   radar     → diasRestantes <= 45 Y hayRiesgoMerma
- *   seguro    → resto
+ * La cantidad evaluada es el stock comprometido del vencimiento/lote, no el
+ * stock total de Glaciar.
  */
 export function calcularRiesgo(
   v: Vencimiento,
@@ -32,16 +34,20 @@ export function calcularRiesgo(
   hoy: Date,
 ): VencimientoConRiesgo {
   const diasRestantes = diasHastaVencimiento(v.fecha_vencimiento, hoy)
+  const diasDonacion = v.dias_donacion ?? diasDonacionLegacyPorSector(p.sector)
 
-  const cobertura_dias =
-    p.venta_media_diaria > 0
-      ? v.cantidad / p.venta_media_diaria
-      : Infinity
+  const metricas = calcularMetricasRiesgo(
+    diasRestantes,
+    v.cantidad,
+    p.venta_media_diaria,
+    diasDonacion,
+  )
 
   const nivel_riesgo: RiesgoNivel = calcularNivelRiesgo(
     diasRestantes,
     v.cantidad,
     p.venta_media_diaria,
+    diasDonacion,
   )
 
   const acciones_sugeridas = sugerirAcciones(nivel_riesgo)
@@ -50,7 +56,10 @@ export function calcularRiesgo(
     ...v,
     producto: p,
     dias_restantes: diasRestantes,
-    cobertura_dias,
+    cobertura_dias: metricas.dias_stock,
+    dias_donacion: diasDonacion,
+    dias_comerciales_restantes: metricas.dias_comerciales_restantes,
+    velocidad_necesaria: metricas.velocidad_necesaria,
     nivel_riesgo,
     acciones_sugeridas,
   }
