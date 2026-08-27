@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-risk-copy-deploy-check-20260827-f
+          EXPECTED_MARKER: noven-radar-zonal-deploy-check-20260827-g
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |
@@ -42,3 +42,14 @@ jobs:
           set -euo pipefail
           html="$(curl -fsS "${SITE_URL}/")"
           printf '%s' "${html}" | grep -q '<div id="root"></div>'
+
+      - name: Verify Radar Zonal function exists
+        env:
+          SITE_URL: https://noven-ia.netlify.app
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl -sS -o /tmp/radar-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/enviar-push-radar-zonal" -H 'Content-Type: application/json' -d '{}')"
+          # Sin secreto debe existir y rechazar con 401. 404 significaría que la
+          # Function todavía no fue publicada.
+          test "${status}" = "401"
