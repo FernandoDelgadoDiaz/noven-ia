@@ -11,7 +11,13 @@
 
 BEGIN;
 
-CREATE OR REPLACE VIEW public.v_vencimientos_operativos
+-- PostgreSQL no permite insertar columnas en medio de una vista existente con
+-- CREATE OR REPLACE VIEW. La versión anterior de esta vista no tenía
+-- sector_id/sector_nombre/dias_donacion antes de stock_actual. Se recrea de
+-- forma explícita para que el contrato tenga el nuevo orden sin ambigüedad.
+DROP VIEW IF EXISTS public.v_vencimientos_operativos;
+
+CREATE VIEW public.v_vencimientos_operativos
 WITH (security_invoker = true)
 AS
 SELECT
