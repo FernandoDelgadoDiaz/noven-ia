@@ -1,3 +1,5 @@
+export type ImagenMimeSalida = 'image/webp' | 'image/jpeg'
+
 export interface ImagenProductoPreparada {
   full: Blob
   thumb: Blob
@@ -5,6 +7,8 @@ export interface ImagenProductoPreparada {
   fullHeight: number
   thumbWidth: number
   thumbHeight: number
+  fullMimeType: ImagenMimeSalida
+  thumbMimeType: ImagenMimeSalida
 }
 
 const MAX_SOURCE_BYTES = 20 * 1024 * 1024
@@ -14,6 +18,13 @@ const THUMB_TARGET_BYTES = 180 * 1024
 interface IntentoCompresion {
   maxSide: number
   quality: number
+}
+
+interface RenderImagen {
+  blob: Blob
+  width: number
+  height: number
+  mimeType: ImagenMimeSalida
 }
 
 const FULL_ATTEMPTS: IntentoCompresion[] = [
@@ -68,29 +79,44 @@ async function cargarImagen(file: File): Promise<{ source: CanvasImageSource; wi
   }
 }
 
-function canvasAWebp(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          reject(new Error('El navegador no pudo convertir la imagen a WebP.'))
-          return
-        }
-        resolve(blob)
-      },
-      'image/webp',
-      quality,
-    )
+function canvasABlob(
+  canvas: HTMLCanvasElement,
+  mimeType: ImagenMimeSalida,
+  quality: number,
+): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), mimeType, quality)
   })
 }
 
-async function renderWebp(
+async function canvasAFormatoCompatible(
+  canvas: HTMLCanvasElement,
+  quality: number,
+): Promise<{ blob: Blob; mimeType: ImagenMimeSalida }> {
+  // Algunos WebKit/iOS aceptan pedir WebP pero devuelven PNG. No debemos
+  // confiar solo en el tipo solicitado: validamos el MIME real del Blob.
+  const webp = await canvasABlob(canvas, 'image/webp', quality)
+  if (webp?.type === 'image/webp') {
+    return { blob: webp, mimeType: 'image/webp' }
+  }
+
+  // JPEG es el fallback universal para fotos de producto. El canvas se crea
+  // sin alpha, así que no dependemos de transparencia y evitamos PNG pesados.
+  const jpeg = await canvasABlob(canvas, 'image/jpeg', quality)
+  if (jpeg?.type === 'image/jpeg') {
+    return { blob: jpeg, mimeType: 'image/jpeg' }
+  }
+
+  throw new Error('Este navegador no pudo preparar la foto en un formato compatible.')
+}
+
+async function renderImagen(
   source: CanvasImageSource,
   sourceWidth: number,
   sourceHeight: number,
   maxSide: number,
   quality: number,
-): Promise<{ blob: Blob; width: number; height: number }> {
+): Promise<RenderImagen> {
   const size = dimensionesAjustadas(sourceWidth, sourceHeight, maxSide)
   const canvas = document.createElement('canvas')
   canvas.width = size.width
@@ -103,22 +129,22 @@ async function renderWebp(
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(source, 0, 0, size.width, size.height)
 
-  const blob = await canvasAWebp(canvas, quality)
-  return { blob, width: size.width, height: size.height }
+  const salida = await canvasAFormatoCompatible(canvas, quality)
+  return { blob: salida.blob, width: size.width, height: size.height, mimeType: salida.mimeType }
 }
 
-async function renderWebpHastaPeso(
+async function renderHastaPeso(
   source: CanvasImageSource,
   sourceWidth: number,
   sourceHeight: number,
   intentos: IntentoCompresion[],
   targetBytes: number,
   tipo: 'foto' | 'miniatura',
-): Promise<{ blob: Blob; width: number; height: number }> {
-  let ultimo: { blob: Blob; width: number; height: number } | null = null
+): Promise<RenderImagen> {
+  let ultimo: RenderImagen | null = null
 
   for (const intento of intentos) {
-    const render = await renderWebp(
+    const render = await renderImagen(
       source,
       sourceWidth,
       sourceHeight,
@@ -129,9 +155,6 @@ async function renderWebpHastaPeso(
     if (render.blob.size <= targetBytes) return render
   }
 
-  // En una fotografía real de producto, incluso una imagen muy ruidosa debería
-  // entrar ampliamente en el objetivo al llegar al último intento. Mantener un
-  // error explícito protege Storage si el navegador devuelve un blob anómalo.
   const pesoKb = ultimo ? Math.ceil(ultimo.blob.size / 1024) : 0
   throw new Error(`No se pudo optimizar la ${tipo} automáticamente (${pesoKb} KB). Intentá nuevamente.`)
 }
@@ -147,7 +170,7 @@ export async function prepararImagenProducto(file: File): Promise<ImagenProducto
   const imagen = await cargarImagen(file)
   try {
     const [full, thumb] = await Promise.all([
-      renderWebpHastaPeso(
+      renderHastaPeso(
         imagen.source,
         imagen.width,
         imagen.height,
@@ -155,7 +178,7 @@ export async function prepararImagenProducto(file: File): Promise<ImagenProducto
         FULL_TARGET_BYTES,
         'foto',
       ),
-      renderWebpHastaPeso(
+      renderHastaPeso(
         imagen.source,
         imagen.width,
         imagen.height,
@@ -172,12 +195,19 @@ export async function prepararImagenProducto(file: File): Promise<ImagenProducto
       fullHeight: full.height,
       thumbWidth: thumb.width,
       thumbHeight: thumb.height,
+      fullMimeType: full.mimeType,
+      thumbMimeType: thumb.mimeType,
     }
   } finally {
     imagen.dispose()
   }
 }
 
+/**
+ * Las claves de Storage son estables y globales por organización + producto.
+ * La extensión histórica .webp se conserva para no crear objetos duplicados;
+ * el Content-Type real (WebP o JPEG fallback) viaja en la metadata del objeto.
+ */
 export function pathImagenProducto(organizacionId: string, productoId: string): {
   full: string
   thumb: string
