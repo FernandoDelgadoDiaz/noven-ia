@@ -39,6 +39,9 @@ interface VencimientoOperativoRow {
   precio_costo: number | null
   imagen_url: string | null
   familia_id: string | null
+  sector_id: string | null
+  sector_nombre: string | null
+  dias_donacion: number | null
   producto_activo: boolean
   producto_created_at: string
   producto_updated_at: string
@@ -46,9 +49,7 @@ interface VencimientoOperativoRow {
   venta_media_diaria: number
 }
 
-/**
- * Narrowing helper para el camino legacy.
- */
+/** Narrowing helper para el camino legacy. */
 function hasProducto(
   row: Vencimiento & { producto: Producto | null },
 ): row is Vencimiento & { producto: Producto } {
@@ -73,7 +74,7 @@ function mapOperativo(row: VencimientoOperativoRow): Vencimiento & {
     gramaje: row.gramaje,
     categoria: row.categoria,
     proveedor: row.proveedor,
-    sector: row.sector,
+    sector: row.sector_nombre ?? row.sector,
     venta_media_diaria: row.venta_media_diaria,
     stock_actual: row.stock_actual,
     precio_costo: row.precio_costo,
@@ -98,6 +99,7 @@ function mapOperativo(row: VencimientoOperativoRow): Vencimiento & {
     created_at: row.created_at,
     producto,
     nivel_actual: row.nivel_actual,
+    dias_donacion: row.dias_donacion,
   }
 }
 
@@ -172,12 +174,10 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
     setFetchLoading(true)
     setFetchError(null)
 
-    // Camino objetivo multitenant. La vista obtiene VMD/stock de producto_sucursal
-    // y su RLS ya filtra sucursal + familia antes de devolver datos al navegador.
     const { data: operativos, error: operativoError } = await supabase
       .from('v_vencimientos_operativos')
       .select(
-        'id, producto_id, sucursal_id, usuario_id, cantidad, lote, fecha_vencimiento, fecha_carga, activo, created_at, nivel_actual, organizacion_id, cod_art, codigo_barras, descripcion, marca, gramaje, categoria, proveedor, sector, precio_costo, imagen_url, familia_id, producto_activo, producto_created_at, producto_updated_at, stock_actual, venta_media_diaria',
+        'id, producto_id, sucursal_id, usuario_id, cantidad, lote, fecha_vencimiento, fecha_carga, activo, created_at, nivel_actual, organizacion_id, cod_art, codigo_barras, descripcion, marca, gramaje, categoria, proveedor, sector, precio_costo, imagen_url, familia_id, sector_id, sector_nombre, dias_donacion, producto_activo, producto_created_at, producto_updated_at, stock_actual, venta_media_diaria',
       )
       .eq('sucursal_id', sucursalId)
       .eq('activo', true)
@@ -188,9 +188,6 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
     if (!operativoError) {
       typed = ((operativos ?? []) as unknown as VencimientoOperativoRow[]).map(mapOperativo)
     } else if (vistaOperativaNoDisponible(operativoError)) {
-      // Compatibilidad EXCLUSIVA para producción pre-migración. Nunca caer al
-      // esquema abierto ante 401/403/RLS: eso convertiría un error de permisos
-      // en un bypass de seguridad.
       const legacy = await cargarLegacy(sucursalId)
       if (legacy.error) {
         setFetchError(legacy.error)
@@ -206,9 +203,6 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
 
     const hoyDate = new Date()
 
-    // Detección de transición a 'urgente': el cron server-side es la garantía
-    // principal; se conserva esta escritura reactiva para no cambiar el flujo de
-    // notificaciones de 091 durante el cutover.
     const transiciones: string[] = []
     const conRiesgo: VencimientoConRiesgo[] = typed
       .map((row) => {
@@ -232,8 +226,6 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
     void fetchData()
   }, [fetchData])
 
-  // Defensa adicional de UI. En multitenant la base ya aplica este scope; se
-  // mantiene para compatibilidad con el camino legacy hasta retirar sus policies.
   const data = useMemo(() => {
     if (famLoading) return []
     if (esAdmin) return rawData
