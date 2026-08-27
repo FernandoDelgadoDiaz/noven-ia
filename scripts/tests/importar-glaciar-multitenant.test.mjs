@@ -4,13 +4,13 @@ const m = await cargar('src/lib/importar-glaciar.ts')
 const T = '\t'
 const L = (...c) => c.join(T)
 
-function reporteValido(codigoSucursal = '091') {
+function reporteValido(codigoSucursal = '091', incluirFamilia = true) {
   return [
     'Parámetros del Listado de Pedido de Reposición Asistida',
     codigoSucursal === null
       ? L('Grupo RA:', '1', 'Nro.Pedido:', '53008944')
       : L('Grupo RA:', '1', 'Nro.Pedido:', '53008944', 'Cod.Suc.Padrón:', codigoSucursal),
-    L('Cód.Familia:', '003'),
+    incluirFamilia ? L('Cód.Familia:', '003') : L('Filtro:', 'Asistido completo'),
     L('Período de Referencia Desde:', '06/08/2026', 'Período de Referencia Hasta:', '06/08/2026', 'Cod.Art.:'),
     '04/08/2026 - 19:24:40',
     'S.A. IMP. Y EXP. DE LA PATAGONIA',
@@ -21,12 +21,25 @@ function reporteValido(codigoSucursal = '091') {
   ].join('\r\n')
 }
 
-seccion('Reporte válido 091')
+seccion('Reporte válido 091 · modo por familia')
 const ok = m.analizarReporteGlaciar(reporteValido())
 eq('sucursal', ok.metadata.codigoSucursal, '091')
 eq('familia', ok.parser.codigoFamilia, '003')
+eq('modo', ok.modo, 'familia')
 eq('filas', ok.parser.filas.length, 1)
 eq('sin errores bloqueantes', ok.erroresBloqueantes, [])
+
+seccion('Asistido completo · la familia global NO es obligatoria')
+const masivo = m.analizarReporteGlaciar(reporteValido('091', false), { modo: 'masiva' })
+eq('sucursal masiva', masivo.metadata.codigoSucursal, '091')
+eq('sin familia global', masivo.parser.codigoFamilia, null)
+eq('modo masivo', masivo.modo, 'masiva')
+eq('grilla válida', masivo.parser.filas.length, 1)
+eq('no bloquea por familia ausente', masivo.erroresBloqueantes, [])
+
+seccion('El mismo archivo sin familia sí bloquea el modo aprendizaje')
+const sinFamilia = m.analizarReporteGlaciar(reporteValido('091', false), { modo: 'familia' })
+eq('modo familia conserva gate', sinFamilia.erroresBloqueantes.some((e) => e.includes('Cód.Familia')), true)
 
 seccion('Reporte válido pero sin identidad de sucursal')
 const sinSucursal = m.analizarReporteGlaciar(reporteValido(null))
