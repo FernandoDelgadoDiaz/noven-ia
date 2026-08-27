@@ -4,6 +4,11 @@ import { Package, BarChart2, Layers, Camera, CheckCircle2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
 import { calcularDiasRestantes, calcularNivelRiesgo } from '@/lib/riesgo'
+import {
+  consultarModoImagenProducto,
+  guardarImagenProductoGlobal,
+  type ModoImagenProducto,
+} from '@/lib/product-image'
 import ProductIdentity from '@/components/product/ProductIdentity'
 import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
 
@@ -41,25 +46,14 @@ function InfoRow({ label, value, Icon }: InfoRowProps) {
   )
 }
 
-async function subirFotoProducto(file: File, codArt: string): Promise<string> {
-  const ext = file.name.split('.').pop() ?? 'jpg'
-  const path = `${codArt}.${ext}`
-  const { error } = await supabase.storage
-    .from('productos-imagenes')
-    .upload(path, file, { upsert: true })
-  if (error) throw error
-  const { data } = supabase.storage
-    .from('productos-imagenes')
-    .getPublicUrl(path)
-  return data.publicUrl
-}
-
 export default function ProductoConfirm({ producto, onConfirm, onCancel }: ProductoConfirmProps) {
   const { sucursalId } = useSucursalActual()
   const [previewUrl, setPreviewUrl] = useState<string | null>(producto.imagen_url)
   const [subiendo, setSubiendo] = useState(false)
   const [fotoGuardada, setFotoGuardada] = useState(false)
   const [errorFoto, setErrorFoto] = useState<string | null>(null)
+  const [modoFoto, setModoFoto] = useState<ModoImagenProducto | null>(null)
+  const [cargandoPermisoFoto, setCargandoPermisoFoto] = useState(true)
   const [vencimientoActivo, setVencimientoActivo] = useState<VencimientoActivoScanner | null>(null)
   const [verificandoVencimiento, setVerificandoVencimiento] = useState(true)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -103,6 +97,30 @@ export default function ProductoConfirm({ producto, onConfirm, onCancel }: Produ
     return () => { activo = false }
   }, [producto.id, sucursalId])
 
+  useEffect(() => {
+    let activo = true
+    async function cargarModoFoto(): Promise<void> {
+      if (!sucursalId) {
+        if (activo) setCargandoPermisoFoto(false)
+        return
+      }
+      setCargandoPermisoFoto(true)
+      try {
+        const modo = await consultarModoImagenProducto(sucursalId, producto.id)
+        if (!activo) return
+        setModoFoto(modo)
+      } catch (err) {
+        if (!activo) return
+        console.error('[ProductoConfirm] modo imagen:', err)
+        setModoFoto('solo_lectura')
+      } finally {
+        if (activo) setCargandoPermisoFoto(false)
+      }
+    }
+    void cargarModoFoto()
+    return () => { activo = false }
+  }, [producto.id, sucursalId])
+
   const coberturaTexto =
     producto.venta_media_diaria > 0
       ? `${Math.round(producto.stock_actual / producto.venta_media_diaria)} días`
@@ -111,6 +129,20 @@ export default function ProductoConfirm({ producto, onConfirm, onCancel }: Produ
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!sucursalId) {
+      setErrorFoto('No hay una sucursal seleccionada.')
+      return
+    }
+    if (!producto.organizacion_id) {
+      setErrorFoto('No se pudo resolver la organización del producto.')
+      return
+    }
+    if (modoFoto === 'solo_lectura') {
+      setErrorFoto('La foto ya es compartida por la organización y tu perfil no puede reemplazarla.')
+      if (inputRef.current) inputRef.current.value = ''
+      return
+    }
+
     setErrorFoto(null)
     setFotoGuardada(false)
 
@@ -119,19 +151,21 @@ export default function ProductoConfirm({ producto, onConfirm, onCancel }: Produ
     setSubiendo(true)
 
     try {
-      const publicUrl = await subirFotoProducto(file, producto.cod_art)
-      const { error: updateError } = await supabase
-        .from('productos')
-        .update({ imagen_url: publicUrl, updated_at: new Date().toISOString() })
-        .eq('id', producto.id)
-      if (updateError) throw updateError
-      setPreviewUrl(publicUrl)
+      const resultado = await guardarImagenProductoGlobal({
+        file,
+        sucursalId,
+        productoId: producto.id,
+        organizacionId: producto.organizacion_id,
+      })
+      setPreviewUrl(resultado.publicUrl)
+      setModoFoto(resultado.modoPosterior)
       setFotoGuardada(true)
     } catch (err) {
-      console.error('[ProductoConfirm] Error al subir foto:', err)
-      setErrorFoto('No se pudo guardar la foto. Intentá de nuevo.')
+      console.error('[ProductoConfirm] Error al guardar foto global:', err)
+      setErrorFoto(err instanceof Error && err.message ? err.message : 'No se pudo guardar la foto. Intentá de nuevo.')
       setPreviewUrl(producto.imagen_url)
     } finally {
+      URL.revokeObjectURL(localUrl)
       setSubiendo(false)
       if (inputRef.current) inputRef.current.value = ''
     }
@@ -184,6 +218,8 @@ export default function ProductoConfirm({ producto, onConfirm, onCancel }: Produ
     )
   }
 
+  const puedeEditarFoto = modoFoto === 'agregar' || modoFoto === 'reemplazar'
+
   return (
     <div className="flex flex-col gap-4">
       <div className="bg-white rounded-card shadow-card p-5">
@@ -212,27 +248,34 @@ export default function ProductoConfirm({ producto, onConfirm, onCancel }: Produ
                       <CheckCircle2 className="h-3.5 w-3.5 text-white" />
                     </div>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => inputRef.current?.click()}
-                    disabled={subiendo}
-                    className="absolute -bottom-2 -right-2 h-7 w-7 bg-brand hover:bg-brand-hover text-white rounded-full flex items-center justify-center shadow-brand transition-colors disabled:opacity-50"
-                    aria-label="Cambiar foto"
-                  >
-                    <Camera className="h-3.5 w-3.5" />
-                  </button>
+                  {modoFoto === 'reemplazar' && (
+                    <button
+                      type="button"
+                      onClick={() => inputRef.current?.click()}
+                      disabled={subiendo || cargandoPermisoFoto}
+                      className="absolute -bottom-2 -right-2 h-7 w-7 bg-brand hover:bg-brand-hover text-white rounded-full flex items-center justify-center shadow-brand transition-colors disabled:opacity-50"
+                      aria-label="Cambiar foto"
+                    >
+                      <Camera className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
-              ) : (
+              ) : puedeEditarFoto ? (
                 <button
                   type="button"
                   onClick={() => inputRef.current?.click()}
-                  disabled={subiendo}
+                  disabled={subiendo || cargandoPermisoFoto}
                   className="h-[120px] w-[120px] rounded-2xl border-2 border-dashed border-brand/40 bg-brand-light flex flex-col items-center justify-center gap-1.5 text-brand hover:bg-brand/10 transition-colors disabled:opacity-50"
                   aria-label="Agregar foto del producto"
                 >
                   <Camera className="h-7 w-7" />
                   <span className="text-[11px] font-semibold text-center leading-tight px-1">Agregar foto</span>
                 </button>
+              ) : (
+                <div className="h-[120px] w-[120px] rounded-2xl bg-muted flex items-center justify-center text-2xl">📷</div>
+              )}
+              {previewUrl && modoFoto === 'solo_lectura' && (
+                <p className="text-[10px] text-muted-foreground text-center mt-2">Foto compartida</p>
               )}
             </div>
 
@@ -249,14 +292,16 @@ export default function ProductoConfirm({ producto, onConfirm, onCancel }: Produ
             </div>
           </div>
 
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            {...(previewUrl ? {} : { capture: 'environment' as const })}
-            className="hidden"
-            onChange={(e) => void handleFileChange(e)}
-          />
+          {puedeEditarFoto && (
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/*"
+              {...(previewUrl ? {} : { capture: 'environment' as const })}
+              className="hidden"
+              onChange={(e) => void handleFileChange(e)}
+            />
+          )}
         </div>
 
         <div>
