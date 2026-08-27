@@ -31,7 +31,12 @@ const inputCls = 'w-full h-12 px-4 bg-surface-base border border-border rounded-
 
 export default function Scanner() {
   const { scanBarcode, scanning, error: scanError, reset } = useScanner()
-  const { buscarConflictoCodigos } = useProductos()
+  const {
+    buscarConflictoCodigos,
+    vincularEanScanner,
+    completarCodArtScanner,
+    crearProductoScanner,
+  } = useProductos()
   const { user } = useAuth()
   const { esAdmin, familiaIds, loading: famLoading } = useUsuarioFamilias()
   const { sucursalId } = useSucursalActual()
@@ -72,29 +77,36 @@ export default function Scanner() {
   const [guardandoCodArt, setGuardandoCodArt] = useState(false)
   const [errorCodArtCompletando, setErrorCodArtCompletando] = useState<string | null>(null)
 
-  // Nombres de familias para mostrar en mensajes y selector
+  // Familias utilizables en esta sucursal. El RPC devuelve todas para roles de
+  // gestión y solamente las asignadas para operador.
   const [familiasUsuario, setFamiliasUsuario] = useState<Familia[]>([])
 
   const inputManualRef = useRef<HTMLInputElement>(null)
 
-  // Cargar datos de las familias del usuario para mostrar nombres
   useEffect(() => {
-    if (famLoading || familiaIds.length === 0) return
-    supabase
-      .from('familias')
-      .select('id, nombre, codigo, sector_id')
-      .in('id', familiaIds)
-      .then(({ data }) => {
-        if (data) setFamiliasUsuario(data as Familia[])
-      })
-  }, [familiaIds, famLoading])
+    if (famLoading || !sucursalId) return
+    let activo = true
 
-  // Inicializar familia seleccionada para nuevo producto cuando carguen las familias
+    void supabase
+      .rpc('listar_familias_scanner', { p_sucursal_id: sucursalId })
+      .then(({ data, error }) => {
+        if (!activo) return
+        if (error || !data) {
+          setFamiliasUsuario([])
+          return
+        }
+        setFamiliasUsuario(data as Familia[])
+      })
+
+    return () => { activo = false }
+  }, [famLoading, sucursalId])
+
+  // Inicializar familia seleccionada para nuevo producto usando el scope real.
   useEffect(() => {
-    if (familiaIds.length > 0 && !nuevoProductoFamiliaId) {
-      setNuevoProductoFamiliaId(familiaIds[0])
+    if (familiasUsuario.length > 0 && !nuevoProductoFamiliaId) {
+      setNuevoProductoFamiliaId(familiasUsuario[0].id)
     }
-  }, [familiaIds, nuevoProductoFamiliaId])
+  }, [familiasUsuario, nuevoProductoFamiliaId])
 
   function verificarFamiliaProducto(producto: Producto): boolean {
     if (esAdmin) return true
@@ -116,28 +128,28 @@ export default function Scanner() {
       const fueBarcode = esBarcode || resultado.codigo_barras === codigo.trim()
       setEncontradoPorCodArt(!fueBarcode)
 
-      // Regla de negocio: máximo 1 vencimiento activo por producto/sucursal.
-      // Si ya existe, el flujo será actualizar ese registro en lugar de crear un duplicado.
-      // Usamos limit(1) (no maybeSingle) para tolerar duplicados legacy y tomar el más reciente.
-      const { data: vencData } = await supabase
-        .from('vencimientos')
+      // El Scanner ya no lee la tabla legacy cruda: usa el contrato operativo,
+      // cuyo join con producto_sucursal aplica scope de sucursal/familia.
+      const { data: vencData, error: vencError } = await supabase
+        .from('v_vencimientos_operativos')
         .select('id, cantidad, fecha_vencimiento, lote')
         .eq('producto_id', resultado.id)
         .eq('sucursal_id', sucursalId)
         .eq('activo', true)
         .order('fecha_carga', { ascending: false })
         .limit(1)
+
+      if (vencError && vencError.code !== 'PGRST205' && vencError.code !== '42P01') {
+        setErrorBusqueda(`No se pudo verificar el vencimiento activo: ${vencError.message}`)
+        return
+      }
       setVencimientoExistente((vencData?.[0] as VencimientoExistente | undefined) ?? null)
 
       setPaso('confirmando')
     } else if (!scanError) {
       // Precarga del alta. Un código escaneado NUNCA se usa como sustituto del
       // cod_art: si es un código de barras va a `codigo_barras` y el operador
-      // debe tipear el código interno de Glaciar aparte. Adivinar mal acá es
-      // exactamente lo que generó los duplicados que el importador no resuelve.
-      // El largo ya desambigua: 7 dígitos es cod_art, 8/12/13/14 es código de
-      // barras. No se usa `esBarcode` para forzar la decisión porque el comercio
-      // puede tener etiquetas impresas con el código interno.
+      // debe tipear el código interno de Glaciar aparte.
       const codigoTrim = codigo.trim()
       const clase = clasificarCodigoEscaneado(codigoTrim)
       if (clase === 'ean') {
@@ -147,8 +159,6 @@ export default function Scanner() {
         setNuevoProductoCodArt(codigoTrim)
         setNuevoProductoEan('')
       } else {
-        // Ante la duda no se precarga nada: mejor que tipee el operador a que el
-        // sistema adivine mal y meta un EAN en cod_art.
         setNuevoProductoCodArt('')
         setNuevoProductoEan('')
       }
@@ -168,11 +178,10 @@ export default function Scanner() {
   }
 
   // Decide el siguiente paso según qué datos le falten al producto.
-  // Encadena: EAN faltante (Caso 1) → cod_art faltante (Caso 2) → formulario.
+  // Encadena: EAN faltante → cod_art faltante → formulario.
   function continuarDesdeProducto(p: Producto): void {
     if (!p.codigo_barras) { setPaso('capturar_ean'); return }
     if (!p.cod_art || p.cod_art.trim() === '') { setPaso('completar_cod_art'); return }
-    // Si el producto ya tiene un vencimiento activo, mostrar ese registro (actualizar, no duplicar)
     if (vencimientoExistente) { setPaso('vencimiento_existente'); return }
     setPaso('formulario')
   }
@@ -190,7 +199,7 @@ export default function Scanner() {
     setNuevoProductoCategoria('OTRO')
     setNuevoProductoStock(0)
     setNuevoProductoVenta(0)
-    setNuevoProductoFamiliaId(familiaIds[0] ?? '')
+    setNuevoProductoFamiliaId(familiasUsuario[0]?.id ?? '')
     setErrorNuevo(null)
     setErrorCodArt(null)
     setErrorEanNuevo(null)
@@ -212,8 +221,6 @@ export default function Scanner() {
 
   // Validaciones en tiempo real
   function handleCodArtChange(valor: string): void {
-    // Solo dígitos, y truncado al largo del código interno: aunque el operador
-    // pegue un EAN completo acá, nunca puede entrar entero como cod_art.
     const soloDigitos = valor.replace(/\D/g, '').slice(0, LARGO_COD_ART)
     setNuevoProductoCodArt(soloDigitos)
     setErrorCodArt(
@@ -251,44 +258,37 @@ export default function Scanner() {
     setModalEanAbierto(false)
     if (!productoEncontrado) return
     const codigo = ean.trim()
-    // Antes se guardaba lo que viniera del lector sin validar el largo.
     if (!esEanValido(codigo)) { setErrorEan(MENSAJE_EAN_INVALIDO); return }
+
     setGuardandoEan(true)
     setErrorEan(null)
-    const { data: duplicado, error: errCheck } = await supabase
-      .from('productos').select('id, descripcion, cod_art').eq('codigo_barras', codigo).neq('id', productoEncontrado.id).maybeSingle()
-    if (errCheck) { setGuardandoEan(false); setErrorEan(`Error al verificar: ${errCheck.message}`); return }
-    if (duplicado) {
-      setGuardandoEan(false)
-      setErrorEan(`Este código de barras ya está registrado en "${(duplicado as { descripcion: string }).descripcion}".`)
-      return
-    }
 
-    // Vínculo duro: si otro producto tiene este EAN como cod_art, los dos
-    // registros son el mismo objeto físico. Asignarlo acá dejaría el duplicado
-    // en pie y encima ligado por dos campos distintos.
-    const { data: legacy } = await supabase
-      .from('productos').select('id, descripcion, cod_art').eq('cod_art', codigo).neq('id', productoEncontrado.id).maybeSingle()
-    if (legacy) {
+    try {
+      const conflicto = await buscarConflictoCodigos('', codigo, sucursalId, productoEncontrado.id)
+      if (conflicto) {
+        const { producto: existente, motivo } = conflicto
+        if (motivo === 'ean_guardado_como_cod_art') {
+          setErrorEan(
+            `Existe otro producto, "${existente.descripcion}", cargado con este código de barras en el campo del código interno. ` +
+              'Probablemente sean el mismo producto. Avisale al administrador antes de continuar.',
+          )
+        } else {
+          setErrorEan(`Este código de barras ya está registrado en "${existente.descripcion}".`)
+        }
+        return
+      }
+
+      const actualizado = await vincularEanScanner(sucursalId, productoEncontrado.id, codigo)
+      setProductoEncontrado(actualizado)
+      continuarDesdeProducto(actualizado)
+    } catch (err) {
+      setErrorEan(`Error al guardar: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
       setGuardandoEan(false)
-      const l = legacy as { descripcion: string; cod_art: string }
-      setErrorEan(
-        `Existe otro producto, "${l.descripcion}", cargado con este código de barras en el campo del código interno. ` +
-          'Probablemente sean el mismo producto. Avisale al administrador antes de continuar.',
-      )
-      return
     }
-    const { error: errUpdate } = await supabase
-      .from('productos').update({ codigo_barras: ean.trim(), updated_at: new Date().toISOString() }).eq('id', productoEncontrado.id)
-    setGuardandoEan(false)
-    if (errUpdate) { setErrorEan(`Error al guardar: ${errUpdate.message}`); return }
-    const actualizado: Producto = { ...productoEncontrado, codigo_barras: ean.trim() }
-    setProductoEncontrado(actualizado)
-    continuarDesdeProducto(actualizado)
   }
 
   async function handleAgregarNuevoProducto(): Promise<void> {
-    // Validaciones de formato
     if (!codArtValido()) {
       setErrorCodArt(MENSAJE_COD_ART_INVALIDO)
       setErrorNuevo('Corregí los errores antes de continuar.')
@@ -301,24 +301,22 @@ export default function Scanner() {
     }
     if (!nuevoProductoDesc.trim()) { setErrorNuevo('La descripción es obligatoria.'); return }
 
-    // Validar que se seleccionó familia (solo para no-admin)
-    const familiaIdParaInsertar = esAdmin ? (nuevoProductoFamiliaId || null) : (nuevoProductoFamiliaId || familiaIds[0] || null)
-    if (!esAdmin && !familiaIdParaInsertar) {
-      setErrorNuevo('No tenés familias asignadas. Contactá al administrador.')
+    const familiaIdParaInsertar = nuevoProductoFamiliaId || familiasUsuario[0]?.id || null
+    if (!familiaIdParaInsertar) {
+      setErrorNuevo('No hay una familia disponible para este usuario en la sucursal.')
       return
     }
 
     setErrorNuevo(null)
     setGuardandoNuevo(true)
 
-    // Chequeo de códigos ocupados ANTES de insertar. Incluye productos dados de
-    // baja (los índices únicos aplican igual) y, sobre todo, el vínculo duro:
-    // si ya existe un producto cuyo cod_art es este mismo EAN, es el mismo
-    // objeto físico cargado antes con el código en el campo equivocado.
-    // Insertar acá crearía el duplicado que después el importador no resuelve.
     let conflicto: ConflictoCodigos | null = null
     try {
-      conflicto = await buscarConflictoCodigos(nuevoProductoCodArt, nuevoProductoEan)
+      conflicto = await buscarConflictoCodigos(
+        nuevoProductoCodArt,
+        nuevoProductoEan,
+        sucursalId,
+      )
     } catch (err) {
       setGuardandoNuevo(false)
       setErrorNuevo(`Error al verificar los códigos: ${err instanceof Error ? err.message : String(err)}`)
@@ -343,23 +341,26 @@ export default function Scanner() {
       return
     }
 
-    const { data, error } = await supabase
-      .from('productos')
-      .insert({
-        cod_art: nuevoProductoCodArt.trim(),
-        codigo_barras: nuevoProductoEan.trim(),
-        descripcion: nuevoProductoDesc.trim(),
+    try {
+      const creado = await crearProductoScanner({
+        sucursalId,
+        codArt: nuevoProductoCodArt,
+        ean: nuevoProductoEan,
+        descripcion: nuevoProductoDesc,
         marca: nuevoProductoMarca.trim() || null,
         categoria: nuevoProductoCategoria,
-        stock_actual: nuevoProductoStock,
-        venta_media_diaria: nuevoProductoVenta,
-        familia_id: familiaIdParaInsertar,
-        activo: true,
+        stockActual: nuevoProductoStock,
+        ventaMediaDiaria: nuevoProductoVenta,
+        familiaId: familiaIdParaInsertar,
       })
-      .select().single()
-    setGuardandoNuevo(false)
-    if (error) { setErrorNuevo(`Error al agregar: ${error.message}`); return }
-    if (data) { setProductoEncontrado(data as Producto); setErrorBusqueda(null); setPaso('formulario') }
+      setProductoEncontrado(creado)
+      setErrorBusqueda(null)
+      setPaso('formulario')
+    } catch (err) {
+      setErrorNuevo(`Error al agregar: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setGuardandoNuevo(false)
+    }
   }
 
   // ── Pantalla bloqueada por familia ─────────────────────────────────────────
@@ -369,21 +370,18 @@ export default function Scanner() {
       <div className="min-h-screen bg-surface-base flex flex-col">
         <SubHeader paso={1} titulo="Producto fuera de tu sector" subtitulo="Este producto no pertenece a tu sector" onBack={handleCancelarConfirmacion} />
         <div className="flex-1 flex flex-col px-4 pb-nav pt-6 gap-5">
-          {/* Icono de advertencia */}
           <div className="flex flex-col items-center gap-3 text-center py-4">
             <div className="p-4 bg-amber-50 rounded-full">
               <ShieldAlert className="h-12 w-12 text-amber-500" />
             </div>
           </div>
 
-          {/* Info del producto bloqueado */}
           <div className="bg-white rounded-card shadow-card px-4 py-3.5">
             <p className="text-xs text-muted-foreground mb-0.5">Producto escaneado</p>
             <p className="text-foreground font-bold text-base leading-tight">{productoEncontrado.descripcion}</p>
             {productoEncontrado.marca && <p className="text-muted-foreground text-sm mt-0.5">{productoEncontrado.marca}</p>}
           </div>
 
-          {/* Mensaje de restricción */}
           <div className="bg-amber-50 border border-amber-200 rounded-card p-4 flex gap-3 items-start">
             <ShieldAlert className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
             <div>
@@ -397,7 +395,6 @@ export default function Scanner() {
             </div>
           </div>
 
-          {/* Botón para volver a escanear */}
           <button
             type="button"
             onClick={handleCancelarConfirmacion}
@@ -438,7 +435,6 @@ export default function Scanner() {
       <div className="min-h-screen bg-surface-base flex flex-col">
         <SubHeader paso={2} titulo="Registro existente" subtitulo="Este producto ya tiene un vencimiento cargado" onBack={handleCancelarConfirmacion} />
         <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4 flex flex-col gap-4">
-          {/* Producto */}
           <div className="bg-white rounded-card shadow-card p-4 flex gap-3 items-center">
             <div className="h-16 w-16 rounded-xl bg-muted overflow-hidden shrink-0 flex items-center justify-center">
               {productoEncontrado.imagen_url ? (
@@ -453,7 +449,6 @@ export default function Scanner() {
             </div>
           </div>
 
-          {/* Datos actuales del vencimiento */}
           <div className="bg-white rounded-card shadow-card p-4 flex flex-col gap-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Vencimiento actual</p>
             <div className="flex items-center justify-between">
@@ -470,13 +465,11 @@ export default function Scanner() {
             </div>
           </div>
 
-          {/* Mensaje */}
           <div className="bg-brand-light border border-brand-muted rounded-card p-4 flex gap-3 items-start">
             <AlertCircle className="h-5 w-5 text-brand shrink-0 mt-0.5" />
             <p className="text-brand text-sm">Este producto ya tiene un vencimiento registrado. ¿Querés actualizarlo?</p>
           </div>
 
-          {/* Acciones */}
           <button
             type="button"
             onClick={() => setPaso('formulario')}
@@ -530,26 +523,29 @@ export default function Scanner() {
   async function handleGuardarCodArt(): Promise<void> {
     if (!productoEncontrado) return
     const codigo = codArtCompletando.trim()
-    // El largo exacto de 7 es lo que impide que un código de barras entre acá:
-    // los largos válidos de EAN (8, 12, 13, 14) son todos distintos de 7, así
-    // que ningún código de barras real puede pasar esta validación.
     if (!esCodArtValido(codigo)) {
       setErrorCodArtCompletando(MENSAJE_COD_ART_INVALIDO)
       return
     }
+
     setGuardandoCodArt(true)
     setErrorCodArtCompletando(null)
-    const { data: duplicado, error: errCheck } = await supabase
-      .from('productos').select('id').eq('cod_art', codigo).neq('id', productoEncontrado.id).maybeSingle()
-    if (errCheck) { setGuardandoCodArt(false); setErrorCodArtCompletando(`Error al verificar: ${errCheck.message}`); return }
-    if (duplicado) { setGuardandoCodArt(false); setErrorCodArtCompletando('Este código interno ya está registrado en otro producto.'); return }
-    const { error: errUpdate } = await supabase
-      .from('productos').update({ cod_art: codigo, updated_at: new Date().toISOString() }).eq('id', productoEncontrado.id)
-    setGuardandoCodArt(false)
-    if (errUpdate) { setErrorCodArtCompletando(`Error al guardar: ${errUpdate.message}`); return }
-    const actualizado: Producto = { ...productoEncontrado, cod_art: codigo }
-    setProductoEncontrado(actualizado)
-    continuarDesdeProducto(actualizado)
+
+    try {
+      const conflicto = await buscarConflictoCodigos(codigo, '', sucursalId, productoEncontrado.id)
+      if (conflicto) {
+        setErrorCodArtCompletando('Este código interno ya está registrado en otro producto.')
+        return
+      }
+
+      const actualizado = await completarCodArtScanner(sucursalId, productoEncontrado.id, codigo)
+      setProductoEncontrado(actualizado)
+      continuarDesdeProducto(actualizado)
+    } catch (err) {
+      setErrorCodArtCompletando(`Error al guardar: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setGuardandoCodArt(false)
+    }
   }
 
   // ── Capturar EAN (paso 2.5) ─────────────────────────────────────────────────
@@ -578,7 +574,6 @@ export default function Scanner() {
                 <p className="text-red-600 text-sm">{errorEan}</p>
               </div>
             )}
-            {/* Opción 1: Escanear con cámara */}
             <button
               type="button"
               onClick={() => { setErrorEan(null); setModalEanAbierto(true) }}
@@ -683,8 +678,8 @@ export default function Scanner() {
 
   // ── Nuevo producto ──────────────────────────────────────────────────────────
   if (paso === 'nuevo_producto') {
-    const mostrarSelectorFamilia = !esAdmin && familiasUsuario.length > 1
-    const familiaUnica = !esAdmin && familiasUsuario.length === 1 ? familiasUsuario[0] : null
+    const mostrarSelectorFamilia = familiasUsuario.length > 1
+    const familiaUnica = familiasUsuario.length === 1 ? familiasUsuario[0] : null
 
     const codArtTocado = nuevoProductoCodArt.length > 0
 
@@ -709,7 +704,6 @@ export default function Scanner() {
             )}
             <div className="bg-white rounded-card shadow-card p-4 flex flex-col gap-4">
 
-              {/* Cod. Art. — 7 dígitos exactos */}
               <div className="space-y-1.5">
                 <label htmlFor="np-codart" className="block text-xs font-semibold text-foreground uppercase tracking-wide">
                   Cod. Art. <span className="text-red-500">*</span>
@@ -740,7 +734,6 @@ export default function Scanner() {
                 )}
               </div>
 
-              {/* Código de barras — captura SOLO por cámara (EAN-8/12/13/14) */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-foreground uppercase tracking-wide">
                   Código EAN <span className="text-red-500">*</span>
@@ -779,7 +772,6 @@ export default function Scanner() {
                 <p className="text-muted-foreground text-xs">El EAN se captura únicamente con la cámara para garantizar lecturas exactas.</p>
               </div>
 
-              {/* Descripción */}
               <div className="space-y-1.5">
                 <label htmlFor="np-desc" className="block text-xs font-semibold text-foreground uppercase tracking-wide">
                   Descripción <span className="text-red-500">*</span>
@@ -787,7 +779,6 @@ export default function Scanner() {
                 <input id="np-desc" type="text" value={nuevoProductoDesc} onChange={(e) => setNuevoProductoDesc(e.target.value)} placeholder="Ej: Chocolate con leche 100g" className={inputCls} />
               </div>
 
-              {/* Marca */}
               <div className="space-y-1.5">
                 <label htmlFor="np-marca" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Marca (opcional)</label>
                 <input id="np-marca" type="text" value={nuevoProductoMarca} onChange={(e) => setNuevoProductoMarca(e.target.value)} placeholder="Ej: Milka" className={inputCls} />
@@ -810,7 +801,6 @@ export default function Scanner() {
                 </div>
               </div>
 
-              {/* Selector de familia — solo si el usuario tiene múltiples familias */}
               {mostrarSelectorFamilia && (
                 <div className="space-y-1.5">
                   <label htmlFor="np-familia" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Sector / Familia *</label>
@@ -828,12 +818,11 @@ export default function Scanner() {
                 </div>
               )}
 
-              {/* Info de familia única — solo lectura */}
               {familiaUnica && (
                 <div className="bg-brand-light border border-brand-muted rounded-lg px-3 py-2.5 flex items-center gap-2">
                   <Package className="h-4 w-4 text-brand shrink-0" />
                   <p className="text-brand text-sm">
-                    Se va a asignar a tu sector: <span className="font-semibold">{familiaUnica.nombre}</span>
+                    Se va a asignar a: <span className="font-semibold">{familiaUnica.nombre}</span>
                   </p>
                 </div>
               )}
@@ -841,7 +830,7 @@ export default function Scanner() {
             <button
               type="button"
               onClick={() => void handleAgregarNuevoProducto()}
-              disabled={guardandoNuevo || !codArtValido() || !eanNuevoValido()}
+              disabled={guardandoNuevo || !codArtValido() || !eanNuevoValido() || !nuevoProductoFamiliaId}
               className="w-full min-h-[56px] flex items-center justify-center gap-3 bg-brand hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-base rounded-card shadow-brand transition-all duration-150 active:scale-[0.98]"
             >
               {guardandoNuevo ? (
@@ -865,7 +854,6 @@ export default function Scanner() {
       {modalAbierto && <ScannerModal onScan={handleScanFromCamera} onClose={() => setModalAbierto(false)} />}
 
       <div className="min-h-screen bg-surface-base flex flex-col">
-        {/* Header */}
         <div className="px-4 pt-5 pb-4">
           <StepIndicator current={1} total={3} />
           <h1 className="text-foreground text-xl font-bold mt-3 tracking-tight">Registrar vencimiento</h1>
@@ -873,8 +861,6 @@ export default function Scanner() {
         </div>
 
         <div className="flex-1 flex flex-col px-4 pb-nav gap-5">
-
-          {/* ── HERO scan button ── */}
           <button
             type="button"
             onClick={() => { setErrorBusqueda(null); setModalAbierto(true) }}
@@ -891,32 +877,27 @@ export default function Scanner() {
               'focus:outline-none focus-visible:ring-4 focus-visible:ring-brand/40',
             ].join(' ')}
           >
-            {/* Decorative rings */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="h-52 w-52 rounded-full border-2 border-white/10" />
               <div className="absolute h-36 w-36 rounded-full border border-white/8" />
             </div>
 
-            {/* Icon container */}
             <div className="relative bg-white/20 p-5 rounded-[18px]">
               <ScanLine className="h-12 w-12 text-white" />
             </div>
 
-            {/* Text */}
             <div className="relative text-center px-4">
               <p className="text-white font-bold text-xl tracking-tight">Escanear producto</p>
               <p className="text-white/70 text-sm mt-1">Tocá para abrir la cámara</p>
             </div>
           </button>
 
-          {/* Divider */}
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-border" />
             <span className="text-muted-foreground text-xs font-medium">o ingresá el código</span>
             <div className="flex-1 h-px bg-border" />
           </div>
 
-          {/* Manual input */}
           <div className="flex flex-col gap-3">
             <div className="flex gap-2">
               <input
@@ -944,7 +925,6 @@ export default function Scanner() {
               </button>
             </div>
 
-            {/* No encontrado */}
             {errorBusqueda === 'no_encontrado' && (
               <div className="bg-white rounded-card shadow-card p-4 flex flex-col gap-3 animate-fade-in">
                 <div className="flex items-start gap-2">
@@ -968,7 +948,6 @@ export default function Scanner() {
               </div>
             )}
 
-            {/* Otro error */}
             {errorVisible && errorBusqueda !== 'no_encontrado' && (
               <div className="bg-white rounded-card shadow-card p-4 flex items-start gap-2 animate-fade-in">
                 <Package className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
