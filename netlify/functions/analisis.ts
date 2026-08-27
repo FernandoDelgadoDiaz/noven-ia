@@ -1,6 +1,7 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import { getCorsHeaders } from './_auth'
+import { SYSTEM_ADMIN, SYSTEM_OPERADOR } from './_analisis_policy'
 
 /**
  * analisis — genera un reporte en lenguaje natural (DeepSeek) sobre los
@@ -9,55 +10,6 @@ import { getCorsHeaders } from './_auth'
  */
 
 const SUCURSAL_LEGACY = '00000000-0000-0000-0000-000000000001'
-const IDENTIDAD_REGLA = '- Siempre que nombre un artículo, identifíquelo como: Descripción — Marca | Gramaje: ... | Interno: ... | EAN: ...; no omita ninguno de esos datos aunque figure "Sin dato"'
-
-const SYSTEM_OPERADOR = `Usted es un consultor especializado en gestión de vencimientos y control de pérdidas para comercios minoristas de alimentación.
-Analiza datos actuales, históricos y seguimiento de acciones RAG para proporcionar recomendaciones constructivas y fundamentadas.
-
-REGLAS:
-- Utilice un tono formal y profesional en todo momento
-- Base sus recomendaciones SIEMPRE en los cálculos determinísticos provistos
-- La ventana comercial termina cuando el producto debe retirarse para DONACIÓN, no el día de vencimiento
-- RAG significa Retiro Anticipado de Góndola y el porcentaje lo sugiere Glaciar
-- NUNCA invente ni recomiende un porcentaje de descuento específico
-- Si un RAG figura sin movimiento o insuficiente, indique que debe revisarse nuevamente en Glaciar
-- Diferencie VMD histórica de Glaciar de velocidad observada por controles físicos del operador
-- Identifique patrones históricos: productos que se repiten en donaciones o decomisos
-- Compare el período actual con el anterior cuando haya datos disponibles
-- Explique el razonamiento detrás de cada recomendación
-${IDENTIDAD_REGLA}
-- Máximo 350 palabras
-
-Estructura del informe:
-1. Situación actual (datos concretos de unidades en riesgo antes de donación)
-2. Seguimiento RAG (qué acciones están funcionando y cuáles requieren revisión)
-3. Análisis histórico (patrones detectados en trimestres anteriores)
-4. Productos que requieren acción inmediata
-5. Recomendaciones específicas y medibles sin inventar descuentos`
-
-const SYSTEM_ADMIN = `Usted es un consultor estratégico especializado en gestión de pérdidas y vencimientos para cadenas de supermercados.
-Analiza el desempeño operativo de la sucursal comparando riesgo actual, seguimiento RAG e histórico.
-
-REGLAS:
-- Utilice un tono formal y profesional en todo momento
-- Base sus análisis en cálculos determinísticos y datos históricos provistos
-- La ventana comercial termina en el umbral obligatorio de DONACIÓN del sector
-- RAG significa Retiro Anticipado de Góndola y el porcentaje lo determina Glaciar
-- NUNCA invente ni recomiende un porcentaje de descuento específico
-- Destaque RAG sin movimiento o insuficientes y falta de seguimiento operativo
-- Diferencie VMD histórica de Glaciar de velocidad observada por el operador
-- Identifique tendencias entre trimestres y familias con problemas recurrentes
-- Cuantifique el impacto en unidades cuando sea posible
-${IDENTIDAD_REGLA}
-- Máximo 450 palabras
-
-Estructura del informe:
-1. Estado general de la sucursal
-2. Seguimiento RAG y productos que requieren nueva intervención
-3. Comparativa trimestral
-4. Familias con mayor riesgo estructural
-5. Recomendaciones estratégicas con fundamento`
-
 const UMBRAL_RADAR = 45
 const UMBRAL_URGENTE = 20
 
@@ -115,11 +67,16 @@ function calcularRiesgoComercial(
 
 function accionDeterministica(nivel: string): string {
   switch (nivel) {
-    case 'decomiso': return 'Retirar inmediatamente y registrar decomiso'
-    case 'donacion': return 'Retirar de venta y gestionar donación según política'
-    case 'urgente': return 'Revisar RAG en Glaciar y controlar cantidad comprometida'
-    case 'radar': return 'Gestionar RAG en Glaciar y monitorear cantidad comprometida'
-    default: return 'Monitorear; la proyección actual llega antes de la ventana de donación'
+    case 'decomiso':
+      return 'Retirar inmediatamente y registrar decomiso'
+    case 'donacion':
+      return 'Retirar de venta y gestionar donación hoy según política'
+    case 'urgente':
+      return 'Revisar/aplicar RAG en Glaciar y controlar estrechamente; no donar antes del umbral obligatorio'
+    case 'radar':
+      return 'Revisar/aplicar RAG en Glaciar cuando corresponda y monitorear cantidad comprometida'
+    default:
+      return 'Seguimiento normal; no indicar RAG obligatorio ni intervención extraordinaria'
   }
 }
 
@@ -320,6 +277,8 @@ const handler: Handler = async (event: HandlerEvent) => {
   const decActual = resumirAcciones(accActual, 'decomiso')
   const donAnterior = resumirAcciones(accAnterior, 'donacion')
   const decAnterior = resumirAcciones(accAnterior, 'decomiso')
+  const terminalActual = donActual.total + decActual.total
+  const terminalAnterior = donAnterior.total + decAnterior.total
 
   const patronMap = new Map<string, { tipo: string; producto: string; veces: number; cantidad: number }>()
   for (const a of [...accActual, ...accAnterior]) {
@@ -358,13 +317,13 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     const detallesRag = rag?.rag_porcentaje != null
       ? [
-          `  RAG vigente: ${rag.rag_porcentaje}% (porcentaje registrado desde Glaciar, no recomendado por Noven)`,
-          `  Estado seguimiento RAG: ${rag.estado_seguimiento_rag}`,
+          `  RAG registrado en Noven: ${rag.rag_porcentaje}% (porcentaje informado como aplicado en Glaciar; Noven no lo lee directamente de Glaciar)`,
+          `  Estado de seguimiento registrado en Noven: ${rag.estado_seguimiento_rag}`,
           `  Velocidad observada operador: ${fmtVelocidad(rag.velocidad_observada)}`,
           `  Velocidad necesaria actual: ${fmtVelocidad(rag.velocidad_necesaria)}`,
           rag.unidades_vendidas_observadas != null ? `  Reducción observada desde RAG: ${rag.unidades_vendidas_observadas} unidades` : null,
         ].filter(Boolean)
-      : ['  RAG: sin intervención registrada']
+      : ['  RAG en Noven: sin intervención registrada. Esto NO confirma el estado en Glaciar; verificar allí si la acción determinística requiere RAG.']
 
     return [
       `Producto: ${identidadArticulo(r)}`,
@@ -376,7 +335,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       `  Velocidad necesaria para llegar antes de donación: ${fmtVelocidad(riesgo.velocidadNecesaria)}`,
       `  Vendibles a VMD actual antes del retiro: ${Math.round(riesgo.unidadesVendiblesAntesRetiro)}`,
       `  Unidades en riesgo de no venderse: ${Math.round(riesgo.unidadesEnRiesgo)} (${riesgo.riesgoPorcentaje.toFixed(1)}%)`,
-      `  Acción determinística: ${accionDeterministica(r.nivel)}`,
+      `  Acción determinística OBLIGATORIA: ${accionDeterministica(r.nivel)}`,
       ...detallesRag,
     ].join('\n')
   })
@@ -397,6 +356,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       fmtTop(topProductos(don.porProducto)),
       `- Decomisos: ${dec.total} unidades en ${dec.registros} registros`,
       fmtTop(topProductos(dec.porProducto)),
+      `- Resultado terminal total (donación + decomiso): ${don.total + dec.total} unidades`,
     ].join('\n')
 
   const bloquePatrones = patronesRepetidos.length > 0
@@ -421,9 +381,13 @@ const handler: Handler = async (event: HandlerEvent) => {
     'Comparativa trimestral (actual vs. anterior):',
     `- Donaciones: ${comparativa(donActual.total, donAnterior.total)}`,
     `- Decomisos: ${comparativa(decActual.total, decAnterior.total)}`,
+    `- Resultado terminal combinado DONACIÓN + DECOMISO: ${comparativa(terminalActual, terminalAnterior)}`,
+    '- Regla de interpretación: una baja de donaciones NO es por sí sola una mejora; los decomisos son cualitativamente peores y deben evaluarse junto al total terminal.',
     '',
     'Patrones repetidos detectados (mismo producto en ≥2 registros):',
     bloquePatrones,
+    '',
+    'Límite de inferencia histórica: solo hay dos trimestres comparables. NO afirmar estacionalidad; como máximo indicar concentración/recurrencia y necesidad de más períodos para confirmarla.',
   ].join('\n')
 
   try {
@@ -437,7 +401,7 @@ const handler: Handler = async (event: HandlerEvent) => {
           { role: 'user', content: datosFormateados },
         ],
         max_tokens: 1300,
-        temperature: 0.3,
+        temperature: 0.2,
       }),
     })
     if (!dsRes.ok) {
