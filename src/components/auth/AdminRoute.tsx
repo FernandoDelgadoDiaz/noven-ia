@@ -1,8 +1,12 @@
 import { Navigate, Outlet } from 'react-router-dom'
 import { useUsuarioRol } from '@/hooks/useUsuarioRol'
+import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
 
 export default function AdminRoute() {
-  const { isAdmin, loading } = useUsuarioRol()
+  const { isAdmin, loading: rolLoading } = useUsuarioRol()
+  const { tieneRol, loading: accesosLoading, legacyMode } = useAccesosMultitenant()
+  const loading = rolLoading || accesosLoading
+  const puedeAdministrarSucursal = legacyMode ? isAdmin : tieneRol('gerente_sucursal')
 
   if (loading) {
     return (
@@ -15,7 +19,7 @@ export default function AdminRoute() {
     )
   }
 
-  if (!isAdmin) {
+  if (!puedeAdministrarSucursal) {
     return <Navigate to="/dashboard" replace />
   }
 
