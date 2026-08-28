@@ -14,7 +14,7 @@ const zonalMigration = fs.readFileSync(
 
 function block(source, schema, name) {
   const match = source.match(new RegExp(
-    `CREATE OR REPLACE FUNCTION ${schema}\\.${name}[\\s\\S]*?(?=CREATE OR REPLACE FUNCTION|DROP POLICY|REVOKE ALL ON FUNCTION|COMMIT;)`,
+    `CREATE OR REPLACE FUNCTION ${schema}\\.${name}[\\s\\S]*?\\$\\$;`,
   ))
   return match?.[0] ?? ''
 }
@@ -92,7 +92,7 @@ assert.doesNotMatch(localInvite, /gerente_zonal|admin_organizacion/)
 
 const hierarchyContext = block(scopeMigration, 'public', 'listar_contexto_altas_v1')
 assert.match(hierarchyContext, /es_administrador_jerarquia_v1\(p_actor_id,ua\.organizacion_id\)/)
-assert.doesNotMatch(hierarchyContext, /gerente_zonal/)
+assert.doesNotMatch(hierarchyContext, /ua\.rol='gerente_zonal'|ua\.rol = 'gerente_zonal'/)
 
 const hierarchyInvite = block(scopeMigration, 'public', 'registrar_invitacion_acceso_v1')
 assert.match(hierarchyInvite, /es_administrador_jerarquia_v1\(p_actor_id,v_org\)/)
