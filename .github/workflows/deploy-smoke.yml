@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-shared-product-photo-fallback-deploy-check-20260827-a
+          EXPECTED_MARKER: noven-access-invitations-deploy-check-20260828-a
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |
@@ -50,7 +50,6 @@ jobs:
         run: |
           set -euo pipefail
           status="$(curl -sS -o /tmp/analysis-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/analisis" -H 'Content-Type: application/json' -d '{}')"
-          # Sin token debe existir y rechazar con 401. 404 significaría que la Function no fue publicada.
           test "${status}" = "401"
 
       - name: Verify Radar Zonal function exists
@@ -60,6 +59,14 @@ jobs:
         run: |
           set -euo pipefail
           status="$(curl -sS -o /tmp/radar-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/enviar-push-radar-zonal" -H 'Content-Type: application/json' -d '{}')"
-          # Sin secreto debe existir y rechazar con 401. 404 significaría que la
-          # Function todavía no fue publicada.
+          test "${status}" = "401"
+
+      - name: Verify access admin function exists
+        env:
+          SITE_URL: https://noven-ia.netlify.app
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl -sS -o /tmp/access-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/admin-accesos" -H 'Content-Type: application/json' -d '{}')"
+          # Sin sesión debe existir y rechazar con 401; 404 implicaría deploy incompleto.
           test "${status}" = "401"
