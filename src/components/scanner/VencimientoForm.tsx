@@ -16,6 +16,8 @@ export interface VencimientoExistente {
 interface VencimientoFormProps {
   producto: Producto
   sucursalId: string
+  /** Compatibilidad del caller actual; la autorización real usa auth.uid() en PostgreSQL. */
+  usuarioId?: string
   onSuccess: () => void
   vencimientoExistente?: VencimientoExistente | null
 }
