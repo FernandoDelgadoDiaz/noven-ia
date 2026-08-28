@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-sucursal-context-sync-hierarchy-ui-deploy-check-20260828-a
+          EXPECTED_MARKER: noven-hierarchy-zone-branches-no-maps-deploy-check-20260828-a
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Building2, Check, ChevronDown, ChevronRight, Copy, Link2, Loader2, Mail, MapPinned, Plus, Shield, Users, X } from 'lucide-react'
+import { Building2, Check, ChevronDown, ChevronRight, Copy, Link2, Loader2, Mail, MapPinned, Plus, Shield, Store, Users, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 type RolInvitable = 'gerente_zonal' | 'gerente_sucursal'
@@ -49,6 +49,7 @@ export default function AdminAccesos() {
   const [error, setError] = useState<string | null>(null)
   const [modal, setModal] = useState(false)
   const [regionesAbiertas, setRegionesAbiertas] = useState<Set<string>>(new Set())
+  const [zonasAbiertas, setZonasAbiertas] = useState<Set<string>>(new Set())
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -66,6 +67,15 @@ export default function AdminAccesos() {
 
   function toggleRegion(id: string) {
     setRegionesAbiertas((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleZona(id: string) {
+    setZonasAbiertas((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
@@ -112,7 +122,7 @@ export default function AdminAccesos() {
               <div className="px-1">
                 <h2 className="text-sm font-bold text-foreground">Estructura disponible</h2>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Tocá una región para ver sus zonas. Noven solo permite asignar accesos dentro de tu jerarquía real.
+                  Abrí una región y después una zona para ver sus sucursales. Noven solo permite asignar accesos dentro de tu jerarquía real.
                 </p>
               </div>
 
@@ -127,7 +137,7 @@ export default function AdminAccesos() {
                     <button
                       type="button"
                       onClick={() => toggleRegion(region.id)}
-                      className="w-full px-4 py-4 flex items-center gap-3 text-left"
+                      className="w-full px-4 py-4 flex items-center gap-3 text-left select-none"
                       aria-expanded={abierta}
                     >
                       <div className="h-10 w-10 rounded-xl bg-brand-light flex items-center justify-center shrink-0">
@@ -147,17 +157,47 @@ export default function AdminAccesos() {
                     {abierta && (
                       <div className="border-t border-border/60 divide-y divide-border/50">
                         {zonas.map((zona) => {
-                          const n = (contexto.sucursales ?? []).filter((s) => s.zona_id === zona.id).length
+                          const sucursalesZona = (contexto.sucursales ?? [])
+                            .filter((s) => s.zona_id === zona.id)
+                            .sort((a, b) => a.codigo.localeCompare(b.codigo))
+                          const zonaAbierta = zonasAbiertas.has(zona.id)
+
                           return (
-                            <div key={zona.id} className="px-4 py-3 flex items-center gap-3 bg-surface-base/35">
-                              <div className="h-8 w-8 rounded-lg bg-white border border-border/60 flex items-center justify-center shrink-0">
-                                <Shield className="h-4 w-4 text-brand" />
-                              </div>
-                              <p className="flex-1 min-w-0 text-sm font-medium text-foreground">{zona.nombre}</p>
-                              <div className="text-right shrink-0">
-                                <p className="text-sm font-bold tabular-nums text-foreground">{n}</p>
-                                <p className="text-[10px] text-muted-foreground">sucursales</p>
-                              </div>
+                            <div key={zona.id} className="bg-surface-base/35">
+                              <button
+                                type="button"
+                                onClick={() => toggleZona(zona.id)}
+                                className="w-full px-4 py-3 flex items-center gap-3 text-left select-none"
+                                aria-expanded={zonaAbierta}
+                              >
+                                <div className="h-8 w-8 rounded-lg bg-white border border-border/60 flex items-center justify-center shrink-0">
+                                  <Shield className="h-4 w-4 text-brand" />
+                                </div>
+                                <p className="flex-1 min-w-0 text-sm font-medium text-foreground">{zona.nombre}</p>
+                                <div className="text-right shrink-0 mr-1">
+                                  <p className="text-sm font-bold tabular-nums text-foreground">{sucursalesZona.length}</p>
+                                  <p className="text-[10px] text-muted-foreground">sucursales</p>
+                                </div>
+                                {zonaAbierta
+                                  ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                                  : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+                              </button>
+
+                              {zonaAbierta && (
+                                <div className="border-t border-border/50 bg-white divide-y divide-border/40">
+                                  {sucursalesZona.map((sucursal) => (
+                                    <div key={sucursal.id} className="px-4 py-3 pl-12 flex items-center gap-3">
+                                      <div className="h-8 w-8 rounded-lg bg-brand-light flex items-center justify-center shrink-0">
+                                        <Store className="h-4 w-4 text-brand" />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold text-foreground">Sucursal {sucursal.codigo}</p>
+                                        <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{sucursal.nombre}</p>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )
                         })}
