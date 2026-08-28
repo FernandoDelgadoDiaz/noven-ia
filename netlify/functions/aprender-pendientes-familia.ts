@@ -58,6 +58,18 @@ const handler: Handler = async (event: HandlerEvent) => {
     return json(400, { success: false, error: 'Faltan sucursalId o archivoBase64' })
   }
 
+  const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
+  const { data: puedeOperar, error: gateError } = await supabase.rpc('validar_operacion_local_server_v1', {
+    p_actor_id: uid,
+    p_sucursal_id: sucursalId,
+  })
+  if (gateError) {
+    return json(502, { success: false, error: 'No se pudo validar el alcance para aprender catálogo.' })
+  }
+  if (puedeOperar !== true) {
+    return json(403, { success: false, error: 'No tenés permiso para aprender catálogo desde esta sucursal.' })
+  }
+
   let raw: Buffer
   try {
     raw = Buffer.from(archivoBase64, 'base64')
@@ -87,7 +99,6 @@ const handler: Handler = async (event: HandlerEvent) => {
   }
 
   const codArts = Array.from(new Set(analisis.parser.filas.map((f) => f.cod_art)))
-  const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
   const { data, error } = await supabase.rpc('resolver_pendientes_catalogo_por_familia_csv', {
     p_sucursal_id: sucursalId,
     p_usuario_id: uid,
