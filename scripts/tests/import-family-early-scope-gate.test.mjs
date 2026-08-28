@@ -26,19 +26,22 @@ assert.ok(profileGatePos > actorClientPos, 'debe validar el perfil propio median
 assert.ok(branchGatePos > actorClientPos, 'debe validar la sucursal mediante RLS')
 assert.ok(accessGatePos > actorClientPos, 'debe leer sólo los accesos propios mediante RLS')
 assert.match(source, /if \(!perfilActor\?\.activo\)/, 'una cuenta inactiva debe quedar bloqueada')
-assert.match(source, /acceso\.rol === 'gerente_zonal'/,
-  'el zonal puede construir preview con información de una sucursal visible de su zona')
-assert.match(source, /acceso\.rol === 'gerente_sucursal'/)
-assert.match(source, /acceso\.rol === 'supervisor'/)
+assert.match(source, /acceso\.rol === 'gerente_sucursal'/, 'gerente local conserva importación')
+assert.match(source, /acceso\.rol === 'supervisor'/, 'supervisor local conserva importación')
+assert.doesNotMatch(source, /acceso\.rol === 'gerente_zonal'/,
+  'gerente zonal es sólo lectura y no debe entrar al endpoint de importación')
+assert.doesNotMatch(source, /acceso\.rol === 'admin_organizacion'/,
+  'admin de jerarquía no debe ampliar scope operativo')
 assert.doesNotMatch(source, /acceso\.rol === 'operador'/, 'operador no entra al flujo de importación')
+assert.match(source, /acceso\.sucursal_id === sucursalId/,
+  'el permiso de importación debe exigir la sucursal exacta')
 assert.ok(permissionGatePos > accessGatePos)
-assert.ok(fileDecodePos > permissionGatePos)
-assert.ok(serviceRolePos > permissionGatePos)
+assert.ok(fileDecodePos > permissionGatePos, 'el archivo no se procesa antes del gate local')
+assert.ok(serviceRolePos > permissionGatePos, 'service_role sólo existe después del gate local')
 assert.ok(privilegedCatalogPos > serviceRolePos)
 
-// El preview de lectura NO equivale a permiso de escritura. La RPC pública
-// vigente es un wrapper service-only que exige explícitamente scope operativo
-// local antes de tocar la implementación legacy.
+// La capa SQL repite la misma barrera para que un caller server-side nuevo no
+// pueda saltarse el alcance local.
 assert.match(source, /supabase\.rpc\('aplicar_importacion_glaciar_familia_v1'/)
 assert.match(serverScope, /CREATE FUNCTION public\.aplicar_importacion_glaciar_familia_v1/)
 assert.match(
@@ -57,4 +60,4 @@ assert.match(
   'service_role tampoco debe poder saltar directo a la implementación legacy',
 )
 
-console.log('✓ Importación familia: preview RLS permitido, commit final sólo scope local')
+console.log('✓ Importación familia: endpoint + RPC final exigen scope operativo local')
