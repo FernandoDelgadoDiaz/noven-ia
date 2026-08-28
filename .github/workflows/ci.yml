@@ -18,7 +18,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -41,3 +41,30 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Install isolated Playwright test runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          PW_DIR="${RUNNER_TEMP}/noven-playwright"
+          npm install --prefix "${PW_DIR}" --no-save --no-package-lock @playwright/test@1.55.0
+          mkdir -p node_modules/@playwright
+          ln -s "${PW_DIR}/node_modules/@playwright/test" node_modules/@playwright/test
+          echo "PW_DIR=${PW_DIR}" >> "${GITHUB_ENV}"
+
+      - name: Install Chromium for E2E
+        run: "${PW_DIR}/node_modules/.bin/playwright install --with-deps chromium"
+
+      - name: Browser E2E critical flows
+        run: "${PW_DIR}/node_modules/.bin/playwright test"
+
+      - name: Upload E2E diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
