@@ -30,6 +30,10 @@ interface UseSucursalActualReturn {
  * - gerente_sucursal/supervisor/operador: su sucursal;
  * - gerente_zonal: todas las sucursales de su zona;
  * - admin_organizacion: todas las sucursales de su organización.
+ *
+ * Si una cuenta tiene a la vez alcance superior y una sucursal propia (por ejemplo,
+ * gerente 091 + admin de organización), conserva su sucursal propia como contexto
+ * inicial. Una selección manual posterior siempre tiene prioridad.
  */
 export function useSucursalActual(): UseSucursalActualReturn {
   const { perfil, loading: rolLoading } = useUsuarioRol()
@@ -113,9 +117,10 @@ export function useSucursalActual(): UseSucursalActualReturn {
     }
   }
 
-  if (sucursalesPermitidas.length === 1) {
+  // Una elección explícita siempre prevalece sobre el contexto propio del perfil.
+  if (seleccion && idsPermitidos.has(seleccion)) {
     return {
-      sucursalId: sucursalesPermitidas[0].id,
+      sucursalId: seleccion,
       loading: false,
       legacyMode: false,
       requiereSeleccionSucursal: false,
@@ -124,9 +129,21 @@ export function useSucursalActual(): UseSucursalActualReturn {
     }
   }
 
-  if (seleccion && idsPermitidos.has(seleccion)) {
+  // Mantiene el local habitual de un gerente que además tenga alcance superior.
+  if (perfil?.sucursal_id && idsPermitidos.has(perfil.sucursal_id)) {
     return {
-      sucursalId: seleccion,
+      sucursalId: perfil.sucursal_id,
+      loading: false,
+      legacyMode: false,
+      requiereSeleccionSucursal: false,
+      sucursalesPermitidas,
+      seleccionarSucursal,
+    }
+  }
+
+  if (sucursalesPermitidas.length === 1) {
+    return {
+      sucursalId: sucursalesPermitidas[0].id,
       loading: false,
       legacyMode: false,
       requiereSeleccionSucursal: false,
