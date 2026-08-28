@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-sold-terminal-close-preserve-quantity-deploy-check-20260828-a
+          EXPECTED_MARKER: noven-p2f-invitation-management-deploy-check-20260828-a
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |
@@ -77,6 +77,15 @@ jobs:
         run: |
           set -euo pipefail
           status="$(curl -sS -o /tmp/local-admin-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/admin-sucursal" -H 'Content-Type: application/json' -d '{}')"
+          test "${status}" = "401"
+
+      - name: Verify invitation management function exists
+        env:
+          SITE_URL: https://noven-ia.netlify.app
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl -sS -o /tmp/invitations-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/admin-invitaciones" -H 'Content-Type: application/json' -d '{}')"
           test "${status}" = "401"
 
       - name: Verify urgent push function exists
