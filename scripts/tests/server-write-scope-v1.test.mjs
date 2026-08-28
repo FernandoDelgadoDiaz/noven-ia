@@ -44,6 +44,11 @@ assert.match(
   /REVOKE ALL ON FUNCTION public\.aplicar_importacion_glaciar_masiva\([\s\S]*?service_role/,
   'la implementación masiva base tampoco puede quedar invocable directamente por service_role',
 )
+assert.match(
+  migration,
+  /REVOKE ALL ON FUNCTION public\.listar_productos_pendientes_catalogo\(uuid\)[\s\S]*?service_role/,
+  'la lectura legacy de pendientes no puede reabrir scope admin_organizacion desde un Function',
+)
 
 assert.match(masiva, /validar_operacion_local_server_v1/)
 assert.ok(masiva.indexOf('validar_operacion_local_server_v1') < masiva.indexOf('Buffer.from(archivoBase64'),
@@ -53,6 +58,8 @@ assert.ok(aprender.indexOf('validar_operacion_local_server_v1') < aprender.index
   'aprendizaje autoriza antes de procesar archivo')
 assert.match(resolver, /validar_resolucion_pendiente_server_v1/)
 assert.match(listar, /listar_productos_pendientes_catalogo_v2/)
+assert.doesNotMatch(listar, /rpc\('listar_productos_pendientes_catalogo'/,
+  'el caller debe usar exclusivamente la lectura v2 filtrada')
 
 const pendingRead = migration.match(/CREATE OR REPLACE FUNCTION public\.listar_productos_pendientes_catalogo_v2[\s\S]*?\$\$;/)?.[0] ?? ''
 assert.match(pendingRead, /ua\.rol='gerente_zonal' AND ua\.zona_id=s\.zona_id/)
