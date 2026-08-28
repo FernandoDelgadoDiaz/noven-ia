@@ -16,28 +16,23 @@ async function buscarProductoScanner(page) {
 }
 
 test.describe('Noven · recorridos críticos multitenant', () => {
-  test('cuenta multirrol abre en 091 y cambiar sucursal actualiza el Dashboard en el acto', async ({ page }) => {
+  test('cuenta multirrol 091 no expone otras sucursales por el rol jerárquico', async ({ page }) => {
     const fixture = await installNovenFixture(page)
     await login(page)
 
-    // AppLayout mantiene simultáneamente las variantes desktop/mobile en el DOM;
-    // el test debe operar sobre el selector realmente visible en el viewport.
+    // La jerarquía corporativa no amplía el alcance operativo. Aunque el mock de
+    // sucursales devuelva más filas, la UI debe intersectarlas con los roles activos.
     const selector = page.locator('select[aria-label="Seleccionar sucursal de trabajo"]:visible')
     await expect(selector).toHaveCount(1)
     await expect(selector).toBeVisible()
     await expect(selector).toHaveValue(IDS.s091)
+    await expect(selector.locator(`option[value="${IDS.s091}"]`)).toHaveCount(1)
+    await expect(selector.locator(`option[value="${IDS.s043}"]`)).toHaveCount(0)
 
     const riskCard = page.getByRole('button', { name: /UNIDADES EN RIESGO/i })
     await expect(riskCard).toContainText('5')
     await expect.poll(() => fixture.seenExpiryStores.includes(IDS.s091)).toBeTruthy()
-
-    await selector.selectOption(IDS.s043)
-    await expect(selector).toHaveValue(IDS.s043)
-    await expect(riskCard).toContainText('17')
-    await expect.poll(() => fixture.seenExpiryStores.at(-1)).toBe(IDS.s043)
-
-    const persisted = await page.evaluate(() => localStorage.getItem('noven_sucursal_actual'))
-    expect(persisted).toBe(IDS.s043)
+    expect(fixture.seenExpiryStores.includes(IDS.s043)).toBeFalsy()
   })
 
   test('una cuenta desactivada no entra al shell operativo', async ({ page }) => {
