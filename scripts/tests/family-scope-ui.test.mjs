@@ -33,20 +33,20 @@ assert.match(
   /a\.organizacion_id !== sucursalActual\.organizacion_id/,
   'un rol de otra organización no puede ampliar las familias de la sucursal actual',
 )
-assert.match(
+assert.doesNotMatch(
   familias,
-  /a\.rol === 'admin_organizacion'/,
-  'admin de organización conserva todas las familias sólo después del guard de organización',
+  /if \(a\.rol === 'admin_organizacion'\) return true/,
+  'admin_organizacion es jerarquía y no debe ampliar familias operativas',
 )
 assert.match(
   familias,
   /a\.rol === 'gerente_zonal'/,
-  'gerente zonal debe resolverse explícitamente',
+  'gerente zonal debe resolverse explícitamente para lectura',
 )
 assert.match(
   familias,
   /a\.zona_id === sucursalActual\.zona_id/,
-  'gerente zonal sólo amplía familias dentro de su zona',
+  'gerente zonal sólo ve familias dentro de su zona',
 )
 assert.match(
   familias,
@@ -74,4 +74,4 @@ assert.match(
   'no debe anunciar sin familias mientras todavía no hay contexto de sucursal',
 )
 
-console.log('✓ Alcance UI de familias replica organización, zona y sucursal de PostgreSQL')
+console.log('✓ UI: jerarquía no amplía familias; zonal lee zona; local queda local')
