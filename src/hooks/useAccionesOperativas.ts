@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
 
+const TZ_OPERATIVA = 'America/Argentina/Buenos_Aires'
+
 export interface TrimestreInfo {
   trimestre: number
   anio: number
@@ -11,10 +13,14 @@ export interface TrimestreInfo {
 }
 
 export function getTrimestreActual(): TrimestreInfo {
-  const hoy = new Date()
-  const mes = hoy.getMonth() + 1
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone: TZ_OPERATIVA,
+    year: 'numeric',
+    month: 'numeric',
+  }).formatToParts(new Date())
+  const mes = Number(partes.find((p) => p.type === 'month')?.value ?? 1)
+  const anio = Number(partes.find((p) => p.type === 'year')?.value ?? new Date().getFullYear())
   const trimestre = Math.ceil(mes / 3)
-  const anio = hoy.getFullYear()
   const mesInicio = (trimestre - 1) * 3 + 1
   const desde = new Date(anio, mesInicio - 1, 1)
   const hasta = new Date(anio, mesInicio + 2, 0, 23, 59, 59)
@@ -49,11 +55,22 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
   const [decomisos, setDecomisos] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { sucursalId } = useSucursalActual()
+  const { sucursalId, loading: sucursalLoading } = useSucursalActual()
 
   const trimestreInfo = useMemo(() => getTrimestreActual(), [])
 
   const fetchData = useCallback(async (): Promise<void> => {
+    if (sucursalLoading) return
+
+    if (!sucursalId) {
+      setVendidos(0)
+      setDonaciones(0)
+      setDecomisos(0)
+      setError(null)
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     setError(null)
 
@@ -73,14 +90,10 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
 
     const rows = (data ?? []) as AccionOperativaRow[]
     setVendidos(rows.filter((a) => a.tipo === 'vendido').length)
-    setDonaciones(
-      rows.filter((a) => a.tipo === 'donacion').reduce((sum, a) => sum + a.cantidad, 0),
-    )
-    setDecomisos(
-      rows.filter((a) => a.tipo === 'decomiso').reduce((sum, a) => sum + a.cantidad, 0),
-    )
+    setDonaciones(rows.filter((a) => a.tipo === 'donacion').reduce((sum, a) => sum + a.cantidad, 0))
+    setDecomisos(rows.filter((a) => a.tipo === 'decomiso').reduce((sum, a) => sum + a.cantidad, 0))
     setLoading(false)
-  }, [trimestreInfo, sucursalId])
+  }, [trimestreInfo, sucursalId, sucursalLoading])
 
   const refetch = useCallback((): Promise<void> => fetchData(), [fetchData])
 
@@ -88,13 +101,5 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
     void fetchData()
   }, [fetchData])
 
-  return {
-    vendidos,
-    donaciones,
-    decomisos,
-    loading,
-    error,
-    trimestreInfo,
-    refetch,
-  }
+  return { vendidos, donaciones, decomisos, loading, error, trimestreInfo, refetch }
 }
