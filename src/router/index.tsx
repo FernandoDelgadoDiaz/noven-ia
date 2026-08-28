@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import AppLayout from '../components/layout/AppLayout'
 import PrivateRoute from '../components/auth/PrivateRoute'
+import OperationalRoute from '../components/auth/OperationalRoute'
 import AdminRoute from '../components/auth/AdminRoute'
 import AccessAdminRoute from '../components/auth/AccessAdminRoute'
 import ErrorBoundary from '../components/ErrorBoundary'
@@ -43,8 +44,14 @@ export const router = createBrowserRouter([
             element: <ErrorBoundary><Suspense {...suspenseProps}><Dashboard /></Suspense></ErrorBoundary>,
           },
           {
-            path: 'scanner',
-            element: <ErrorBoundary><Suspense {...suspenseProps}><Scanner /></Suspense></ErrorBoundary>,
+            // Scanner es una herramienta de escritura local: zonal queda fuera.
+            element: <OperationalRoute />,
+            children: [
+              {
+                path: 'scanner',
+                element: <ErrorBoundary><Suspense {...suspenseProps}><Scanner /></Suspense></ErrorBoundary>,
+              },
+            ],
           },
           {
             path: 'vencimientos',
@@ -89,7 +96,7 @@ export const router = createBrowserRouter([
             ],
           },
           {
-            // Administración superior: organización y zona.
+            // Administración superior: exclusiva de la cuenta gerente 091 + admin_organizacion.
             element: <AccessAdminRoute />,
             children: [
               {
