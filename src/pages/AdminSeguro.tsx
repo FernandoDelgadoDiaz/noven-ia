@@ -51,6 +51,8 @@ interface UsuarioAdmin {
   nombre: string
   email: string
   activo: boolean
+  perfil_activo: boolean
+  editable: boolean
   rol: RolUi
   rol_scope: string
   familias_ids: string[]
@@ -217,7 +219,14 @@ export default function AdminSeguro() {
                 </div>
               ) : (
                 <div className="divide-y divide-border/60">
-                  {usuarios.map((u) => <UsuarioRow key={u.id} usuario={u} familias={payload?.familias ?? []} onEditar={() => setModal({ modo: 'editar', usuario: u })} />)}
+                  {usuarios.map((u) => (
+                    <UsuarioRow
+                      key={u.id}
+                      usuario={u}
+                      familias={payload?.familias ?? []}
+                      onEditar={u.editable ? () => setModal({ modo: 'editar', usuario: u }) : undefined}
+                    />
+                  ))}
                 </div>
               )}
             </div>
@@ -248,7 +257,7 @@ function UsuarioRow({
 }: {
   usuario: UsuarioAdmin
   familias: FamiliaAdmin[]
-  onEditar: () => void
+  onEditar?: () => void
 }) {
   const Icono = ROL_ICONO[usuario.rol]
   const nombres = usuario.familias_ids
@@ -256,16 +265,23 @@ function UsuarioRow({
     .filter((f): f is FamiliaAdmin => Boolean(f))
     .map((f) => f.nombre)
 
+  const detalleSoloLectura = usuario.rol === 'admin'
+    ? 'Gestionar desde Accesos y jerarquía.'
+    : !usuario.perfil_activo
+      ? 'La cuenta debe completar su activación antes de editarse.'
+      : 'Este acceso es de solo lectura en Administración local.'
+
   return (
     <div className="p-4 flex items-start gap-3">
-      <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${usuario.activo ? 'bg-brand-light' : 'bg-muted'}`}>
-        {usuario.activo ? <Icono className="h-5 w-5 text-brand" /> : <UserX className="h-5 w-5 text-muted-foreground" />}
+      <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${usuario.activo && usuario.perfil_activo ? 'bg-brand-light' : 'bg-muted'}`}>
+        {usuario.activo && usuario.perfil_activo ? <Icono className="h-5 w-5 text-brand" /> : <UserX className="h-5 w-5 text-muted-foreground" />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <p className="font-semibold text-sm text-foreground">{usuario.nombre}</p>
           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${ROL_BADGE[usuario.rol]}`}>{ROL_LABEL[usuario.rol]}</span>
-          {!usuario.activo && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">INACTIVO</span>}
+          {!usuario.perfil_activo && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">CUENTA SIN ACTIVAR</span>}
+          {usuario.perfil_activo && !usuario.activo && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">INACTIVO EN SUCURSAL</span>}
         </div>
         <p className="text-xs text-muted-foreground mt-1 truncate">{usuario.email || 'Sin email visible'}</p>
         {usuario.rol === 'operador' && (
@@ -273,10 +289,15 @@ function UsuarioRow({
             {nombres.length > 0 ? nombres.join(' · ') : 'Sin familias asignadas'}
           </p>
         )}
+        {!usuario.editable && <p className="text-[11px] text-muted-foreground mt-1.5">{detalleSoloLectura}</p>}
       </div>
-      <button type="button" onClick={onEditar} className="h-9 w-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted" aria-label={`Editar ${usuario.nombre}`}>
-        <Pencil className="h-4 w-4" />
-      </button>
+      {onEditar ? (
+        <button type="button" onClick={onEditar} className="h-9 w-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted" aria-label={`Editar ${usuario.nombre}`}>
+          <Pencil className="h-4 w-4" />
+        </button>
+      ) : (
+        <span className="shrink-0 rounded-lg bg-muted px-2 py-1 text-[10px] font-semibold text-muted-foreground" aria-label={`${usuario.nombre} solo lectura`}>Solo lectura</span>
+      )}
     </div>
   )
 }
@@ -375,6 +396,11 @@ function ModalUsuario({
     setError(null)
     if (!form.nombre.trim()) {
       setError('El nombre es obligatorio.')
+      return
+    }
+
+    if (modo === 'editar' && (!usuario?.editable || !usuario.perfil_activo || usuario.rol === 'admin')) {
+      setError('Este acceso no se edita desde Administración local. Usá Accesos y jerarquía o completá primero la activación de la cuenta.')
       return
     }
 
@@ -496,7 +522,6 @@ function ModalUsuario({
 
           <Campo label="Rol en esta sucursal" htmlFor="admin-local-rol">
             <select id="admin-local-rol" value={form.rol} onChange={(e) => setForm((p) => ({ ...p, rol: e.target.value as RolUi, familias: e.target.value === 'operador' ? p.familias : new Set() }))} className={inputCls}>
-              {modo === 'editar' && usuario?.rol === 'admin' && <option value="admin">Admin de sucursal</option>}
               <option value="supervisor">Supervisor</option>
               <option value="operador">Operador</option>
             </select>
