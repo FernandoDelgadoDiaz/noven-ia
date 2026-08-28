@@ -1,5 +1,5 @@
 import type { User, Session, AuthError } from '@supabase/supabase-js'
-import { useNovenAccessContext } from '@/context/NovenAccessContext'
+import { useNovenAccessContext } from '@/hooks/useNovenAccessContext'
 
 interface AuthState {
   user: User | null

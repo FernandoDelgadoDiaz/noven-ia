@@ -1,28 +1,23 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react'
-import type { AuthError, Session, User } from '@supabase/supabase-js'
+import type { AuthError, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import type { UsuarioAcceso, UsuarioPerfil } from '@/types/index'
+import {
+  NovenAccessContext,
+  type NovenAccessContextValue,
+  type SucursalPermitida,
+} from '@/context/novenAccessContextBase'
 
 const SUCURSAL_LEGACY = '00000000-0000-0000-0000-000000000001'
 const STORAGE_KEY = 'noven_sucursal_actual'
 const STORAGE_EVENT = 'noven:sucursal-cambio'
-
-export interface SucursalPermitida {
-  id: string
-  codigo: string
-  nombre: string
-  zona_id: string
-  organizacion_id: string
-}
 
 interface AuthorizationState {
   perfil: UsuarioPerfil | null
@@ -33,18 +28,6 @@ interface AuthorizationState {
   loading: boolean
 }
 
-interface NovenAccessContextValue extends AuthorizationState {
-  user: User | null
-  session: Session | null
-  authLoading: boolean
-  sucursalId: string
-  requiereSeleccionSucursal: boolean
-  signIn: (email: string, password: string) => Promise<AuthError | null>
-  signOut: () => Promise<void>
-  refreshAuthorization: () => Promise<void>
-  seleccionarSucursal: (id: string) => void
-}
-
 const EMPTY_AUTHORIZATION: AuthorizationState = {
   perfil: null,
   accesos: [],
@@ -53,8 +36,6 @@ const EMPTY_AUTHORIZATION: AuthorizationState = {
   sucursalesPermitidas: [],
   loading: true,
 }
-
-const NovenAccessContext = createContext<NovenAccessContextValue | null>(null)
 
 function leerSeleccionPersistida(): string {
   if (typeof localStorage === 'undefined') return ''
@@ -335,10 +316,4 @@ export function NovenAccessProvider({ children }: { children: ReactNode }) {
   ])
 
   return <NovenAccessContext.Provider value={value}>{children}</NovenAccessContext.Provider>
-}
-
-export function useNovenAccessContext(): NovenAccessContextValue {
-  const value = useContext(NovenAccessContext)
-  if (!value) throw new Error('useNovenAccessContext debe usarse dentro de NovenAccessProvider')
-  return value
 }

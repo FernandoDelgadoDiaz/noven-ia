@@ -8,11 +8,12 @@ const ROOT = path.resolve(HERE, '..', '..')
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8')
 
 const context = read('src/context/NovenAccessContext.tsx')
+const contextBase = read('src/context/novenAccessContextBase.ts')
 const sucursal = read('src/hooks/useSucursalActual.ts')
 const familias = read('src/hooks/useUsuarioFamilias.ts')
 
 assert.match(
-  context,
+  contextBase,
   /organizacion_id:\s*string/,
   'la sucursal operativa debe transportar organizacion_id para resolver scopes mixtos',
 )

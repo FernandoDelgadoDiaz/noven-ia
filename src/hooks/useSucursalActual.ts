@@ -1,4 +1,5 @@
-import { useNovenAccessContext, type SucursalPermitida } from '@/context/NovenAccessContext'
+import { useNovenAccessContext } from '@/hooks/useNovenAccessContext'
+import type { SucursalPermitida } from '@/context/novenAccessContextBase'
 
 export type { SucursalPermitida }
 
