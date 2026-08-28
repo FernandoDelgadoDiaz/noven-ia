@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-hierarchy-zone-branches-no-maps-deploy-check-20260828-a
+          EXPECTED_MARKER: noven-p0-multitenant-security-hardening-deploy-check-20260828-a
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |
@@ -70,3 +70,24 @@ jobs:
           status="$(curl -sS -o /tmp/access-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/admin-accesos" -H 'Content-Type: application/json' -d '{}')"
           # Sin sesión debe existir y rechazar con 401; 404 implicaría deploy incompleto.
           test "${status}" = "401"
+
+      - name: Verify urgent push function exists
+        env:
+          SITE_URL: https://noven-ia.netlify.app
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl -sS -o /tmp/push-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/enviar-push" -H 'Content-Type: application/json' -d '{}')"
+          # Sin secreto debe existir y rechazar con 401.
+          test "${status}" = "401"
+
+      - name: Verify legacy admin endpoints are retired
+        env:
+          SITE_URL: https://noven-ia.netlify.app
+        shell: bash
+        run: |
+          set -euo pipefail
+          for endpoint in crear-usuario listar-usuarios; do
+            status="$(curl -sS -o /tmp/legacy-body -w '%{http_code}' "${SITE_URL}/.netlify/functions/${endpoint}")"
+            test "${status}" = "404"
+          done
