@@ -22,34 +22,12 @@ export const BADGE_CONFIG: Record<NivelRiesgo, BadgeConfig> = {
 
 const UMBRAL_RADAR = 45
 const UMBRAL_URGENTE = 20
-export const UMBRAL_DONACION_LEGACY = 10
-
-const SECTORES_PERECEDEROS_DOS_DIAS = new Set([
-  'VERDULERIA',
-  'VERDULERÍA',
-  'CARNICERIA',
-  'CARNICERÍA',
-  'LACTEOS',
-  'LÁCTEOS',
-  'PANADERIA',
-  'PANADERÍA',
-  'ROTISERIA',
-  'ROTISERÍA',
-])
 
 /**
- * Compatibilidad temporal mientras producción todavía no expone
- * sectores.dias_donacion. El origen autoritativo futuro es la DB.
- *
- * Congelados y todo no perecedero confirmado conservan 10 días. FIAMBRES e
- * INSUMOS también caen en 10 sólo como fallback técnico mientras su política
- * concreta no esté configurada en DB; no se persiste esa inferencia.
+ * Regla de dominio: la política de donación nunca se infiere en el cliente.
+ * `diasDonacion` debe provenir de `sectores.dias_donacion` a través del contrato
+ * operativo de PostgreSQL. Un sector con política NULL queda fuera del circuito.
  */
-export function diasDonacionLegacyPorSector(sector: string | null | undefined): number {
-  const normalizado = (sector ?? '').trim().toUpperCase()
-  return SECTORES_PERECEDEROS_DOS_DIAS.has(normalizado) ? 2 : UMBRAL_DONACION_LEGACY
-}
-
 export function calcularDiasRestantes(fechaVencimiento: string): number {
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
@@ -63,10 +41,7 @@ export function calcularDiasStock(cantidadLote: number, ventaMediaDiaria: number
   return cantidadLote / ventaMediaDiaria
 }
 
-/**
- * Tiempo comercial real disponible. El producto deja de estar vendible cuando
- * entra en la ventana obligatoria de donación (2 o 10 días según política).
- */
+/** Tiempo comercial real antes del retiro obligatorio para donación. */
 export function calcularDiasComercialesRestantes(
   diasRestantes: number,
   diasDonacion: number,
@@ -89,7 +64,7 @@ export function calcularMetricasRiesgo(
   diasRestantes: number,
   cantidadLote: number,
   ventaMediaDiaria: number,
-  diasDonacion: number = UMBRAL_DONACION_LEGACY,
+  diasDonacion: number,
 ): MetricasRiesgo {
   const diasStock = calcularDiasStock(cantidadLote, ventaMediaDiaria)
   const diasComerciales = calcularDiasComercialesRestantes(diasRestantes, diasDonacion)
@@ -107,7 +82,7 @@ export function calcularNivelRiesgo(
   diasRestantes: number,
   cantidadLote: number,
   ventaMediaDiaria: number,
-  diasDonacion: number = UMBRAL_DONACION_LEGACY,
+  diasDonacion: number,
 ): NivelRiesgo {
   if (diasRestantes <= 0) return 'decomiso'
   if (diasRestantes <= diasDonacion) return 'donacion'
