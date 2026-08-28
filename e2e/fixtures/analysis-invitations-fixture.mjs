@@ -13,7 +13,19 @@ function jsonHeaders(extra = {}) {
 }
 
 export async function installAnalysisFixture(page) {
-  await installNovenFixture(page)
+  await installNovenFixture(page, {
+    accesses: [{
+      id: IDS.accessOrg,
+      usuario_id: IDS.user,
+      organizacion_id: IDS.org,
+      rol: 'gerente_zonal',
+      zona_id: IDS.zona,
+      sucursal_id: null,
+      activo: true,
+      created_at: '2026-08-28T00:00:00Z',
+      updated_at: '2026-08-28T00:00:00Z',
+    }],
+  })
   const calls = []
 
   await page.route('**/.netlify/functions/analisis', async (route) => {
