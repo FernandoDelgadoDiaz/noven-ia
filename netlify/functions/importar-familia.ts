@@ -35,6 +35,12 @@ interface EstadoLocalRow {
   venta_media_diaria: number
 }
 
+interface AccesoImportacionRow {
+  rol: string
+  zona_id: string | null
+  sucursal_id: string | null
+}
+
 interface OperacionImportacion {
   accion: 'actualizar' | 'insertar'
   producto_id: string | null
@@ -154,6 +160,63 @@ const handler: Handler = async (event: HandlerEvent) => {
     return json(400, { success: false, error: 'Faltan sucursalId, nombreArchivo o archivoBase64' })
   }
 
+  // Gate temprano con el JWT del actor. Estas lecturas pasan por RLS y, por lo
+  // tanto, no exponen sucursales ni accesos fuera del alcance del usuario.
+  // El cliente service_role se crea únicamente después de demostrar el permiso.
+  const actorSupabase = createClient(supabaseUrl, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+    accessToken: async () => token,
+  })
+
+  const [{ data: perfilActor, error: perfilActorError }, { data: sucursalActor, error: sucursalActorError }] = await Promise.all([
+    actorSupabase
+      .from('usuarios')
+      .select('activo')
+      .eq('id', uid)
+      .maybeSingle(),
+    actorSupabase
+      .from('sucursales')
+      .select('id, codigo, organizacion_id, zona_id')
+      .eq('id', sucursalId)
+      .eq('activa', true)
+      .maybeSingle(),
+  ])
+
+  if (perfilActorError || sucursalActorError) {
+    return json(502, { success: false, error: 'No se pudo validar el alcance de la importación.' })
+  }
+  if (!perfilActor?.activo) {
+    return json(403, { success: false, error: 'La cuenta no está activa en Noven.' })
+  }
+  if (!sucursalActor) {
+    return json(403, { success: false, error: 'No tenés permiso para importar en la sucursal seleccionada.' })
+  }
+
+  const { data: accesosActorRaw, error: accesosActorError } = await actorSupabase
+    .from('usuario_accesos')
+    .select('rol, zona_id, sucursal_id')
+    .eq('usuario_id', uid)
+    .eq('organizacion_id', sucursalActor.organizacion_id)
+    .eq('activo', true)
+
+  if (accesosActorError) {
+    return json(502, { success: false, error: 'No se pudo validar el permiso de importación.' })
+  }
+
+  const accesosActor = (accesosActorRaw ?? []) as AccesoImportacionRow[]
+  const puedeImportar = accesosActor.some((acceso) =>
+    acceso.rol === 'admin_organizacion'
+    || (acceso.rol === 'gerente_zonal' && acceso.zona_id === sucursalActor.zona_id)
+    || (
+      (acceso.rol === 'gerente_sucursal' || acceso.rol === 'supervisor')
+      && acceso.sucursal_id === sucursalId
+    ),
+  )
+
+  if (!puedeImportar) {
+    return json(403, { success: false, error: 'No tenés permiso para importar esta familia en la sucursal.' })
+  }
+
   let raw: Buffer
   try {
     raw = Buffer.from(archivoBase64, 'base64')
@@ -182,29 +245,21 @@ const handler: Handler = async (event: HandlerEvent) => {
     return json(400, { success: false, error: 'No se pudo verificar sucursal o Cód.Familia.' })
   }
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
-
-  const { data: sucursal, error: errSucursal } = await supabase
-    .from('sucursales')
-    .select('id, codigo, organizacion_id')
-    .eq('id', sucursalId)
-    .eq('activa', true)
-    .maybeSingle()
-
-  if (errSucursal || !sucursal) {
-    return json(404, { success: false, error: 'Sucursal inexistente o inactiva.' })
-  }
-  if (sucursal.codigo !== codigoSucursal) {
+  if (sucursalActor.codigo !== codigoSucursal) {
     return json(409, {
       success: false,
-      error: `El archivo corresponde a la sucursal ${codigoSucursal}, no a ${sucursal.codigo}.`,
+      error: `El archivo corresponde a la sucursal ${codigoSucursal}, no a ${sucursalActor.codigo}.`,
     })
   }
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  })
 
   const { data: familia, error: errFamilia } = await supabase
     .from('familias')
     .select('id, codigo, nombre')
-    .eq('organizacion_id', sucursal.organizacion_id)
+    .eq('organizacion_id', sucursalActor.organizacion_id)
     .eq('codigo', codigoFamilia)
     .maybeSingle()
 
@@ -224,12 +279,12 @@ const handler: Handler = async (event: HandlerEvent) => {
       supabase
         .from('productos')
         .select(campos)
-        .eq('organizacion_id', sucursal.organizacion_id)
+        .eq('organizacion_id', sucursalActor.organizacion_id)
         .in('cod_art', lote),
       supabase
         .from('productos')
         .select(campos)
-        .eq('organizacion_id', sucursal.organizacion_id)
+        .eq('organizacion_id', sucursalActor.organizacion_id)
         .in('codigo_barras', lote),
     ])
     if (errCod || errEan) {
@@ -242,7 +297,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const { data: porFamilia, error: errPorFamilia } = await supabase
     .from('productos')
     .select(campos)
-    .eq('organizacion_id', sucursal.organizacion_id)
+    .eq('organizacion_id', sucursalActor.organizacion_id)
     .eq('familia_id', familia.id)
     .eq('activo', true)
 
