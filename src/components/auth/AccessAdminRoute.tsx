@@ -1,9 +1,21 @@
 import { Navigate, Outlet } from 'react-router-dom'
 import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
+import { useNovenAccessContext } from '@/hooks/useNovenAccessContext'
 
 export default function AccessAdminRoute() {
-  const { tieneRol, loading } = useAccesosMultitenant()
-  const permitido = tieneRol(['admin_organizacion', 'gerente_zonal'])
+  const { accesos, loading, legacyMode } = useAccesosMultitenant()
+  const { sucursalesPermitidas } = useNovenAccessContext()
+
+  const esAdministradorJerarquia = !legacyMode
+    && accesos.some((acceso) => acceso.rol === 'admin_organizacion' && acceso.activo)
+    && accesos.some((acceso) =>
+      acceso.rol === 'gerente_sucursal'
+      && acceso.activo
+      && Boolean(acceso.sucursal_id)
+      && sucursalesPermitidas.some((sucursal) =>
+        sucursal.id === acceso.sucursal_id && sucursal.codigo === '091',
+      ),
+    )
 
   if (loading) {
     return (
@@ -16,6 +28,6 @@ export default function AccessAdminRoute() {
     )
   }
 
-  if (!permitido) return <Navigate to="/dashboard" replace />
+  if (!esAdministradorJerarquia) return <Navigate to="/dashboard" replace />
   return <Outlet />
 }
