@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test'
 import { IDS, installNovenFixture, login } from './fixtures/noven-fixture.mjs'
 import { SCANNER_IDS, installScannerWriteFixture } from './fixtures/scanner-write-fixture.mjs'
+import {
+  INVITATION_IDS,
+  installActivationFixture,
+  installAnalysisFixture,
+  installInvitationFixture,
+} from './fixtures/analysis-invitations-fixture.mjs'
 
 async function buscarProductoScanner(page) {
   await page.goto('/scanner')
@@ -79,6 +85,31 @@ test.describe('Noven · recorridos críticos multitenant', () => {
     await invitationButton.click()
     await expect(page.getByRole('heading', { name: 'Invitaciones pendientes' })).toBeVisible()
     await expect(page.getByText('No hay invitaciones pendientes')).toBeVisible()
+  })
+
+  test('Análisis IA mantiene cache y requests aislados por sucursal seleccionada', async ({ page }) => {
+    const fixture = await installAnalysisFixture(page)
+    await login(page)
+    await page.goto('/analisis')
+
+    await expect(page.getByRole('heading', { name: 'Análisis inteligente' })).toBeVisible()
+    await page.getByRole('button', { name: 'Generar análisis' }).click()
+    await expect(page.getByRole('heading', { name: '1. INFORME SUCURSAL 091' })).toBeVisible()
+
+    const selector = page.locator('select[aria-label="Seleccionar sucursal de trabajo"]:visible')
+    await selector.selectOption(IDS.s043)
+    await expect(page.getByRole('heading', { name: '1. INFORME SUCURSAL 091' })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Generar análisis' }).click()
+    await expect(page.getByRole('heading', { name: '1. INFORME SUCURSAL 043' })).toBeVisible()
+
+    expect(fixture.calls).toEqual([
+      { sucursal_id: IDS.s091 },
+      { sucursal_id: IDS.s043 },
+    ])
+
+    await selector.selectOption(IDS.s091)
+    await expect(page.getByRole('heading', { name: '1. INFORME SUCURSAL 091' })).toBeVisible()
+    expect(fixture.calls).toHaveLength(2)
   })
 })
 
@@ -215,5 +246,81 @@ test.describe('Noven · escrituras críticas Scanner', () => {
       p_nota: null,
     })
     expect(fixture.directTableWrites).toEqual([])
+  })
+})
+
+test.describe('Noven · invitaciones seguras', () => {
+  test('crear operador, regenerar y anular conserva el scope local y cambia el enlace', async ({ page }) => {
+    const fixture = await installInvitationFixture(page)
+    await login(page)
+    await page.goto('/admin')
+
+    await expect(page.getByRole('heading', { name: 'Administración' })).toBeVisible()
+    await page.getByRole('button', { name: 'Nuevo usuario' }).click()
+
+    const dialog = page.getByRole('dialog', { name: 'Invitar usuario' })
+    await expect(dialog).toBeVisible()
+    await dialog.getByLabel('Nombre').fill('Operador E2E')
+    await dialog.getByLabel('Email').fill('operador.e2e@noven.test')
+    await dialog.getByLabel('Rol en esta sucursal').selectOption('operador')
+    await dialog.getByRole('button', { name: /Almacén/ }).click()
+    await dialog.getByRole('button', { name: /003.*Golosinas/ }).click()
+    await dialog.getByRole('button', { name: 'Crear invitación' }).click()
+
+    const creada = page.getByRole('dialog', { name: 'Invitación creada' })
+    await expect(creada).toBeVisible()
+    await expect(creada).toContainText('https://noven-ia.netlify.app/activar#e2e-original')
+
+    const invitar = fixture.adminSucursalCalls.find((call) => call.accion === 'invitar')
+    expect(invitar).toEqual({
+      accion: 'invitar',
+      sucursalId: IDS.s091,
+      email: 'operador.e2e@noven.test',
+      nombre: 'Operador E2E',
+      rol: 'operador',
+      familias: [INVITATION_IDS.family],
+      canal: 'link',
+    })
+
+    await creada.getByRole('button', { name: 'Cerrar' }).click()
+    await page.getByRole('button', { name: 'Gestionar invitaciones pendientes' }).click()
+    const gestion = page.getByRole('dialog', { name: 'Invitaciones pendientes' })
+    await expect(gestion.getByText('Operador E2E', { exact: true })).toBeVisible()
+
+    await gestion.getByRole('button', { name: 'Regenerar' }).click()
+    await expect(gestion.getByText('Nuevo enlace generado')).toBeVisible()
+    await expect(gestion).toContainText('https://noven-ia.netlify.app/activar#e2e-regenerated')
+    await expect.poll(() => fixture.currentInvitations()[0]?.id).toBe(INVITATION_IDS.regenerated)
+
+    page.once('dialog', (confirm) => confirm.accept())
+    await gestion.getByRole('button', { name: 'Anular' }).click()
+    await expect(gestion.getByText('No hay invitaciones pendientes')).toBeVisible()
+
+    expect(fixture.invitationCalls.some((call) => call.accion === 'regenerar' && call.invitacionId === INVITATION_IDS.pending)).toBeTruthy()
+    expect(fixture.invitationCalls.some((call) => call.accion === 'anular' && call.invitacionId === INVITATION_IDS.regenerated)).toBeTruthy()
+  })
+
+  test('/activar guarda contraseña antes de aceptar y refresca el acceso antes del Dashboard', async ({ page }) => {
+    const fixture = await installActivationFixture(page)
+
+    await page.goto('/login')
+    await page.getByLabel('Email').fill('admin@noven.test')
+    await page.getByLabel('Contraseña').fill('e2e-password')
+    await page.getByRole('button', { name: 'Ingresar' }).click()
+    await page.waitForURL('**/dashboard')
+    await page.goto('/activar')
+
+    await expect(page.getByRole('heading', { name: 'Activá tu acceso a Noven IA' })).toBeVisible()
+    await page.getByLabel('Nueva contraseña').fill('NuevaClaveE2E!')
+    await page.getByLabel('Repetir contraseña').fill('NuevaClaveE2E!')
+    await page.getByRole('button', { name: 'Crear contraseña y entrar' }).click()
+
+    await expect(page.getByText('Cuenta activada', { exact: true })).toBeVisible()
+    await expect.poll(() => fixture.isAccepted()).toBeTruthy()
+    expect(fixture.events.map((event) => event.type)).toEqual(['password', 'accept'])
+    expect(fixture.events[0]?.body?.password).toBe('NuevaClaveE2E!')
+
+    await page.waitForURL('**/dashboard')
+    await expect(page.getByRole('heading', { name: 'Sin acceso activo' })).toHaveCount(0)
   })
 })
