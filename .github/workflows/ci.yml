@@ -9,7 +9,7 @@ on:
       - master
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: noven-ci-${{ github.ref }}
@@ -23,56 +23,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-
-      - name: Materialize accessible field labels on audit branch
-        if: github.event_name == 'pull_request' && github.head_ref == 'test/e2e-scanner-write-flows' && github.event.pull_request.head.repo.full_name == github.repository
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path('src/components/dashboard/EditarVencimientoModalSeguro.tsx')
-          text = path.read_text()
-          replacements = [
-              (
-                  '<Campo label="Stock total Glaciar"><input type="number" min={0} value={stockActual} onChange={(e) => setStockActual(Number(e.target.value))} className={inputCls} /></Campo>',
-                  '<Campo label="Stock total Glaciar" htmlFor="ev-stock"><input id="ev-stock" type="number" min={0} value={stockActual} onChange={(e) => setStockActual(Number(e.target.value))} className={inputCls} /></Campo>',
-              ),
-              (
-                  '<Campo label="Fecha de vencimiento"><input type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} className={inputCls} /></Campo>',
-                  '<Campo label="Fecha de vencimiento" htmlFor="ev-fecha"><input id="ev-fecha" type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} className={inputCls} /></Campo>',
-              ),
-              (
-                  '<Campo label="Cantidad comprometida observada hoy">\n            <input type="number" min={0} value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} className={inputCls} />',
-                  '<Campo label="Cantidad comprometida observada hoy" htmlFor="ev-cantidad">\n            <input id="ev-cantidad" type="number" min={0} value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} className={inputCls} />',
-              ),
-              (
-                  'function Campo({ label, children }: { label: string; children: React.ReactNode }) {\n  return <div className="space-y-1.5"><label className="block text-xs font-semibold text-foreground uppercase tracking-wide">{label}</label>{children}</div>\n}',
-                  'function Campo({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {\n  return <div className="space-y-1.5"><label htmlFor={htmlFor} className="block text-xs font-semibold text-foreground uppercase tracking-wide">{label}</label>{children}</div>\n}',
-              ),
-          ]
-
-          for before, after in replacements:
-              count = text.count(before)
-              if count != 1:
-                  raise SystemExit(f'Expected exactly one match, got {count}: {before[:80]}')
-              text = text.replace(before, after)
-
-          path.write_text(text)
-          PY
-
-          if git diff --quiet -- src/components/dashboard/EditarVencimientoModalSeguro.tsx; then
-            echo 'Semantic labels already materialized'
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/components/dashboard/EditarVencimientoModalSeguro.tsx
-          git commit -m 'fix(a11y): asociar etiquetas del control a sus campos'
-          git push origin HEAD:${GITHUB_HEAD_REF}
 
       - name: Node 22
         uses: actions/setup-node@v4
