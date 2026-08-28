@@ -50,6 +50,7 @@ export default function ActivarCuenta() {
     }
 
     setGuardando(true)
+
     const { error: passwordError } = await supabase.auth.updateUser({ password })
     if (passwordError) {
       setError(passwordError.message)
@@ -57,9 +58,13 @@ export default function ActivarCuenta() {
       return
     }
 
-    // Es sólo trazabilidad de la invitación. El permiso real ya vive en
-    // usuario_accesos y nunca depende de metadata del navegador.
-    await supabase.rpc('aceptar_invitacion_acceso_v1')
+    // El alcance nace inactivo. Sólo esta aceptación autenticada lo habilita.
+    const { data: aceptadas, error: activacionError } = await supabase.rpc('aceptar_invitacion_acceso_v1')
+    if (activacionError || typeof aceptadas !== 'number' || aceptadas < 1) {
+      setError('La contraseña se guardó, pero no pudimos habilitar el acceso. Volvé a intentar con este mismo enlace.')
+      setGuardando(false)
+      return
+    }
 
     setCompletado(true)
     setGuardando(false)
