@@ -39,6 +39,12 @@ for (const legacy of [
   )
 }
 
+assert.match(
+  migration,
+  /REVOKE ALL ON FUNCTION public\.aplicar_importacion_glaciar_masiva\([\s\S]*?service_role/,
+  'la implementación masiva base tampoco puede quedar invocable directamente por service_role',
+)
+
 assert.match(masiva, /validar_operacion_local_server_v1/)
 assert.ok(masiva.indexOf('validar_operacion_local_server_v1') < masiva.indexOf('Buffer.from(archivoBase64'),
   'importación masiva autoriza antes de procesar archivo')
