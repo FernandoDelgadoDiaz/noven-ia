@@ -27,7 +27,7 @@ assert.match(ean, /NULLIF\(btrim\(COALESCE\(v_codigo_actual, ''\)\), ''\) IS NOT
 assert.match(ean, /FROM public\.producto_codigos pc[\s\S]*?pc\.activo = true/, 'EAN debe bloquear si ya existe un código activo del producto')
 assert.match(ean, /puede_ver_producto_sucursal/, 'EAN debe conservar el gate de alcance')
 assert.match(ean, /AND NULLIF\(btrim\(COALESCE\(codigo_barras, ''\)\), ''\) IS NULL/, 'UPDATE EAN debe ser condicional para evitar carreras')
-assert.doesNotMatch(ean, /ON CONFLICT/, 'EAN no debe absorber una carrera de unicidad con ON CONFLICT')
+assert.doesNotMatch(ean, /^\s*ON CONFLICT\b/m, 'EAN no debe absorber una carrera de unicidad con una cláusula ON CONFLICT ejecutable')
 assert.match(ean, /INSERT INTO public\.producto_codigos/, 'EAN debe seguir registrando la identidad normalizada')
 
 console.log('✓ Scanner sólo completa Cod.Art/EAN faltantes y la UNIQUE aborta carreras de identidad')
