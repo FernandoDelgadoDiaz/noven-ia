@@ -55,21 +55,17 @@ assert.doesNotMatch(
   /INSERT INTO public\.usuarios/i,
   'Admin local no debe crear perfiles directamente',
 )
-assert.doesNotMatch(
-  migration,
-  /SET[\s\S]{0,160}\bactivo\s*=\s*p_activo[\s\S]{0,160}WHERE u\.id = p_usuario_id/i,
-  'Admin local no debe escribir usuarios.activo global',
+
+const profileUpdateMatch = migration.match(
+  /UPDATE public\.usuarios u\n([\s\S]*?)\n\s*UPDATE public\.usuario_accesos ua/,
 )
-assert.doesNotMatch(
-  migration,
-  /UPDATE public\.usuarios[\s\S]{0,260}\brol\s*=/i,
-  'Admin local no debe escribir usuarios.rol legacy',
-)
-assert.doesNotMatch(
-  migration,
-  /UPDATE public\.usuarios[\s\S]{0,260}\bsucursal_id\s*=/i,
-  'Admin local no debe escribir usuarios.sucursal_id legacy',
-)
+assert.ok(profileUpdateMatch, 'debe existir una actualización acotada del perfil antes del acceso local')
+const profileUpdate = profileUpdateMatch[1]
+assert.match(profileUpdate, /SET nombre = btrim\(p_nombre\)/, 'sólo se permite corregir el nombre de cuenta')
+assert.doesNotMatch(profileUpdate, /\bactivo\s*=/i, 'Admin local no debe escribir usuarios.activo global')
+assert.doesNotMatch(profileUpdate, /\brol\s*=/i, 'Admin local no debe escribir usuarios.rol legacy')
+assert.doesNotMatch(profileUpdate, /\bsucursal_id\s*=/i, 'Admin local no debe escribir usuarios.sucursal_id legacy')
+
 assert.match(
   migration,
   /UPDATE public\.usuario_accesos ua[\s\S]*?SET rol = v_rol_scope,[\s\S]*?activo = p_activo/,
