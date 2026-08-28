@@ -21,6 +21,12 @@ interface InviteBody {
 
 type Body = ListBody | InviteBody
 
+interface ContextoAltas {
+  puede_crear_zonal?: boolean
+  zonas?: Array<{ id?: string }>
+  sucursales?: Array<{ id?: string; zona_id?: string }>
+}
+
 function jsonResponse(event: HandlerEvent, statusCode: number, payload: unknown) {
   return {
     statusCode,
@@ -141,12 +147,35 @@ const handler: Handler = async (event) => {
     return jsonResponse(event, 400, { success: false, error: 'Seleccioná una sucursal' })
   }
 
-  // Validamos primero que el actor tenga un alcance superior habilitado.
-  const { error: permisoError } = await supabase.rpc('listar_contexto_altas_v1', {
+  // Resolvemos el alcance exacto ANTES de crear la cuenta o enviar un email.
+  // El servidor devuelve sólo zonas/sucursales que el actor puede administrar.
+  const { data: contextoData, error: permisoError } = await supabase.rpc('listar_contexto_altas_v1', {
     p_actor_id: sesion.uid,
   })
   if (permisoError) {
     return jsonResponse(event, statusRpc(permisoError.message), { success: false, error: permisoError.message })
+  }
+
+  const contexto = (contextoData ?? {}) as ContextoAltas
+  const zonasPermitidas = new Set((contexto.zonas ?? []).map((z) => z.id).filter((id): id is string => Boolean(id)))
+  const sucursalesPermitidas = new Map(
+    (contexto.sucursales ?? [])
+      .filter((s): s is { id: string; zona_id?: string } => Boolean(s.id))
+      .map((s) => [s.id, s]),
+  )
+
+  if (rol === 'gerente_zonal') {
+    if (!contexto.puede_crear_zonal) {
+      return jsonResponse(event, 403, { success: false, error: 'Solo el administrador de organización puede crear gerentes zonales.' })
+    }
+    if (!zonaId || !zonasPermitidas.has(zonaId)) {
+      return jsonResponse(event, 403, { success: false, error: 'No tenés permiso para asignar esa zona.' })
+    }
+  } else {
+    const sucursal = sucursalId ? sucursalesPermitidas.get(sucursalId) : undefined
+    if (!sucursal) {
+      return jsonResponse(event, 403, { success: false, error: 'No tenés permiso para asignar esa sucursal.' })
+    }
   }
 
   try {
