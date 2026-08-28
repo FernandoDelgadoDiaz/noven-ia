@@ -39,7 +39,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
-  const { data, error } = await supabase.rpc('listar_productos_pendientes_catalogo', {
+  const { data, error } = await supabase.rpc('listar_productos_pendientes_catalogo_v2', {
     p_usuario_id: uid,
   })
 
