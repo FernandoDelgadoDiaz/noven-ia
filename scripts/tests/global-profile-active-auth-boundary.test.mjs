@@ -25,7 +25,7 @@ for (const nombre of [
   'noven_private.puede_ver_familia_sucursal',
 ]) {
   const body = funcion(nombre)
-  assert.match(body, /JOIN public\.usuarios u/i, `${nombre} debe resolver el perfil global`)
+  assert.match(body, /(?:FROM|JOIN) public\.usuarios u/i, `${nombre} debe resolver el perfil global`)
   assert.match(body, /u\.id\s*=\s*\(SELECT auth\.uid\(\)\)/i, `${nombre} debe atar el perfil al JWT`)
   assert.match(body, /u\.activo\s*=\s*true/i, `${nombre} debe rechazar perfiles globalmente inactivos`)
   assert.match(body, /ua\.activo\s*=\s*true/i, `${nombre} debe seguir exigiendo acceso activo`)
@@ -44,7 +44,7 @@ assert.match(
 )
 
 const radar = funcion('noven_private.listar_resumen_radar_zonal_v1_impl')
-assert.match(radar, /JOIN public\.usuarios u/i, 'Radar zonal debe resolver el perfil global del actor')
+assert.match(radar, /(?:FROM|JOIN) public\.usuarios u/i, 'Radar zonal debe resolver el perfil global del actor')
 assert.match(radar, /u\.id\s*=\s*v_uid/i, 'Radar zonal debe atar el perfil al JWT')
 assert.match(radar, /u\.activo\s*=\s*true/i, 'Radar zonal debe rechazar perfiles globalmente inactivos')
 assert.match(radar, /ua\.activo\s*=\s*true/i, 'Radar zonal debe conservar el gate de acceso activo')
