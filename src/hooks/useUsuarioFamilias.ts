@@ -15,14 +15,13 @@ interface UseUsuarioFamiliasReturn {
 /**
  * Familias visibles del usuario dentro de la sucursal operativa actual.
  *
- * En multitenant replica el mismo alcance que PostgreSQL:
- * - admin_organizacion: todas las familias, sólo dentro de su organización;
- * - gerente_zonal: todas las familias, sólo dentro de su zona;
+ * En multitenant replica el alcance operacional de PostgreSQL:
+ * - gerente_zonal: todas las familias, sólo dentro de su zona y para lectura;
  * - gerente_sucursal/supervisor: todas las familias, sólo en su sucursal;
  * - operador: sólo usuario_familias_sucursal para ESA sucursal.
  *
- * RLS sigue siendo la barrera real. Este hook evita que la UI prometa un alcance
- * mayor al que la base autoriza cuando una cuenta combina más de un rol/scope.
+ * `admin_organizacion` es una capacidad jerárquica y no amplía el contexto
+ * operativo por sí sola. RLS sigue siendo la barrera real.
  */
 export function useUsuarioFamilias(): UseUsuarioFamiliasReturn {
   const { perfil, isAdmin: legacyAdmin, loading: rolLoading } = useUsuarioRol()
@@ -47,7 +46,6 @@ export function useUsuarioFamilias(): UseUsuarioFamiliasReturn {
     return accesos.some((a) => {
       if (!a.activo || a.organizacion_id !== sucursalActual.organizacion_id) return false
 
-      if (a.rol === 'admin_organizacion') return true
       if (a.rol === 'gerente_zonal') {
         return Boolean(a.zona_id) && a.zona_id === sucursalActual.zona_id
       }
