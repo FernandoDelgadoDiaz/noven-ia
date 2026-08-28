@@ -21,13 +21,10 @@ test.describe('Noven · recorridos críticos multitenant', () => {
     await login(page)
 
     // La jerarquía corporativa no amplía el alcance operativo. Aunque el mock de
-    // sucursales devuelva más filas, la UI debe intersectarlas con los roles activos.
+    // sucursales devuelva más filas, la UI las intersecta con roles operativos.
+    // Con una sola sucursal resultante el selector se oculta deliberadamente.
     const selector = page.locator('select[aria-label="Seleccionar sucursal de trabajo"]:visible')
-    await expect(selector).toHaveCount(1)
-    await expect(selector).toBeVisible()
-    await expect(selector).toHaveValue(IDS.s091)
-    await expect(selector.locator(`option[value="${IDS.s091}"]`)).toHaveCount(1)
-    await expect(selector.locator(`option[value="${IDS.s043}"]`)).toHaveCount(0)
+    await expect(selector).toHaveCount(0)
 
     const riskCard = page.getByRole('button', { name: /UNIDADES EN RIESGO/i })
     await expect(riskCard).toContainText('5')
@@ -88,10 +85,20 @@ test.describe('Noven · recorridos críticos multitenant', () => {
     await page.goto('/analisis')
 
     await expect(page.getByRole('heading', { name: 'Análisis inteligente' })).toBeVisible()
+    const selector = page.locator('select[aria-label="Seleccionar sucursal de trabajo"]:visible')
+    await expect(selector).toBeVisible()
+    await expect(selector).toHaveValue('')
+
+    // Un zonal con más de una sucursal debe elegir explícitamente; Noven no inventa
+    // una sucursal por defecto y tampoco hace una llamada de análisis sin contexto.
+    await page.getByRole('button', { name: 'Generar análisis' }).click()
+    await expect(page.getByText('Seleccioná una sucursal antes de generar el análisis.')).toBeVisible()
+    expect(fixture.calls).toHaveLength(0)
+
+    await selector.selectOption(IDS.s091)
     await page.getByRole('button', { name: 'Generar análisis' }).click()
     await expect(page.getByRole('heading', { name: '1. INFORME SUCURSAL 091' })).toBeVisible()
 
-    const selector = page.locator('select[aria-label="Seleccionar sucursal de trabajo"]:visible')
     await selector.selectOption(IDS.s043)
     await expect(page.getByRole('heading', { name: '1. INFORME SUCURSAL 091' })).toHaveCount(0)
     await page.getByRole('button', { name: 'Generar análisis' }).click()
