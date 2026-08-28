@@ -9,7 +9,7 @@ on:
       - master
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: noven-ci-${{ github.ref }}
@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Node 22
         uses: actions/setup-node@v4
@@ -49,6 +51,21 @@ jobs:
           git diff --stat -- package-lock.json
           echo '--- TOP LEVEL AFTER FIX ---'
           npm ls react-router-dom react-router vite esbuild postcss nanoid js-yaml brace-expansion @babel/core --depth=1 || true
+
+      - name: Commit safe lock remediation to audit branch
+        if: github.event_name == 'pull_request' && github.head_ref == 'audit/dependency-vulnerabilities' && github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- package-lock.json; then
+            echo 'package-lock.json already remediated'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package-lock.json
+          git commit -m 'fix(deps): remediate runtime vulnerabilities'
+          git push origin HEAD:${GITHUB_HEAD_REF}
 
       - name: Tests
         run: npm test
