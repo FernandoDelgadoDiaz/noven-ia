@@ -13,6 +13,7 @@ export interface SucursalPermitida {
   codigo: string
   nombre: string
   zona_id: string
+  organizacion_id: string
 }
 
 interface UseSucursalActualReturn {
@@ -77,7 +78,7 @@ export function useSucursalActual(): UseSucursalActualReturn {
     setScopeLoading(true)
     supabase
       .from('sucursales')
-      .select('id, codigo, nombre, zona_id')
+      .select('id, codigo, nombre, zona_id, organizacion_id')
       .eq('activa', true)
       .order('codigo', { ascending: true })
       .then(({ data, error }) => {

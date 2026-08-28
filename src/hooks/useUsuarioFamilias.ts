@@ -15,28 +15,48 @@ interface UseUsuarioFamiliasReturn {
 /**
  * Familias visibles del usuario dentro de la sucursal operativa actual.
  *
- * Compatibilidad:
- * - legacy: conserva `usuario_familias` + admin global de la app actual;
- * - multitenant: gerente/supervisor ven todas las familias de su contexto;
- *   operador solo las filas de `usuario_familias_sucursal` para ESA sucursal.
+ * En multitenant replica el mismo alcance que PostgreSQL:
+ * - admin_organizacion: todas las familias, sólo dentro de su organización;
+ * - gerente_zonal: todas las familias, sólo dentro de su zona;
+ * - gerente_sucursal/supervisor: todas las familias, sólo en su sucursal;
+ * - operador: sólo usuario_familias_sucursal para ESA sucursal.
  *
- * RLS sigue siendo la barrera real. Este hook solo evita mostrar en UI datos que
- * la base igualmente rechazará.
+ * RLS sigue siendo la barrera real. Este hook evita que la UI prometa un alcance
+ * mayor al que la base autoriza cuando una cuenta combina más de un rol/scope.
  */
 export function useUsuarioFamilias(): UseUsuarioFamiliasReturn {
   const { perfil, isAdmin: legacyAdmin, loading: rolLoading } = useUsuarioRol()
   const { accesos, loading: accesosLoading, legacyMode } = useAccesosMultitenant()
-  const { sucursalId, loading: sucursalLoading } = useSucursalActual()
+  const {
+    sucursalId,
+    sucursalesPermitidas,
+    loading: sucursalLoading,
+  } = useSucursalActual()
   const [familiaIds, setFamiliaIds] = useState<string[]>([])
   const [famLoading, setFamLoading] = useState(true)
 
+  const sucursalActual = useMemo(
+    () => sucursalesPermitidas.find((s) => s.id === sucursalId) ?? null,
+    [sucursalId, sucursalesPermitidas],
+  )
+
   const veTodasFamilias = useMemo(() => {
     if (legacyMode) return legacyAdmin
-    return accesos.some((a) =>
-      a.activo &&
-      ['admin_organizacion', 'gerente_zonal', 'gerente_sucursal', 'supervisor'].includes(a.rol),
-    )
-  }, [accesos, legacyAdmin, legacyMode])
+    if (!sucursalId || !sucursalActual) return false
+
+    return accesos.some((a) => {
+      if (!a.activo || a.organizacion_id !== sucursalActual.organizacion_id) return false
+
+      if (a.rol === 'admin_organizacion') return true
+      if (a.rol === 'gerente_zonal') {
+        return Boolean(a.zona_id) && a.zona_id === sucursalActual.zona_id
+      }
+      if (a.rol === 'gerente_sucursal' || a.rol === 'supervisor') {
+        return a.sucursal_id === sucursalId
+      }
+      return false
+    })
+  }, [accesos, legacyAdmin, legacyMode, sucursalActual, sucursalId])
 
   useEffect(() => {
     if (rolLoading || accesosLoading || sucursalLoading) return
@@ -94,7 +114,7 @@ export function useUsuarioFamilias(): UseUsuarioFamiliasReturn {
   ])
 
   const loading = rolLoading || accesosLoading || sucursalLoading || famLoading
-  const sinFamilias = !loading && !veTodasFamilias && familiaIds.length === 0
+  const sinFamilias = Boolean(sucursalId) && !loading && !veTodasFamilias && familiaIds.length === 0
 
   return {
     esAdmin: veTodasFamilias,
