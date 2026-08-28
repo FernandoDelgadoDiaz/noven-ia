@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Building2, Check, Copy, Link2, Loader2, Mail, MapPinned, Plus, Shield, Users, X } from 'lucide-react'
+import { Building2, Check, ChevronDown, ChevronRight, Copy, Link2, Loader2, Mail, MapPinned, Plus, Shield, Users, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 type RolInvitable = 'gerente_zonal' | 'gerente_sucursal'
@@ -48,6 +48,7 @@ export default function AdminAccesos() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [modal, setModal] = useState(false)
+  const [regionesAbiertas, setRegionesAbiertas] = useState<Set<string>>(new Set())
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -62,6 +63,15 @@ export default function AdminAccesos() {
   }, [])
 
   useEffect(() => { void cargar() }, [cargar])
+
+  function toggleRegion(id: string) {
+    setRegionesAbiertas((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   return (
     <div className="min-h-screen bg-surface-base">
@@ -98,30 +108,65 @@ export default function AdminAccesos() {
               <Resumen titulo="Sucursales" valor={contexto.sucursales?.length ?? 0} Icono={Building2} />
             </div>
 
-            <div className="bg-white rounded-card shadow-card overflow-hidden">
-              <div className="px-4 py-3.5 border-b border-border">
-                <h2 className="text-sm font-bold text-foreground">Alcance disponible</h2>
+            <section className="space-y-3" aria-label="Estructura disponible">
+              <div className="px-1">
+                <h2 className="text-sm font-bold text-foreground">Estructura disponible</h2>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Noven solo permite asignar accesos dentro de tu jerarquía real.
+                  Tocá una región para ver sus zonas. Noven solo permite asignar accesos dentro de tu jerarquía real.
                 </p>
               </div>
-              <div className="divide-y divide-border/60">
-                {(contexto.regiones ?? []).map((region) => {
-                  const zonas = (contexto.zonas ?? []).filter((z) => z.region_id === region.id)
-                  return (
-                    <div key={region.id} className="p-4">
-                      <p className="text-sm font-bold text-foreground">{region.nombre}</p>
-                      <div className="mt-2 flex flex-wrap gap-2">
+
+              {(contexto.regiones ?? []).map((region) => {
+                const zonas = (contexto.zonas ?? []).filter((z) => z.region_id === region.id)
+                const zonaIds = new Set(zonas.map((z) => z.id))
+                const sucursalesRegion = (contexto.sucursales ?? []).filter((s) => zonaIds.has(s.zona_id)).length
+                const abierta = regionesAbiertas.has(region.id)
+
+                return (
+                  <div key={region.id} className="bg-white rounded-card shadow-card overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => toggleRegion(region.id)}
+                      className="w-full px-4 py-4 flex items-center gap-3 text-left"
+                      aria-expanded={abierta}
+                    >
+                      <div className="h-10 w-10 rounded-xl bg-brand-light flex items-center justify-center shrink-0">
+                        <MapPinned className="h-5 w-5 text-brand" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-foreground">{region.nombre}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {zonas.length} zona{zonas.length !== 1 ? 's' : ''} · {sucursalesRegion} sucursales
+                        </p>
+                      </div>
+                      {abierta
+                        ? <ChevronDown className="h-5 w-5 text-muted-foreground shrink-0" />
+                        : <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />}
+                    </button>
+
+                    {abierta && (
+                      <div className="border-t border-border/60 divide-y divide-border/50">
                         {zonas.map((zona) => {
                           const n = (contexto.sucursales ?? []).filter((s) => s.zona_id === zona.id).length
-                          return <span key={zona.id} className="text-xs px-2.5 py-1 rounded-full bg-brand-light text-brand border border-brand/15">{zona.nombre} · {n}</span>
+                          return (
+                            <div key={zona.id} className="px-4 py-3 flex items-center gap-3 bg-surface-base/35">
+                              <div className="h-8 w-8 rounded-lg bg-white border border-border/60 flex items-center justify-center shrink-0">
+                                <Shield className="h-4 w-4 text-brand" />
+                              </div>
+                              <p className="flex-1 min-w-0 text-sm font-medium text-foreground">{zona.nombre}</p>
+                              <div className="text-right shrink-0">
+                                <p className="text-sm font-bold tabular-nums text-foreground">{n}</p>
+                                <p className="text-[10px] text-muted-foreground">sucursales</p>
+                              </div>
+                            </div>
+                          )
                         })}
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+                    )}
+                  </div>
+                )
+              })}
+            </section>
           </>
         ) : null}
       </main>
