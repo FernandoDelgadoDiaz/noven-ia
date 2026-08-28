@@ -16,7 +16,8 @@ export interface VencimientoExistente {
 interface VencimientoFormProps {
   producto: Producto
   sucursalId: string
-  usuarioId: string
+  /** Compatibilidad del caller actual; la autorización real usa auth.uid() en PostgreSQL. */
+  usuarioId?: string
   onSuccess: () => void
   vencimientoExistente?: VencimientoExistente | null
 }
@@ -122,51 +123,27 @@ export default function VencimientoForm({ producto, sucursalId, onSuccess, venci
     setError(null)
 
     const cantidadNum = parseInt(form.cantidad, 10)
+    const stockNum = form.stockActual === '' ? null : parseInt(form.stockActual, 10)
     const lote = form.lote.trim() || null
 
-    if (vencimientoExistente) {
-      const { error: updateError } = await supabase.rpc('actualizar_vencimiento_operador', {
-        p_vencimiento_id: vencimientoExistente.id,
-        p_cantidad: cantidadNum,
-        p_fecha_vencimiento: form.fechaVencimiento,
-        p_lote: lote,
-      })
-      if (updateError) {
-        setGuardando(false)
-        setError(`Error al actualizar: ${updateError.message}`)
-        return
-      }
-    } else {
-      const { error: supabaseError } = await supabase.rpc('crear_vencimiento_operador', {
-        p_producto_id: producto.id,
-        p_sucursal_id: sucursalId,
-        p_cantidad: cantidadNum,
-        p_fecha_vencimiento: form.fechaVencimiento,
-        p_lote: lote,
-      })
-      if (supabaseError) {
-        setGuardando(false)
-        if (supabaseError.code === '23505') {
-          setError('Este producto ya tiene un vencimiento activo. Volvé a escanearlo para actualizarlo.')
-        } else {
-          setError(`Error al guardar: ${supabaseError.message}`)
-        }
-        return
-      }
-    }
+    const { error: saveError } = await supabase.rpc('guardar_vencimiento_y_stock_scanner_v1', {
+      p_producto_id: producto.id,
+      p_sucursal_id: sucursalId,
+      p_cantidad: cantidadNum,
+      p_fecha_vencimiento: form.fechaVencimiento,
+      p_lote: lote,
+      p_stock_actual: stockNum,
+      p_vencimiento_id: vencimientoExistente?.id ?? null,
+    })
 
-    const nuevoStock = parseInt(form.stockActual, 10)
-    if (!isNaN(nuevoStock) && nuevoStock !== producto.stock_actual) {
-      const { error: stockError } = await supabase.rpc('actualizar_stock_producto_sucursal_scanner', {
-        p_sucursal_id: sucursalId,
-        p_producto_id: producto.id,
-        p_stock_actual: nuevoStock,
-      })
-      if (stockError) {
-        setGuardando(false)
-        setError(`Vencimiento guardado, pero error al actualizar stock local: ${stockError.message}`)
-        return
+    if (saveError) {
+      setGuardando(false)
+      if (saveError.code === '23505') {
+        setError('Este producto ya tiene un vencimiento activo. Volvé a escanearlo para actualizarlo.')
+      } else {
+        setError(`No se pudo guardar el control: ${saveError.message}`)
       }
+      return
     }
 
     setGuardando(false)
