@@ -3,81 +3,20 @@ import { createClient } from '@supabase/supabase-js'
 import { getCorsHeaders } from './_auth'
 import { SYSTEM_ADMIN, SYSTEM_OPERADOR } from './_analisis_policy'
 
-/**
- * analisis — genera un reporte en lenguaje natural (DeepSeek) sobre los
- * vencimientos del usuario. La clasificación y los cálculos son determinísticos;
- * el modelo sólo interpreta/prioriza los datos ya calculados.
- */
-
-const SUCURSAL_LEGACY = '00000000-0000-0000-0000-000000000001'
 const UMBRAL_RADAR = 45
 const UMBRAL_URGENTE = 20
+const TZ_OPERATIVA = 'America/Argentina/Buenos_Aires'
 
-function diasRestantes(fecha: string): number {
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
-  const v = new Date(fecha); v.setHours(0, 0, 0, 0)
-  return Math.floor((v.getTime() - hoy.getTime()) / 86400000)
+type RolAcceso = 'admin_organizacion' | 'gerente_zonal' | 'gerente_sucursal' | 'supervisor' | 'operador'
+
+interface Body {
+  sucursal_id?: string
 }
 
-function diasComerciales(dias: number, diasDonacion: number): number {
-  return Math.max(0, dias - diasDonacion)
-}
-
-function calcularNivel(dias: number, cantidad: number, venta: number, diasDonacion: number): string {
-  if (dias <= 0) return 'decomiso'
-  if (dias <= diasDonacion) return 'donacion'
-
-  const disponibles = diasComerciales(dias, diasDonacion)
-  const diasStock = venta <= 0 ? Infinity : cantidad / venta
-  const hayRiesgo = diasStock > disponibles
-
-  if (dias <= UMBRAL_URGENTE && hayRiesgo) return 'urgente'
-  if (dias <= UMBRAL_RADAR && hayRiesgo) return 'radar'
-  return 'seguro'
-}
-
-interface RiesgoCalc {
-  unidadesVendiblesAntesRetiro: number
-  unidadesEnRiesgo: number
-  riesgoPorcentaje: number
-  diasComercialesRestantes: number
-  velocidadNecesaria: number
-}
-
-function calcularRiesgoComercial(
-  cantidad: number,
-  ventaMedia: number,
-  dias: number,
-  diasDonacion: number,
-): RiesgoCalc {
-  const comerciales = diasComerciales(dias, diasDonacion)
-  const unidadesVendiblesAntesRetiro = ventaMedia * comerciales
-  const unidadesEnRiesgo = Math.max(0, cantidad - unidadesVendiblesAntesRetiro)
-  const riesgoPorcentaje = cantidad > 0 ? (unidadesEnRiesgo / cantidad) * 100 : 0
-  const velocidadNecesaria = comerciales > 0 && cantidad > 0 ? cantidad / comerciales : Infinity
-
-  return {
-    unidadesVendiblesAntesRetiro,
-    unidadesEnRiesgo,
-    riesgoPorcentaje,
-    diasComercialesRestantes: comerciales,
-    velocidadNecesaria,
-  }
-}
-
-function accionDeterministica(nivel: string): string {
-  switch (nivel) {
-    case 'decomiso':
-      return 'Retirar inmediatamente y registrar decomiso'
-    case 'donacion':
-      return 'Retirar de venta y gestionar donación hoy según política'
-    case 'urgente':
-      return 'Revisar/aplicar RAG en Glaciar y controlar estrechamente; no donar antes del umbral obligatorio'
-    case 'radar':
-      return 'Revisar/aplicar RAG en Glaciar cuando corresponda y monitorear cantidad comprometida'
-    default:
-      return 'Seguimiento normal; no indicar RAG obligatorio ni intervención extraordinaria'
-  }
+interface AccesoRow {
+  rol: RolAcceso
+  zona_id: string | null
+  sucursal_id: string | null
 }
 
 interface IdentidadArticulo {
@@ -86,11 +25,6 @@ interface IdentidadArticulo {
   gramaje: string | null
   cod_art: string | null
   codigo_barras: string | null
-}
-
-function identidadArticulo(p: IdentidadArticulo | null | undefined): string {
-  if (!p) return '(sin producto) — Sin dato | Gramaje: Sin dato | Interno: Sin dato | EAN: Sin dato'
-  return `${p.descripcion} — ${p.marca?.trim() || 'Sin dato'} | Gramaje: ${p.gramaje?.trim() || 'Sin dato'} | Interno: ${p.cod_art?.trim() || 'Sin dato'} | EAN: ${p.codigo_barras?.trim() || 'Sin dato'}`
 }
 
 interface VencRow extends IdentidadArticulo {
@@ -123,19 +57,72 @@ interface AccionRow {
   productos: (IdentidadArticulo & { familia_id: string | null }) | null
 }
 
-function getTrimestre(): { trimestre: number; anio: number } {
-  const hoy = new Date()
-  return { trimestre: Math.ceil((hoy.getMonth() + 1) / 3), anio: hoy.getFullYear() }
+function fechaOperacionalYmd(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ_OPERATIVA,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+}
+
+function fechaAEntero(ymd: string): number {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return Date.UTC(y, m - 1, d)
+}
+
+function diasRestantes(fechaVencimiento: string, hoyYmd: string): number {
+  return Math.floor((fechaAEntero(fechaVencimiento) - fechaAEntero(hoyYmd)) / 86_400_000)
+}
+
+function trimestreOperacional(hoyYmd: string): { trimestre: number; anio: number } {
+  const [anio, mes] = hoyYmd.split('-').map(Number)
+  return { trimestre: Math.ceil(mes / 3), anio }
+}
+
+function diasComerciales(dias: number, diasDonacion: number): number {
+  return Math.max(0, dias - diasDonacion)
+}
+
+function calcularNivel(dias: number, cantidad: number, venta: number, diasDonacion: number): string {
+  if (dias <= 0) return 'decomiso'
+  if (dias <= diasDonacion) return 'donacion'
+  const disponibles = diasComerciales(dias, diasDonacion)
+  const diasStock = venta <= 0 ? Infinity : cantidad / venta
+  const hayRiesgo = diasStock > disponibles
+  if (dias <= UMBRAL_URGENTE && hayRiesgo) return 'urgente'
+  if (dias <= UMBRAL_RADAR && hayRiesgo) return 'radar'
+  return 'seguro'
+}
+
+function identidadArticulo(p: IdentidadArticulo | null | undefined): string {
+  if (!p) return '(sin producto) — Sin dato | Gramaje: Sin dato | Interno: Sin dato | EAN: Sin dato'
+  return `${p.descripcion} — ${p.marca?.trim() || 'Sin dato'} | Gramaje: ${p.gramaje?.trim() || 'Sin dato'} | Interno: ${p.cod_art?.trim() || 'Sin dato'} | EAN: ${p.codigo_barras?.trim() || 'Sin dato'}`
+}
+
+function accionDeterministica(nivel: string): string {
+  switch (nivel) {
+    case 'decomiso': return 'Retirar inmediatamente y registrar decomiso'
+    case 'donacion': return 'Retirar de venta y gestionar donación hoy según política'
+    case 'urgente': return 'Revisar/aplicar RAG en Glaciar y controlar estrechamente; no donar antes del umbral obligatorio'
+    case 'radar': return 'Revisar/aplicar RAG en Glaciar cuando corresponda y monitorear cantidad comprometida'
+    default: return 'Seguimiento normal; no indicar RAG obligatorio ni intervención extraordinaria'
+  }
+}
+
+function fmtVelocidad(v: number | null): string {
+  if (v == null || !Number.isFinite(v)) return '—'
+  return `${v.toFixed(2)} u/día`
 }
 
 function resumirAcciones(acciones: AccionRow[], tipo: string) {
   const items = acciones.filter((a) => a.tipo === tipo)
-  const total = items.reduce((s, a) => s + (a.cantidad ?? 0), 0)
+  const total = items.reduce((s, a) => s + Number(a.cantidad ?? 0), 0)
   const porProducto = new Map<string, { cantidad: number; veces: number }>()
   for (const a of items) {
     const nombre = identidadArticulo(a.productos)
     const prev = porProducto.get(nombre) ?? { cantidad: 0, veces: 0 }
-    porProducto.set(nombre, { cantidad: prev.cantidad + (a.cantidad ?? 0), veces: prev.veces + 1 })
+    porProducto.set(nombre, { cantidad: prev.cantidad + Number(a.cantidad ?? 0), veces: prev.veces + 1 })
   }
   return { total, registros: items.length, porProducto }
 }
@@ -152,11 +139,6 @@ function comparativa(actual: number, anterior: number): string {
   const pct = ((delta / anterior) * 100).toFixed(0)
   const signo = delta > 0 ? '+' : ''
   return `${signo}${delta} u (${signo}${pct}% vs. período anterior)`
-}
-
-function fmtVelocidad(v: number | null): string {
-  if (v == null || !Number.isFinite(v)) return '—'
-  return `${v.toFixed(2)} u/día`
 }
 
 const ORDEN: Record<string, number> = { decomiso: 0, donacion: 1, urgente: 2, radar: 3, seguro: 4 }
@@ -176,52 +158,86 @@ const handler: Handler = async (event: HandlerEvent) => {
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const deepseekKey = process.env.DEEPSEEK_API_KEY
-
   if (!supabaseUrl || !anonKey || !serviceRoleKey || !deepseekKey) {
-    console.error('[analisis] Faltan variables de entorno')
-    return json(500, { success: false, error: 'Config de servidor incompleta' })
+    return json(500, { success: false, error: 'Configuración de servidor incompleta' })
   }
 
-  const authHeader = event.headers['authorization'] ?? event.headers['Authorization'] ?? ''
+  const authHeader = event.headers.authorization ?? event.headers.Authorization ?? ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
   if (!token) return json(401, { success: false, error: 'No autorizado: token ausente' })
 
-  let uid: string
+  let uid = ''
   try {
-    const ures = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: { Authorization: `Bearer ${token}`, apikey: anonKey },
     })
-    if (!ures.ok) return json(401, { success: false, error: 'No autorizado: token inválido' })
-    const ud = (await ures.json()) as { id?: string }
-    if (!ud.id) return json(401, { success: false, error: 'No autorizado' })
-    uid = ud.id
-  } catch (e: unknown) {
-    return json(502, { success: false, error: `Error al verificar token: ${(e as Error).message}` })
+    if (!res.ok) return json(401, { success: false, error: 'No autorizado: sesión inválida o expirada' })
+    const user = await res.json() as { id?: string }
+    uid = user.id ?? ''
+    if (!uid) return json(401, { success: false, error: 'No autorizado' })
+  } catch (err) {
+    return json(502, { success: false, error: `No se pudo validar la sesión: ${err instanceof Error ? err.message : String(err)}` })
   }
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
+  let body: Body
+  try {
+    body = JSON.parse(event.body ?? '{}') as Body
+  } catch {
+    return json(400, { success: false, error: 'JSON inválido' })
+  }
+  const sucursalId = body.sucursal_id?.trim() ?? ''
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sucursalId)) {
+    return json(400, { success: false, error: 'Seleccioná una sucursal válida para generar el análisis.' })
+  }
 
-  const { data: perfil } = await supabase
-    .from('usuarios')
-    .select('rol, sucursal_id')
-    .eq('id', uid)
-    .maybeSingle()
-  const rol = (perfil?.rol as string) ?? 'operador'
-  const sucursalId = (perfil?.sucursal_id as string | null) ?? SUCURSAL_LEGACY
-  const esAdmin = rol === 'admin'
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  })
+
+  const [{ data: perfil, error: perfilError }, { data: sucursal, error: sucursalError }] = await Promise.all([
+    supabase.from('usuarios').select('activo').eq('id', uid).maybeSingle(),
+    supabase.from('sucursales').select('id, codigo, nombre, organizacion_id, zona_id, activa').eq('id', sucursalId).maybeSingle(),
+  ])
+  if (perfilError) return json(502, { success: false, error: `No se pudo validar el perfil: ${perfilError.message}` })
+  if (!perfil?.activo) return json(403, { success: false, error: 'La cuenta no está activa en Noven.' })
+  if (sucursalError) return json(502, { success: false, error: `No se pudo validar la sucursal: ${sucursalError.message}` })
+  if (!sucursal?.activa) return json(404, { success: false, error: 'La sucursal no existe o está inactiva.' })
+
+  const { data: accesosRaw, error: accesosError } = await supabase
+    .from('usuario_accesos')
+    .select('rol, zona_id, sucursal_id')
+    .eq('usuario_id', uid)
+    .eq('organizacion_id', sucursal.organizacion_id)
+    .eq('activo', true)
+  if (accesosError) return json(502, { success: false, error: `No se pudo validar el alcance: ${accesosError.message}` })
+
+  const accesos = (accesosRaw ?? []) as AccesoRow[]
+  const scopeCompleto = accesos.some((a) =>
+    a.rol === 'admin_organizacion'
+    || (a.rol === 'gerente_zonal' && a.zona_id === sucursal.zona_id)
+    || ((a.rol === 'gerente_sucursal' || a.rol === 'supervisor') && a.sucursal_id === sucursalId),
+  )
+  const esOperadorLocal = accesos.some((a) => a.rol === 'operador' && a.sucursal_id === sucursalId)
+  if (!scopeCompleto && !esOperadorLocal) {
+    return json(403, { success: false, error: 'No tenés acceso a la sucursal seleccionada.' })
+  }
 
   let familiaIds: string[] = []
-  if (!esAdmin) {
-    const { data: ufs } = await supabase
-      .from('usuario_familias')
+  if (!scopeCompleto) {
+    const { data: familiasAsignadas, error: familiasError } = await supabase
+      .from('usuario_familias_sucursal')
       .select('familia_id')
       .eq('usuario_id', uid)
-    familiaIds = (ufs ?? []).map((u) => u.familia_id as string)
+      .eq('sucursal_id', sucursalId)
+      .eq('activo', true)
+    if (familiasError) return json(502, { success: false, error: `No se pudieron validar las familias: ${familiasError.message}` })
+    familiaIds = (familiasAsignadas ?? []).map((r) => r.familia_id as string)
     if (familiaIds.length === 0) {
       return json(200, {
         success: true,
-        analisis: 'Todavía no tenés familias asignadas, así que no hay datos para analizar. Pedile al administrador que te asigne tus sectores.',
+        analisis: 'Todavía no tenés familias asignadas en esta sucursal, así que no hay datos autorizados para analizar.',
         generado_en: new Date().toISOString(),
+        sucursal_id: sucursalId,
       })
     }
   }
@@ -233,45 +249,46 @@ const handler: Handler = async (event: HandlerEvent) => {
     .eq('sucursal_id', sucursalId)
   if (vErr) return json(502, { success: false, error: `Error al leer vencimientos: ${vErr.message}` })
 
-  let vencs = ((rows ?? []) as unknown as VencRow[])
-  if (!esAdmin) {
-    vencs = vencs.filter((r) => r.familia_id !== null && familiaIds.includes(r.familia_id))
-  }
+  let vencs = (rows ?? []) as unknown as VencRow[]
+  if (!scopeCompleto) vencs = vencs.filter((r) => r.familia_id != null && familiaIds.includes(r.familia_id))
 
-  const famIds = Array.from(new Set(vencs.map((r) => r.familia_id).filter((x): x is string => !!x)))
+  const famIds = Array.from(new Set(vencs.map((r) => r.familia_id).filter((x): x is string => Boolean(x))))
   const famNombre = new Map<string, string>()
   if (famIds.length > 0) {
-    const { data: fams } = await supabase.from('familias').select('id, nombre').in('id', famIds)
+    const { data: fams } = await supabase
+      .from('familias')
+      .select('id, nombre')
+      .eq('organizacion_id', sucursal.organizacion_id)
+      .in('id', famIds)
     for (const f of fams ?? []) famNombre.set(f.id as string, f.nombre as string)
   }
 
-  const { data: ragRaw } = await supabase
+  const { data: ragRaw, error: ragError } = await supabase
     .from('v_seguimiento_rag_actual')
     .select('vencimiento_id, familia_id, rag_porcentaje, estado_seguimiento_rag, velocidad_observada, velocidad_necesaria, cantidad_observada, unidades_vendidas_observadas')
     .eq('sucursal_id', sucursalId)
-
-  let rags = ((ragRaw ?? []) as unknown as RagRow[])
-  if (!esAdmin) {
-    rags = rags.filter((r) => r.familia_id !== null && familiaIds.includes(r.familia_id))
-  }
+  if (ragError) return json(502, { success: false, error: `Error al leer seguimiento RAG: ${ragError.message}` })
+  let rags = (ragRaw ?? []) as unknown as RagRow[]
+  if (!scopeCompleto) rags = rags.filter((r) => r.familia_id != null && familiaIds.includes(r.familia_id))
   const ragPorVencimiento = new Map(rags.map((r) => [r.vencimiento_id, r]))
 
-  const { trimestre: trimestreActual, anio: anioActual } = getTrimestre()
+  const hoyYmd = fechaOperacionalYmd()
+  const { trimestre: trimestreActual, anio: anioActual } = trimestreOperacional(hoyYmd)
   const trimestreAnterior = trimestreActual === 1 ? 4 : trimestreActual - 1
   const anioAnterior = trimestreActual === 1 ? anioActual - 1 : anioActual
 
   const accionSelect = 'tipo, cantidad, trimestre, anio, productos(descripcion, marca, gramaje, cod_art, codigo_barras, familia_id)'
-  const [{ data: accActualRaw }, { data: accAnteriorRaw }] = await Promise.all([
-    supabase.from('acciones_operativas').select(accionSelect)
-      .eq('sucursal_id', sucursalId).eq('trimestre', trimestreActual).eq('anio', anioActual),
-    supabase.from('acciones_operativas').select(accionSelect)
-      .eq('sucursal_id', sucursalId).eq('trimestre', trimestreAnterior).eq('anio', anioAnterior),
+  const [{ data: accActualRaw, error: accActualError }, { data: accAnteriorRaw, error: accAnteriorError }] = await Promise.all([
+    supabase.from('acciones_operativas').select(accionSelect).eq('sucursal_id', sucursalId).eq('trimestre', trimestreActual).eq('anio', anioActual),
+    supabase.from('acciones_operativas').select(accionSelect).eq('sucursal_id', sucursalId).eq('trimestre', trimestreAnterior).eq('anio', anioAnterior),
   ])
+  if (accActualError || accAnteriorError) {
+    return json(502, { success: false, error: `Error al leer historial: ${(accActualError ?? accAnteriorError)?.message}` })
+  }
 
-  const scope = (a: AccionRow) =>
-    esAdmin || (a.productos?.familia_id != null && familiaIds.includes(a.productos.familia_id))
-  const accActual = ((accActualRaw ?? []) as unknown as AccionRow[]).filter(scope)
-  const accAnterior = ((accAnteriorRaw ?? []) as unknown as AccionRow[]).filter(scope)
+  const filtrarAccion = (a: AccionRow) => scopeCompleto || (a.productos?.familia_id != null && familiaIds.includes(a.productos.familia_id))
+  const accActual = ((accActualRaw ?? []) as unknown as AccionRow[]).filter(filtrarAccion)
+  const accAnterior = ((accAnteriorRaw ?? []) as unknown as AccionRow[]).filter(filtrarAccion)
 
   const donActual = resumirAcciones(accActual, 'donacion')
   const decActual = resumirAcciones(accActual, 'decomiso')
@@ -285,109 +302,99 @@ const handler: Handler = async (event: HandlerEvent) => {
     const producto = identidadArticulo(a.productos)
     const key = `${a.tipo}::${producto}`
     const prev = patronMap.get(key) ?? { tipo: a.tipo, producto, veces: 0, cantidad: 0 }
-    patronMap.set(key, { ...prev, veces: prev.veces + 1, cantidad: prev.cantidad + (a.cantidad ?? 0) })
+    patronMap.set(key, { ...prev, veces: prev.veces + 1, cantidad: prev.cantidad + Number(a.cantidad ?? 0) })
   }
   const patronesRepetidos = Array.from(patronMap.values())
     .filter((p) => p.veces >= 2)
     .sort((a, b) => b.veces - a.veces || b.cantidad - a.cantidad)
     .slice(0, 8)
 
-  // NULL significa sector fuera del circuito (Electro/Insumos u otro no
-  // configurado). No inferir 10 días tampoco en el análisis IA.
   const procesados = vencs
-    .filter((r): r is VencRow & { dias_donacion: number } => r.dias_donacion !== null)
+    .filter((r): r is VencRow & { dias_donacion: number } => r.dias_donacion != null)
     .map((r) => {
-      const dias = diasRestantes(r.fecha_vencimiento)
-      const umbral = r.dias_donacion
-      const nivel = calcularNivel(dias, r.cantidad, r.venta_media_diaria, umbral)
-      const riesgo = calcularRiesgoComercial(r.cantidad, r.venta_media_diaria, dias, umbral)
-      const rag = ragPorVencimiento.get(r.id) ?? null
-      return { ...r, dias, umbral, nivel, riesgo, rag }
+      const dias = diasRestantes(r.fecha_vencimiento, hoyYmd)
+      const nivel = calcularNivel(dias, r.cantidad, r.venta_media_diaria, r.dias_donacion)
+      const comerciales = diasComerciales(dias, r.dias_donacion)
+      const vendibles = r.venta_media_diaria * comerciales
+      const riesgoUnidades = Math.max(0, r.cantidad - vendibles)
+      const velocidadNecesaria = comerciales > 0 && r.cantidad > 0 ? r.cantidad / comerciales : Infinity
+      return {
+        ...r,
+        dias,
+        nivel,
+        comerciales,
+        vendibles,
+        riesgoUnidades,
+        riesgoPorcentaje: r.cantidad > 0 ? (riesgoUnidades / r.cantidad) * 100 : 0,
+        velocidadNecesaria,
+        rag: ragPorVencimiento.get(r.id) ?? null,
+      }
     })
     .sort((a, b) => (ORDEN[a.nivel] - ORDEN[b.nivel]) || (a.dias - b.dias))
     .slice(0, 60)
 
-  const hoyStr = new Intl.DateTimeFormat('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date())
   const lineas = procesados.map((r) => {
     const fam = r.familia_id ? (famNombre.get(r.familia_id) ?? '—') : '—'
-    const ventaStr = r.venta_media_diaria > 0 ? `${r.venta_media_diaria} u/día` : 'sin rotación'
     const vence = r.dias < 0 ? `vencido hace ${Math.abs(r.dias)} días` : r.dias === 0 ? 'vence hoy' : `vence en ${r.dias} días`
-    const riesgo = r.riesgo
     const rag = r.rag
-
-    const detallesRag = rag?.rag_porcentaje != null
-      ? [
-          `  RAG registrado en Noven: ${rag.rag_porcentaje}% (porcentaje informado como aplicado en Glaciar; Noven no lo lee directamente de Glaciar)`,
-          `  Estado de seguimiento registrado en Noven: ${rag.estado_seguimiento_rag}`,
-          `  Velocidad observada operador: ${fmtVelocidad(rag.velocidad_observada)}`,
-          `  Velocidad necesaria actual: ${fmtVelocidad(rag.velocidad_necesaria)}`,
-          rag.unidades_vendidas_observadas != null ? `  Reducción observada desde RAG: ${rag.unidades_vendidas_observadas} unidades` : null,
-        ].filter(Boolean)
-      : ['  RAG en Noven: sin intervención registrada. Esto NO confirma el estado en Glaciar; verificar allí si la acción determinística requiere RAG.']
-
+    const ragInfo = rag?.rag_porcentaje != null
+      ? `RAG registrado en Noven: ${rag.rag_porcentaje}%. Estado: ${rag.estado_seguimiento_rag}. Velocidad observada: ${fmtVelocidad(rag.velocidad_observada)}. Velocidad necesaria: ${fmtVelocidad(rag.velocidad_necesaria)}.`
+      : 'Noven no tiene RAG registrado. Esto no informa el estado de Glaciar; verificar allí si la acción lo requiere.'
     return [
       `Producto: ${identidadArticulo(r)}`,
-      `  Familia: ${fam} | Sector: ${r.sector_nombre ?? '—'} | Nivel: ${r.nivel}`,
-      `  ${vence} | Retiro para donación: ${r.umbral} días antes`,
-      `  Días comerciales restantes: ${riesgo.diasComercialesRestantes}`,
-      `  Cantidad comprometida: ${r.cantidad} unidades`,
-      `  VMD histórica Glaciar: ${ventaStr}`,
-      `  Velocidad necesaria para llegar antes de donación: ${fmtVelocidad(riesgo.velocidadNecesaria)}`,
-      `  Vendibles a VMD actual antes del retiro: ${Math.round(riesgo.unidadesVendiblesAntesRetiro)}`,
-      `  Unidades en riesgo de no venderse: ${Math.round(riesgo.unidadesEnRiesgo)} (${riesgo.riesgoPorcentaje.toFixed(1)}%)`,
-      `  Acción determinística OBLIGATORIA: ${accionDeterministica(r.nivel)}`,
-      ...detallesRag,
-    ].join('\n')
+      `Familia: ${fam} | Sector: ${r.sector_nombre ?? '—'} | Nivel: ${r.nivel}`,
+      `${vence} | Retiro para donación: ${r.dias_donacion} días antes | Días comerciales: ${r.comerciales}`,
+      `Cantidad comprometida: ${r.cantidad} | VMD Glaciar: ${r.venta_media_diaria > 0 ? `${r.venta_media_diaria} u/día` : 'sin rotación'}`,
+      `Velocidad necesaria: ${fmtVelocidad(r.velocidadNecesaria)} | Vendibles antes del retiro: ${Math.round(r.vendibles)} | En riesgo: ${Math.round(r.riesgoUnidades)} (${r.riesgoPorcentaje.toFixed(1)}%)`,
+      `Acción determinística: ${accionDeterministica(r.nivel)}`,
+      ragInfo,
+    ].join('\n  ')
   })
 
-  const fmtTop = (top: Array<[string, { cantidad: number; veces: number }]>) =>
-    top.length > 0
-      ? top.map(([n, v]) => `    · ${n}: ${v.cantidad} u (${v.veces} ${v.veces === 1 ? 'registro' : 'registros'})`).join('\n')
-      : '    · (sin registros)'
+  const fmtTop = (top: Array<[string, { cantidad: number; veces: number }]>) => top.length
+    ? top.map(([n, v]) => `· ${n}: ${v.cantidad} u (${v.veces} ${v.veces === 1 ? 'registro' : 'registros'})`).join('\n')
+    : '· Sin registros'
 
-  const bloqueTrimestre = (
-    etiqueta: string,
-    don: ReturnType<typeof resumirAcciones>,
-    dec: ReturnType<typeof resumirAcciones>,
-  ) =>
-    [
-      etiqueta,
-      `- Donaciones: ${don.total} unidades en ${don.registros} registros`,
-      fmtTop(topProductos(don.porProducto)),
-      `- Decomisos: ${dec.total} unidades en ${dec.registros} registros`,
-      fmtTop(topProductos(dec.porProducto)),
-      `- Resultado terminal total (donación + decomiso): ${don.total + dec.total} unidades`,
-    ].join('\n')
+  const bloqueTrimestre = (etiqueta: string, don: ReturnType<typeof resumirAcciones>, dec: ReturnType<typeof resumirAcciones>) => [
+    etiqueta,
+    `Donaciones: ${don.total} unidades en ${don.registros} registros`,
+    fmtTop(topProductos(don.porProducto)),
+    `Decomisos: ${dec.total} unidades en ${dec.registros} registros`,
+    fmtTop(topProductos(dec.porProducto)),
+    `Resultado terminal total (donación + decomiso): ${don.total + dec.total} unidades`,
+  ].join('\n')
 
-  const bloquePatrones = patronesRepetidos.length > 0
-    ? patronesRepetidos
-        .map((p) => `- ${p.producto} — ${p.tipo} ${p.veces} veces (total ${p.cantidad} u) en el período analizado`)
-        .join('\n')
-    : '- No se detectaron productos repetidos entre los registros disponibles.'
+  const hoyTexto = new Intl.DateTimeFormat('es-AR', {
+    timeZone: TZ_OPERATIVA,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(new Date())
 
   const datosFormateados = [
-    `Fecha de hoy: ${hoyStr}`,
-    `Ámbito: ${esAdmin ? 'toda la sucursal' : 'familias asignadas del operador'}`,
+    `Fecha operacional: ${hoyTexto}`,
+    `Sucursal analizada: ${sucursal.codigo} · ${sucursal.nombre}`,
+    `Ámbito autorizado: ${scopeCompleto ? 'toda la sucursal' : 'familias asignadas al operador en esta sucursal'}`,
     '',
-    `Vencimientos activos (${procesados.length}${vencs.length > procesados.length ? ` de ${vencs.length}` : ''}):`,
-    lineas.length > 0 ? lineas.join('\n\n') : '(sin vencimientos activos)',
+    `Vencimientos activos dentro del circuito (${procesados.length}):`,
+    lineas.length ? lineas.join('\n\n') : '(sin vencimientos activos dentro del circuito)',
     '',
     '=== HISTÓRICO DE ACCIONES OPERATIVAS ===',
+    bloqueTrimestre(`Trimestre ACTUAL (Q${trimestreActual} ${anioActual})`, donActual, decActual),
     '',
-    bloqueTrimestre(`Trimestre ACTUAL (Q${trimestreActual} ${anioActual}):`, donActual, decActual),
+    bloqueTrimestre(`Trimestre ANTERIOR (Q${trimestreAnterior} ${anioAnterior})`, donAnterior, decAnterior),
     '',
-    bloqueTrimestre(`Trimestre ANTERIOR (Q${trimestreAnterior} ${anioAnterior}):`, donAnterior, decAnterior),
+    `Comparativa donaciones: ${comparativa(donActual.total, donAnterior.total)}`,
+    `Comparativa decomisos: ${comparativa(decActual.total, decAnterior.total)}`,
+    `Comparativa terminal combinada: ${comparativa(terminalActual, terminalAnterior)}`,
+    'Una baja de donaciones no es por sí sola una mejora: evaluar junto con decomisos y total terminal.',
     '',
-    'Comparativa trimestral (actual vs. anterior):',
-    `- Donaciones: ${comparativa(donActual.total, donAnterior.total)}`,
-    `- Decomisos: ${comparativa(decActual.total, decAnterior.total)}`,
-    `- Resultado terminal combinado DONACIÓN + DECOMISO: ${comparativa(terminalActual, terminalAnterior)}`,
-    '- Regla de interpretación: una baja de donaciones NO es por sí sola una mejora; los decomisos son cualitativamente peores y deben evaluarse junto al total terminal.',
+    'Patrones repetidos:',
+    patronesRepetidos.length
+      ? patronesRepetidos.map((p) => `- ${p.producto} — ${p.tipo} ${p.veces} veces (${p.cantidad} u)`).join('\n')
+      : '- No se detectaron productos repetidos en los dos trimestres disponibles.',
     '',
-    'Patrones repetidos detectados (mismo producto en ≥2 registros):',
-    bloquePatrones,
-    '',
-    'Límite de inferencia histórica: solo hay dos trimestres comparables. NO afirmar estacionalidad; como máximo indicar concentración/recurrencia y necesidad de más períodos para confirmarla.',
+    'Límite de inferencia: sólo hay dos trimestres comparables. No afirmar estacionalidad; hablar únicamente de recurrencia o concentración observada.',
   ].join('\n')
 
   try {
@@ -397,7 +404,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages: [
-          { role: 'system', content: esAdmin ? SYSTEM_ADMIN : SYSTEM_OPERADOR },
+          { role: 'system', content: scopeCompleto ? SYSTEM_ADMIN : SYSTEM_OPERADOR },
           { role: 'user', content: datosFormateados },
         ],
         max_tokens: 1300,
@@ -405,16 +412,21 @@ const handler: Handler = async (event: HandlerEvent) => {
       }),
     })
     if (!dsRes.ok) {
-      const errTxt = await dsRes.text().catch(() => '')
-      console.error('[analisis] DeepSeek error', dsRes.status, errTxt)
+      console.error('[analisis] DeepSeek error', dsRes.status, await dsRes.text().catch(() => ''))
       return json(502, { success: false, error: `Error del modelo de análisis (${dsRes.status})` })
     }
-    const dsData = (await dsRes.json()) as { choices?: Array<{ message?: { content?: string } }> }
+    const dsData = await dsRes.json() as { choices?: Array<{ message?: { content?: string } }> }
     const contenido = dsData.choices?.[0]?.message?.content?.trim() ?? ''
     if (!contenido) return json(502, { success: false, error: 'El modelo no devolvió contenido' })
-    return json(200, { success: true, analisis: contenido, generado_en: new Date().toISOString() })
-  } catch (e: unknown) {
-    return json(502, { success: false, error: `Error al contactar el modelo: ${(e as Error).message}` })
+    return json(200, {
+      success: true,
+      analisis: contenido,
+      generado_en: new Date().toISOString(),
+      sucursal_id: sucursalId,
+      sucursal_codigo: sucursal.codigo,
+    })
+  } catch (err) {
+    return json(502, { success: false, error: `Error al contactar el modelo: ${err instanceof Error ? err.message : String(err)}` })
   }
 }
 
