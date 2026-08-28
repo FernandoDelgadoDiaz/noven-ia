@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { ScanLine, Search, CheckCircle, Package, Barcode, ChevronLeft, ShieldAlert, AlertCircle } from 'lucide-react'
 import { useScanner } from '@/hooks/useScanner'
 import { useProductos, type ConflictoCodigos } from '@/hooks/useProductos'
-import { useAuth } from '@/hooks/useAuth'
 import { useUsuarioFamilias } from '@/hooks/useUsuarioFamilias'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
 import { supabase } from '@/lib/supabase'
@@ -26,6 +25,7 @@ import {
 
 type Paso = 'inicio' | 'confirmando' | 'capturar_ean' | 'completar_cod_art' | 'vencimiento_existente' | 'formulario' | 'exito' | 'nuevo_producto' | 'familia_bloqueada'
 type CategoriaProducto = 'CHOCOLATES' | 'CARAMELOS' | 'SNACKS' | 'CHICLES' | 'CEREALES' | 'OTRO'
+type ProductoConPoliticaScanner = Producto & { dias_donacion?: number | null }
 const CATEGORIAS: CategoriaProducto[] = ['CHOCOLATES', 'CARAMELOS', 'SNACKS', 'CHICLES', 'CEREALES', 'OTRO']
 
 const inputCls = 'w-full h-12 px-4 bg-surface-base border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150 text-sm'
@@ -42,7 +42,6 @@ export default function Scanner() {
     completarCodArtScanner,
     crearProductoScanner,
   } = useProductos()
-  const { user } = useAuth()
   const { esAdmin, familiaIds, loading: famLoading } = useUsuarioFamilias()
   const { sucursalId } = useSucursalActual()
 
@@ -417,8 +416,16 @@ export default function Scanner() {
 
   if (paso === 'vencimiento_existente' && productoEncontrado && vencimientoExistente) {
     const diasRestantes = calcularDiasRestantes(vencimientoExistente.fecha_vencimiento)
-    const nivel = calcularNivelRiesgo(diasRestantes, vencimientoExistente.cantidad, productoEncontrado.venta_media_diaria)
-    const viz = RISK_VISUAL[nivel]
+    const diasDonacion = (productoEncontrado as ProductoConPoliticaScanner).dias_donacion ?? null
+    const nivel = diasDonacion == null
+      ? null
+      : calcularNivelRiesgo(
+          diasRestantes,
+          vencimientoExistente.cantidad,
+          productoEncontrado.venta_media_diaria,
+          diasDonacion,
+        )
+    const viz = nivel ? RISK_VISUAL[nivel] : null
     const [y, m, d] = vencimientoExistente.fecha_vencimiento.slice(0, 10).split('-')
     const fechaFmt = `${d}/${m}/${y}`
     return (
@@ -441,9 +448,20 @@ export default function Scanner() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Nivel de riesgo</span>
-              <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full leading-tight ${viz.badge}`}>{viz.label.toUpperCase()}</span>
+              {viz ? (
+                <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full leading-tight ${viz.badge}`}>{viz.label.toUpperCase()}</span>
+              ) : (
+                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full leading-tight bg-amber-50 text-amber-700 border border-amber-200">SIN POLÍTICA</span>
+              )}
             </div>
           </div>
+
+          {diasDonacion == null && (
+            <div className="bg-amber-50 border border-amber-200 rounded-card p-4 flex gap-3 items-start">
+              <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-amber-800 text-sm">Este registro no tiene una política de vencimiento/donación vigente. Noven no calcula ni infiere un nivel de riesgo hasta que exista una política configurada.</p>
+            </div>
+          )}
 
           <div className="bg-brand-light border border-brand-muted rounded-card p-4 flex gap-3 items-start">
             <AlertCircle className="h-5 w-5 text-brand shrink-0 mt-0.5" />
@@ -479,7 +497,6 @@ export default function Scanner() {
           <VencimientoForm
             producto={productoEncontrado}
             sucursalId={sucursalId}
-            usuarioId={user?.id ?? ''}
             onSuccess={handleGuardadoExitoso}
             vencimientoExistente={vencimientoExistente}
           />
