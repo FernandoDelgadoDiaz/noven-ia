@@ -24,10 +24,10 @@ assert.match(migration, /Solo el administrador de organización puede crear gere
 assert.doesNotMatch(migration, /p_rol not in \([^)]*supervisor/)
 assert.doesNotMatch(migration, /p_rol not in \([^)]*operador/)
 
-// Bootstrap controlado: sólo el único gerente activo de 091 recibe admin_organizacion.
-assert.match(migration, /s\.codigo = '091'/)
-assert.match(migration, /v_candidatos <> 1/)
-assert.match(migration, /'admin_organizacion'/)
+// Ninguna cuenta existente recibe privilegios de organización automáticamente.
+assert.match(migration, /NO promueve automáticamente ninguna cuenta existente/)
+assert.doesNotMatch(migration, /s\.codigo = '091'/)
+assert.doesNotMatch(migration, /Bootstrap admin_organizacion/)
 
 // Permiso real en usuario_accesos; metadata Auth sólo lleva nombre de presentación.
 assert.match(migration, /insert into public\.usuario_accesos/)
@@ -46,6 +46,7 @@ assert.match(backend, /auth\.admin\.generateLink/)
 assert.match(backend, /type: 'invite'/)
 assert.match(backend, /auth\.admin\.inviteUserByEmail/)
 assert.match(backend, /properties\.action_link/)
+assert.match(backend, /No tenés permiso para asignar esa sucursal/)
 assert.match(backend, /deleteUser\(usuarioId\)/)
 assert.match(adminPage, /Copiar invitación para WhatsApp/)
 assert.match(adminPage, /Link \/ WhatsApp/)
