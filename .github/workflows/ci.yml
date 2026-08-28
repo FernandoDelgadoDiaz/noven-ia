@@ -42,14 +42,21 @@ jobs:
       - name: Production build
         run: npm run build
 
-      - name: Install Playwright test runner
-        run: npm install --no-save --no-package-lock @playwright/test@1.55.0
+      - name: Install isolated Playwright test runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          PW_DIR="${RUNNER_TEMP}/noven-playwright"
+          npm install --prefix "${PW_DIR}" --no-save --no-package-lock @playwright/test@1.55.0
+          mkdir -p node_modules/@playwright
+          ln -s "${PW_DIR}/node_modules/@playwright/test" node_modules/@playwright/test
+          echo "PW_DIR=${PW_DIR}" >> "${GITHUB_ENV}"
 
       - name: Install Chromium for E2E
-        run: npx playwright install --with-deps chromium
+        run: "${PW_DIR}/node_modules/.bin/playwright install --with-deps chromium"
 
       - name: Browser E2E critical flows
-        run: npx playwright test
+        run: "${PW_DIR}/node_modules/.bin/playwright test"
 
       - name: Upload E2E diagnostics
         if: failure()
