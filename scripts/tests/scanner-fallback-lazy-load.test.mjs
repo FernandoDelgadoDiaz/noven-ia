@@ -32,7 +32,7 @@ assert.match(
 )
 assert.match(
   fallback,
-  /scanner\.start\(/[\s\S]*?facingMode:\s*'environment'/,
+  /scanner\.start\([\s\S]*?facingMode:\s*'environment'/,
   'el fallback debe conservar la cámara trasera y el flujo de inicio existente',
 )
 assert.match(
