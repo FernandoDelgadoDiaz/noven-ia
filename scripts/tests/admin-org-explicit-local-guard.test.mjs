@@ -26,7 +26,7 @@ expect(
   'Falta el guard de frontend contra alta local de gerentes.',
 )
 expect(
-  admin.includes('Los gerentes de sucursal y gerentes zonales se crean desde Accesos y jerarquía'),
+  admin.includes('Los gerentes de sucursal y zonales se crean desde Accesos y jerarquía'),
   'Falta la explicación del flujo correcto en el formulario local.',
 )
 expect(

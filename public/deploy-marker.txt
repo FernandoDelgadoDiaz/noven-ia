@@ -1,1 +1,1 @@
-noven-p2d-scanner-existing-risk-policy-deploy-check-20260828-a
+noven-p2e-local-user-invitations-deploy-check-20260828-a

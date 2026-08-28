@@ -2,14 +2,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
   Briefcase,
+  CheckCircle2,
+  CheckSquare,
   ChevronDown,
   ChevronRight,
+  Copy,
+  Link2,
   Loader2,
+  Mail,
   Pencil,
   Plus,
   Shield,
   Square,
-  CheckSquare,
   User,
   UserCheck,
   UserX,
@@ -20,6 +24,7 @@ import { supabase } from '@/lib/supabase'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
 
 type RolUi = 'admin' | 'supervisor' | 'operador'
+type CanalInvitacion = 'link' | 'email'
 
 interface SucursalAdmin {
   id: string
@@ -58,15 +63,17 @@ interface AdminPayload {
   sectores?: SectorAdmin[]
   familias?: FamiliaAdmin[]
   usuarios?: UsuarioAdmin[]
+  canal?: CanalInvitacion
+  link?: string | null
 }
 
 interface FormState {
   nombre: string
   email: string
-  password: string
   rol: RolUi
   activo: boolean
   familias: Set<string>
+  canal: CanalInvitacion
 }
 
 const ROL_LABEL: Record<RolUi, string> = {
@@ -227,10 +234,7 @@ export default function AdminSeguro() {
           familias={payload.familias ?? []}
           usuarios={usuarios}
           onClose={() => setModal(null)}
-          onGuardado={() => {
-            setModal(null)
-            void cargar()
-          }}
+          onGuardado={() => void cargar()}
         />
       )}
     </div>
@@ -299,14 +303,16 @@ function ModalUsuario({
   const [form, setForm] = useState<FormState>({
     nombre: usuario?.nombre ?? '',
     email: usuario?.email ?? '',
-    password: '',
     rol: usuario?.rol ?? 'operador',
     activo: usuario?.activo ?? true,
     familias: new Set(usuario?.familias_ids ?? []),
+    canal: 'link',
   })
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set())
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [invitacionCreada, setInvitacionCreada] = useState<{ canal: CanalInvitacion; link: string | null } | null>(null)
+  const [copiado, setCopiado] = useState(false)
 
   const ocupacion = useMemo(() => {
     const map = new Map<string, UsuarioAdmin>()
@@ -354,12 +360,24 @@ function ModalUsuario({
     })
   }
 
+  async function copiarLink(): Promise<void> {
+    const link = invitacionCreada?.link
+    if (!link) return
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopiado(true)
+    } catch {
+      setError('No se pudo copiar automáticamente. Mantené presionado el enlace para copiarlo.')
+    }
+  }
+
   async function guardar(): Promise<void> {
     setError(null)
     if (!form.nombre.trim()) {
       setError('El nombre es obligatorio.')
       return
     }
+
     if (modo === 'crear') {
       if (form.rol === 'admin') {
         setError('Los gerentes de sucursal se crean desde Accesos y jerarquía mediante invitación.')
@@ -369,8 +387,8 @@ function ModalUsuario({
         setError('El email no es válido.')
         return
       }
-      if (form.password.length < 6) {
-        setError('La contraseña debe tener al menos 6 caracteres.')
+      if (form.rol === 'operador' && form.familias.size === 0) {
+        setError('Seleccioná al menos una familia responsable para el operador.')
         return
       }
     }
@@ -385,16 +403,31 @@ function ModalUsuario({
 
     setGuardando(true)
     try {
-      await adminRequest({
-        accion: modo,
-        sucursalId,
-        ...(modo === 'editar' ? { usuarioId: usuario?.id } : { email: form.email.trim(), password: form.password }),
-        nombre: form.nombre.trim(),
-        rol: form.rol,
-        activo: form.activo,
-        familias: form.rol === 'operador' && form.activo ? Array.from(form.familias) : [],
-      })
-      onGuardado()
+      if (modo === 'crear') {
+        const data = await adminRequest({
+          accion: 'invitar',
+          sucursalId,
+          email: form.email.trim(),
+          nombre: form.nombre.trim(),
+          rol: form.rol,
+          familias: form.rol === 'operador' ? Array.from(form.familias) : [],
+          canal: form.canal,
+        })
+        setInvitacionCreada({ canal: data.canal ?? form.canal, link: data.link ?? null })
+        onGuardado()
+      } else {
+        await adminRequest({
+          accion: 'editar',
+          sucursalId,
+          usuarioId: usuario?.id,
+          nombre: form.nombre.trim(),
+          rol: form.rol,
+          activo: form.activo,
+          familias: form.rol === 'operador' && form.activo ? Array.from(form.familias) : [],
+        })
+        onGuardado()
+        onClose()
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -402,15 +435,51 @@ function ModalUsuario({
     }
   }
 
+  const mostrarFamilias = form.rol === 'operador' && (modo === 'crear' || form.activo)
+
+  if (invitacionCreada) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center" role="dialog" aria-modal="true" aria-label="Invitación creada">
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative z-10 w-full md:max-w-lg bg-white rounded-t-[28px] md:rounded-[24px] shadow-modal p-5 animate-slide-up">
+          <div className="flex items-start gap-3">
+            <div className="h-11 w-11 rounded-full bg-emerald-50 flex items-center justify-center shrink-0"><CheckCircle2 className="h-6 w-6 text-emerald-600" /></div>
+            <div>
+              <h2 className="font-bold text-lg text-foreground">Invitación creada</h2>
+              <p className="text-sm text-muted-foreground mt-1">La cuenta permanece inactiva hasta que la persona defina su propia contraseña. La invitación vence en 72 horas.</p>
+            </div>
+          </div>
+
+          {invitacionCreada.canal === 'link' && invitacionCreada.link ? (
+            <div className="mt-5 space-y-3">
+              <div className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground break-all select-all">{invitacionCreada.link}</div>
+              <button type="button" onClick={() => void copiarLink()} className="w-full h-11 rounded-xl bg-brand hover:bg-brand-hover text-white font-bold text-sm flex items-center justify-center gap-2">
+                <Copy className="h-4 w-4" />{copiado ? 'Enlace copiado' : 'Copiar enlace para WhatsApp'}
+              </button>
+            </div>
+          ) : (
+            <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex gap-3">
+              <Mail className="h-5 w-5 text-emerald-600 shrink-0" />
+              <p className="text-sm text-emerald-800">Supabase envió la invitación al email indicado.</p>
+            </div>
+          )}
+
+          {error && <div className="mt-3 bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">{error}</div>}
+          <button type="button" onClick={onClose} className="w-full h-11 mt-4 rounded-xl border border-border text-sm font-semibold">Cerrar</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center" role="dialog" aria-modal="true" aria-label={modo === 'crear' ? 'Crear usuario' : 'Editar usuario'}>
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center" role="dialog" aria-modal="true" aria-label={modo === 'crear' ? 'Invitar usuario' : 'Editar usuario'}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={guardando ? undefined : onClose} />
       <div className="relative z-10 w-full md:max-w-lg bg-white rounded-t-[28px] md:rounded-[24px] shadow-modal max-h-[92vh] flex flex-col overflow-hidden animate-slide-up">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/40 shrink-0">
           <div>
-            <h2 className="font-bold text-base text-foreground">{modo === 'crear' ? 'Nuevo usuario' : 'Editar usuario'}</h2>
+            <h2 className="font-bold text-base text-foreground">{modo === 'crear' ? 'Invitar usuario' : 'Editar usuario'}</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {modo === 'crear' ? 'Este flujo crea supervisores u operadores de la sucursal.' : 'Los cambios afectan sólo esta sucursal.'}
+              {modo === 'crear' ? 'Supervisor u Operador define su propia contraseña al aceptar.' : 'Los cambios afectan sólo esta sucursal.'}
             </p>
           </div>
           <button type="button" onClick={onClose} disabled={guardando} className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-40"><X className="h-4 w-4" /></button>
@@ -424,7 +493,6 @@ function ModalUsuario({
             <input type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} disabled={modo === 'editar'} className={`${inputCls} disabled:bg-muted disabled:text-muted-foreground`} />
             {modo === 'editar' && <p className="text-[11px] text-muted-foreground mt-1">El email no se modifica desde este flujo para evitar cambios parciales entre Auth y base.</p>}
           </Campo>
-          {modo === 'crear' && <Campo label="Contraseña inicial"><input type="password" value={form.password} onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))} className={inputCls} /></Campo>}
 
           <Campo label="Rol en esta sucursal">
             <select value={form.rol} onChange={(e) => setForm((p) => ({ ...p, rol: e.target.value as RolUi, familias: e.target.value === 'operador' ? p.familias : new Set() }))} className={inputCls}>
@@ -433,18 +501,32 @@ function ModalUsuario({
               <option value="operador">Operador</option>
             </select>
             {modo === 'crear' && (
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Los gerentes de sucursal y gerentes zonales se crean desde Accesos y jerarquía y definen su propia contraseña al aceptar la invitación.
-              </p>
+              <p className="text-[11px] text-muted-foreground mt-1">Los gerentes de sucursal y zonales se crean desde Accesos y jerarquía.</p>
             )}
           </Campo>
 
-          <label className="flex items-center gap-3 bg-muted/50 rounded-xl px-4 py-3 cursor-pointer">
-            <input type="checkbox" checked={form.activo} onChange={(e) => setForm((p) => ({ ...p, activo: e.target.checked }))} className="h-4 w-4 accent-[color:var(--brand,#0d9488)]" />
-            <div><p className="text-sm font-semibold text-foreground">Usuario activo en esta sucursal</p><p className="text-xs text-muted-foreground">Al desactivarlo se desactivan también sus familias locales.</p></div>
-          </label>
+          {modo === 'crear' && (
+            <Campo label="Entrega de la invitación">
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setForm((p) => ({ ...p, canal: 'link' }))} className={`min-h-12 rounded-xl border px-3 py-2 text-left flex gap-2 items-center ${form.canal === 'link' ? 'border-brand bg-brand-light text-brand' : 'border-border text-muted-foreground'}`}>
+                  <Link2 className="h-4 w-4 shrink-0" /><span className="text-xs font-semibold">Link / WhatsApp</span>
+                </button>
+                <button type="button" onClick={() => setForm((p) => ({ ...p, canal: 'email' }))} className={`min-h-12 rounded-xl border px-3 py-2 text-left flex gap-2 items-center ${form.canal === 'email' ? 'border-brand bg-brand-light text-brand' : 'border-border text-muted-foreground'}`}>
+                  <Mail className="h-4 w-4 shrink-0" /><span className="text-xs font-semibold">Enviar email</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">La invitación vence en 72 horas y el usuario define su propia contraseña.</p>
+            </Campo>
+          )}
 
-          {form.rol === 'operador' && form.activo && (
+          {modo === 'editar' && (
+            <label className="flex items-center gap-3 bg-muted/50 rounded-xl px-4 py-3 cursor-pointer">
+              <input type="checkbox" checked={form.activo} onChange={(e) => setForm((p) => ({ ...p, activo: e.target.checked }))} className="h-4 w-4 accent-[color:var(--brand,#0d9488)]" />
+              <div><p className="text-sm font-semibold text-foreground">Usuario activo en esta sucursal</p><p className="text-xs text-muted-foreground">Al desactivarlo se desactivan también sus familias locales.</p></div>
+            </label>
+          )}
+
+          {mostrarFamilias && (
             <div className="space-y-2">
               <div><p className="text-xs font-semibold uppercase tracking-wide text-foreground">Familias responsables</p><p className="text-[11px] text-muted-foreground mt-1">Una familia puede tener un solo operador activo por sucursal.</p></div>
               <div className="border border-border rounded-xl overflow-hidden">
@@ -487,7 +569,7 @@ function ModalUsuario({
         <div className="px-5 py-4 border-t border-border/40 flex gap-3 shrink-0">
           <button type="button" onClick={onClose} disabled={guardando} className="flex-1 h-11 rounded-xl border border-border text-sm font-medium disabled:opacity-40">Cancelar</button>
           <button type="button" onClick={() => void guardar()} disabled={guardando} className="flex-1 h-11 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50">
-            {guardando ? <><Loader2 className="h-4 w-4 animate-spin" />Guardando…</> : 'Guardar'}
+            {guardando ? <><Loader2 className="h-4 w-4 animate-spin" />{modo === 'crear' ? 'Creando…' : 'Guardando…'}</> : modo === 'crear' ? 'Crear invitación' : 'Guardar'}
           </button>
         </div>
       </div>

@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-p2d-scanner-existing-risk-policy-deploy-check-20260828-a
+          EXPECTED_MARKER: noven-p2e-local-user-invitations-deploy-check-20260828-a
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |
@@ -68,6 +68,15 @@ jobs:
         run: |
           set -euo pipefail
           status="$(curl -sS -o /tmp/access-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/admin-accesos" -H 'Content-Type: application/json' -d '{}')"
+          test "${status}" = "401"
+
+      - name: Verify local admin function exists
+        env:
+          SITE_URL: https://noven-ia.netlify.app
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl -sS -o /tmp/local-admin-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/admin-sucursal" -H 'Content-Type: application/json' -d '{}')"
           test "${status}" = "401"
 
       - name: Verify urgent push function exists
