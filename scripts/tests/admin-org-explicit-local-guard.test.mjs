@@ -14,12 +14,8 @@ function expect(condition, message) {
 }
 
 expect(
-  admin.includes("{modo === 'editar' && usuario?.rol === 'admin' && <option value=\"admin\">Admin de sucursal</option>}"),
-  'El rol admin sólo debe aparecer al editar un gerente ya existente.',
-)
-expect(
-  !admin.includes('\n              <option value="admin">Admin de sucursal</option>\n'),
-  'Nuevo usuario local no debe ofrecer Admin de sucursal de forma incondicional.',
+  !admin.includes('<option value="admin">'),
+  'Admin local no debe ofrecer edición de gerentes de sucursal.',
 )
 expect(
   admin.includes('Los gerentes de sucursal se crean desde Accesos y jerarquía mediante invitación.'),
@@ -39,11 +35,11 @@ expect(
 )
 expect(
   migration.includes("if p_rol_legacy = 'admin' then"),
-  'La base debe bloquear creación/promoción local de nuevos gerentes.',
+  'La migración histórica debe conservar el bloqueo de creación/promoción local de gerentes.',
 )
 expect(
   migration.includes('Los gerentes de sucursal se crean desde Accesos y jerarquía mediante invitación'),
-  'Falta el rechazo de backend para altas locales de gerentes.',
+  'Falta el rechazo histórico de backend para altas locales de gerentes.',
 )
 
 console.log('admin-org-explicit-local-guard: OK')
