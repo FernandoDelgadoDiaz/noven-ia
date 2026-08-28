@@ -12,50 +12,49 @@ const accessRoute = read('src/components/auth/AccessAdminRoute.tsx')
 const layout = read('src/components/layout/AppLayout.tsx')
 const accessHook = read('src/hooks/useAccesosMultitenant.ts')
 const accessContext = read('src/context/NovenAccessContext.tsx')
-const localAdmin = read('supabase/migrations/20260828000160_local_admin_scope_boundary_v2.sql')
+const scopeMigration = read('supabase/migrations/20260828000210_role_scope_invariants_v2.sql')
 
-// Los permisos se acumulan por rol; tener más de un acceso no reemplaza el anterior.
+// Los permisos se acumulan, pero cada rol conserva su alcance propio.
 assert.match(accessHook, /new Set\(accesos\.map\(\(a\) => a\.rol\)\)/,
   'la autorización debe conservar el conjunto de roles activos del usuario')
 assert.match(accessHook, /lista\.some\(\(rol\) => roles\.has\(rol\)\)/,
-  'cada capacidad debe resolverse por pertenencia al conjunto, no por un rol único')
+  'cada capacidad se resuelve por pertenencia al conjunto, no por un rol único')
 
-// Gerencia de sucursal: conserva administración operativa del local.
-assert.match(adminRoute, /tieneRol\('gerente_sucursal'\)/,
-  'gerente_sucursal debe conservar acceso a la administración local')
-assert.match(localAdmin, /WHEN ua\.rol = 'gerente_sucursal' AND ua\.sucursal_id = p_sucursal_id THEN 1/,
-  'backend debe autorizar al gerente únicamente sobre su sucursal')
-assert.match(localAdmin, /UPDATE public\.usuario_accesos ua[\s\S]*?SET rol = v_rol_scope,[\s\S]*?activo = p_activo/,
-  'gerencia local debe poder habilitar/deshabilitar accesos locales de Supervisor/Operador')
-assert.match(localAdmin, /UPDATE public\.usuario_familias_sucursal[\s\S]*?activo = false/,
-  'gerencia local debe conservar administración de responsabilidades por familia')
+// Gerente de sucursal: Admin sólo sobre la sucursal actualmente seleccionada si
+// existe un acceso gerente_sucursal exactamente para esa sucursal.
+assert.match(adminRoute, /acceso\.rol === 'gerente_sucursal'/,
+  'Admin local debe exigir rol gerente_sucursal')
+assert.match(adminRoute, /acceso\.sucursal_id === sucursalId/,
+  'Admin local debe exigir coincidencia exacta con la sucursal actual')
+assert.match(scopeMigration, /ua\.rol = 'gerente_sucursal'[\s\S]*?ua\.sucursal_id = p_sucursal_id/,
+  'backend debe aplicar el mismo límite exacto de sucursal')
+assert.doesNotMatch(scopeMigration.match(/CREATE OR REPLACE FUNCTION public\.listar_admin_sucursal_v1[\s\S]*?(?=CREATE OR REPLACE FUNCTION)/)?.[0] ?? '', /gerente_zonal|admin_organizacion/,
+  'ni zonal ni admin_organizacion deben administrar usuarios locales por sí solos')
 
-// Jerarquía corporativa es una capacidad separada: sólo existe si la misma cuenta
-// también posee admin_organizacion o gerente_zonal. No se hereda por ser gerente local.
-assert.match(accessRoute, /tieneRol\(\['admin_organizacion', 'gerente_zonal'\]\)/,
-  'Accesos y jerarquía debe conservar su guard jerárquico independiente')
-assert.doesNotMatch(accessRoute, /tieneRol\([^\n]*gerente_sucursal/,
-  'gerente_sucursal por sí solo no debe obtener alcance corporativo')
+// Jerarquía: sólo una cuenta con admin_organizacion + gerente_sucursal de la 091.
+assert.match(accessRoute, /esAdministradorJerarquia/)
+assert.match(accessRoute, /admin_organizacion/)
+assert.match(accessRoute, /gerente_sucursal/)
+assert.match(accessRoute, /sucursal\.codigo === '091'/)
+assert.doesNotMatch(accessRoute, /gerente_zonal/,
+  'gerente_zonal no debe entrar a Accesos y jerarquía')
 
-// Una cuenta multirrol debe ver la unión de capacidades, nunca una u otra.
-assert.match(layout, /const administraSucursal = [^\n]*tieneRol\('gerente_sucursal'\)/,
-  'layout debe calcular administración de sucursal en forma independiente')
-assert.match(layout, /const administraJerarquia = [^\n]*tieneRol\(\['admin_organizacion', 'gerente_zonal'\]\)/,
-  'layout debe calcular administración jerárquica en forma independiente')
-assert.match(layout, /\.\.\.\(administraSucursal \? SUCURSAL_ADMIN_NAV_ITEMS : \[\]\)/,
-  'una cuenta con rol local debe conservar Importar/Admin')
-assert.match(layout, /\.\.\.\(administraJerarquia \? \[ACCESS_ADMIN_NAV_ITEM\] : \[\]\)/,
-  'una cuenta con rol jerárquico debe conservar Accesos')
+assert.match(scopeMigration, /CREATE OR REPLACE FUNCTION noven_private\.es_administrador_jerarquia_v1/)
+assert.match(scopeMigration, /ua_admin\.rol = 'admin_organizacion'/)
+assert.match(scopeMigration, /ua_local\.rol = 'gerente_sucursal'/)
+assert.match(scopeMigration, /s091\.codigo = '091'/)
+
+// Layout: las dos capacidades pueden coexistir, pero no se mezclan.
+assert.match(layout, /const administraSucursal =/)
+assert.match(layout, /a\.rol === 'gerente_sucursal' && a\.sucursal_id === sucursalId/)
+assert.match(layout, /const administraJerarquia =/)
+assert.match(layout, /a\.rol === 'admin_organizacion'/)
+assert.match(layout, /s\.codigo === '091'/)
 assert.match(layout, /administraJerarquia && administraSucursal/,
-  'móvil debe contemplar explícitamente la coexistencia de ambos permisos')
-assert.match(layout, />\s*Accesos y jerarquía\s*</,
-  'la acción Accesos y jerarquía debe seguir visible para la cuenta multirrol')
+  'la cuenta gerente 091 puede conservar simultáneamente Admin local y Jerarquía')
 
-// Si la cuenta además es gerente de una sucursal, esa sucursal propia sigue siendo
-// el contexto operativo por defecto aunque también tenga alcance superior.
-assert.match(accessContext, /a\.rol === 'gerente_sucursal'/,
-  'la sucursal propia debe derivarse del acceso gerente_sucursal')
-assert.match(accessContext, /if \(sucursalPropiaId\)[\s\S]*?sucursalId: sucursalPropiaId/,
-  'la sucursal propia debe tener prioridad como contexto operativo por defecto')
+// La sucursal propia continúa siendo el contexto operativo por defecto.
+assert.match(accessContext, /a\.rol === 'gerente_sucursal'/)
+assert.match(accessContext, /if \(sucursalPropiaId\)[\s\S]*?sucursalId: sucursalPropiaId/)
 
-console.log('✓ Gerente 091 multirrol conserva administración local + Accesos y jerarquía sin ampliar el rol local')
+console.log('✓ gerente 091 conserva Admin local + jerarquía exclusiva sin ampliar alcance operativo')
