@@ -21,24 +21,22 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { to: '/analisis', label: 'Análisis', Icon: BrainCircuit },
 ]
 
-// Acciones operativas exclusivas de un gerente de sucursal.
 const SUCURSAL_ADMIN_NAV_ITEMS: NavItem[] = [
   { to: '/importar', label: 'Importar', Icon: FileUp },
   { to: '/admin', label: 'Admin', Icon: Users },
 ]
 
-// Administración superior de la estructura organizacional.
-const ACCESS_ADMIN_NAV_ITEMS: NavItem[] = [
-  { to: '/admin/accesos', label: 'Accesos', Icon: Network },
-]
+const ACCESS_ADMIN_NAV_ITEM: NavItem = {
+  to: '/admin/accesos',
+  label: 'Accesos',
+  Icon: Network,
+}
 
-// Mobile: izquierda del FAB central
 const MOBILE_NAV_LEFT: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { to: '/vencimientos', label: 'Vencimientos', Icon: Calendar },
 ]
 
-// Mobile: derecha del FAB central
 const MOBILE_NAV_RIGHT_BASE: NavItem[] = [
   { to: '/analisis', label: 'Análisis', Icon: BrainCircuit },
 ]
@@ -48,15 +46,16 @@ export default function AppLayout() {
   const { tieneRol, legacyMode } = useAccesosMultitenant()
   const navigate = useNavigate()
 
+  // usuario_accesos es la fuente de permisos cuando el modelo multitenant está activo.
   const administraSucursal = legacyMode ? isAdmin : tieneRol('gerente_sucursal')
-  const administraJerarquia = tieneRol(['admin_organizacion', 'gerente_zonal'])
+  const administraJerarquia = !legacyMode && tieneRol(['admin_organizacion', 'gerente_zonal'])
 
-  // Notificaciones push — banner de activación no intrusivo
   const { soportado, permiso, activar } = usePushNotifications()
   const [pushDismissed, setPushDismissed] = useState(
     () => typeof localStorage !== 'undefined' && localStorage.getItem('push_dismissed') === 'true',
   )
   const mostrarBannerPush = soportado && permiso === 'default' && !pushDismissed
+
   function descartarBannerPush() {
     localStorage.setItem('push_dismissed', 'true')
     setPushDismissed(true)
@@ -68,24 +67,23 @@ export default function AppLayout() {
     navigate('/login')
   }
 
-  const navItems = [
+  const navItems: NavItem[] = [
     ...BASE_NAV_ITEMS,
     ...(administraSucursal ? SUCURSAL_ADMIN_NAV_ITEMS : []),
-    ...(administraJerarquia ? ACCESS_ADMIN_NAV_ITEMS : []),
+    ...(administraJerarquia ? [ACCESS_ADMIN_NAV_ITEM] : []),
   ]
-  const mobileNavRight = [
+
+  // Evita saturar la mitad derecha del navbar móvil. Si una cuenta tiene a la vez
+  // administración de sucursal y de organización, Accesos aparece en la franja superior.
+  const mobileNavRight: NavItem[] = [
     ...MOBILE_NAV_RIGHT_BASE,
     ...(administraSucursal ? SUCURSAL_ADMIN_NAV_ITEMS : []),
-    ...(administraJerarquia ? ACCESS_ADMIN_NAV_ITEMS : []),
+    ...(administraJerarquia && !administraSucursal ? [ACCESS_ADMIN_NAV_ITEM] : []),
   ]
 
   return (
     <div className="flex min-h-screen bg-surface-base">
-
-      {/* ── Sidebar — desktop only ──────────────────────────────────── */}
       <aside className="hidden md:flex md:flex-col md:fixed md:inset-y-0 md:left-0 md:w-[230px] bg-white border-r border-border/50 z-30">
-
-        {/* Logo */}
         <div className="px-5 pt-6 pb-5">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-full bg-brand flex items-center justify-center shadow-brand shrink-0">
@@ -101,11 +99,8 @@ export default function AppLayout() {
         </div>
 
         <div className="mx-5 h-px bg-border/60" />
-
-        {/* Selector visible sólo para scopes con más de una sucursal. */}
         <SucursalContextSelector />
 
-        {/* Nav items */}
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto" aria-label="Menú principal">
           {navItems.map(({ to, label, Icon, isMain }) => (
             <NavLink
@@ -134,7 +129,6 @@ export default function AppLayout() {
           ))}
         </nav>
 
-        {/* Bottom: cerrar sesión + status */}
         <div className="px-3 py-4 border-t border-border/40 space-y-3">
           <button
             type="button"
@@ -154,18 +148,27 @@ export default function AppLayout() {
         </div>
       </aside>
 
-      {/* ── Main area ───────────────────────────────────────────────── */}
       <div className="flex-1 md:ml-[230px] flex flex-col min-h-screen">
-        {/* En móvil, un zonal/organización elige acá la sucursal de trabajo. */}
-        <div className="md:hidden">
+        <div className="md:hidden bg-white border-b border-border/50">
           <SucursalContextSelector mobile />
+          {administraJerarquia && administraSucursal && (
+            <div className="px-3 pb-2">
+              <NavLink
+                to="/admin/accesos"
+                className="h-10 w-full rounded-xl bg-brand-light text-brand border border-brand/15 font-semibold text-sm flex items-center justify-center gap-2"
+              >
+                <Network className="h-4 w-4" />
+                Accesos y jerarquía
+              </NavLink>
+            </div>
+          )}
         </div>
+
         <main className="flex-1 pb-nav md:pb-0">
           <Outlet />
         </main>
       </div>
 
-      {/* ── Banner de activación de notificaciones push ───────────────── */}
       {mostrarBannerPush && (
         <div
           className="fixed left-3 right-3 z-30 md:left-auto md:right-6 md:max-w-sm bg-white border border-border shadow-elevated rounded-2xl p-3.5 flex items-center gap-3 animate-fade-in"
@@ -197,7 +200,6 @@ export default function AppLayout() {
         </div>
       )}
 
-      {/* ── Mobile bottom nav con FAB central — hidden on desktop ─────── */}
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-border/40 shadow-nav"
         style={{
@@ -207,8 +209,6 @@ export default function AppLayout() {
         aria-label="Navegación principal"
       >
         <div className="h-full flex items-center">
-
-          {/* Mitad izquierda */}
           <div className="flex flex-1 items-center justify-around h-full">
             {MOBILE_NAV_LEFT.map(({ to, label, Icon }) => (
               <NavLink
@@ -217,9 +217,7 @@ export default function AppLayout() {
                 className={({ isActive }) =>
                   [
                     'flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-all duration-150 select-none active:scale-[0.94]',
-                    isActive
-                      ? 'text-brand bg-brand-light'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+                    isActive ? 'text-brand bg-brand-light' : 'text-muted-foreground hover:text-foreground hover:bg-muted',
                   ].join(' ')
                 }
               >
@@ -235,10 +233,8 @@ export default function AppLayout() {
             ))}
           </div>
 
-          {/* Hueco central para el FAB (64px ancho) */}
           <div className="w-16 shrink-0" aria-hidden="true" />
 
-          {/* Mitad derecha */}
           <div className="flex flex-1 items-center justify-around h-full">
             {mobileNavRight.map(({ to, label, Icon }) => (
               <NavLink
@@ -247,9 +243,7 @@ export default function AppLayout() {
                 className={({ isActive }) =>
                   [
                     'flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-all duration-150 select-none active:scale-[0.94]',
-                    isActive
-                      ? 'text-brand bg-brand-light'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+                    isActive ? 'text-brand bg-brand-light' : 'text-muted-foreground hover:text-foreground hover:bg-muted',
                   ].join(' ')
                 }
               >
@@ -264,7 +258,6 @@ export default function AppLayout() {
               </NavLink>
             ))}
 
-            {/* Cerrar sesión — mobile */}
             <button
               type="button"
               onClick={() => void handleSignOut()}
@@ -278,7 +271,6 @@ export default function AppLayout() {
         </div>
       </nav>
 
-      {/* ── FAB Scanner — encima del navbar, centrado ────────────────── */}
       <div className="md:hidden fixed bottom-[calc(36px+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-30">
         <NavLink to="/scanner" aria-label="Ir al Scanner">
           {({ isActive }) => (
