@@ -254,6 +254,12 @@ REVOKE ALL ON FUNCTION public.resolver_pendientes_catalogo_por_familia_csv_legac
   uuid,uuid,text,text,jsonb
 ) FROM PUBLIC,anon,authenticated,service_role;
 
+-- Esta implementación base sólo debe ser alcanzable internamente desde el
+-- wrapper v2 protegido. Ningún Function con service_role puede invocarla directo.
+REVOKE ALL ON FUNCTION public.aplicar_importacion_glaciar_masiva(
+  uuid,uuid,text,text,text,integer,integer,integer,jsonb,date
+) FROM PUBLIC,anon,authenticated,service_role;
+
 -- Sólo service_role puede invocar gates, wrappers y lectura server-side.
 REVOKE ALL ON FUNCTION public.validar_operacion_local_server_v1(uuid,uuid)
   FROM PUBLIC,anon,authenticated;
