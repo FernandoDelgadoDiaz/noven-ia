@@ -5,6 +5,7 @@ import { useUsuarioRol } from '@/hooks/useUsuarioRol'
 import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import SucursalContextSelector from './SucursalContextSelector'
+import InvitationManagementDock from '@/components/admin/InvitationManagementDock'
 import { supabase } from '@/lib/supabase'
 
 interface NavItem {
@@ -168,6 +169,8 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      <InvitationManagementDock />
 
       {mostrarBannerPush && (
         <div
