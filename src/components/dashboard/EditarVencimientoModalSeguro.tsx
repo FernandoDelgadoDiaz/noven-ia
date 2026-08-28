@@ -386,10 +386,10 @@ export default function EditarVencimientoModalSeguro({
         </div>
 
         <div className="px-5 py-4 space-y-3">
-          <Campo label="Stock total Glaciar"><input type="number" min={0} value={stockActual} onChange={(e) => setStockActual(Number(e.target.value))} className={inputCls} /></Campo>
-          <Campo label="Fecha de vencimiento"><input type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} className={inputCls} /></Campo>
-          <Campo label="Cantidad comprometida observada hoy">
-            <input type="number" min={0} value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} className={inputCls} />
+          <Campo label="Stock total Glaciar" htmlFor="ev-stock"><input id="ev-stock" type="number" min={0} value={stockActual} onChange={(e) => setStockActual(Number(e.target.value))} className={inputCls} /></Campo>
+          <Campo label="Fecha de vencimiento" htmlFor="ev-fecha"><input id="ev-fecha" type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} className={inputCls} /></Campo>
+          <Campo label="Cantidad comprometida observada hoy" htmlFor="ev-cantidad">
+            <input id="ev-cantidad" type="number" min={0} value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} className={inputCls} />
             <p className="text-[11px] text-muted-foreground mt-1">Si llega a 0, Noven te pedirá confirmar el cierre como vendido.</p>
           </Campo>
 
@@ -441,6 +441,6 @@ export default function EditarVencimientoModalSeguro({
   )
 }
 
-function Campo({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="space-y-1.5"><label className="block text-xs font-semibold text-foreground uppercase tracking-wide">{label}</label>{children}</div>
+function Campo({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {
+  return <div className="space-y-1.5"><label htmlFor={htmlFor} className="block text-xs font-semibold text-foreground uppercase tracking-wide">{label}</label>{children}</div>
 }
