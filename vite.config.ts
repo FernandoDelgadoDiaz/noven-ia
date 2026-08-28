@@ -19,6 +19,9 @@ export default defineConfig({
       options: {
         target: 'browser',
         compact: true,
+        // Semilla fija: la misma fuente debe producir la misma ofuscacion.
+        // Evita hashes/tamanos aleatorios entre deploys y permite cache y auditoria reproducibles.
+        seed: 915733,
         // CRITICO: los specifiers de `import('../pages/X')` deben quedar como
         // literales o Rollup no puede analizarlos y se pierde el code-splitting
         // de las rutas lazy (quedarian como imports en runtime que dan 404).
