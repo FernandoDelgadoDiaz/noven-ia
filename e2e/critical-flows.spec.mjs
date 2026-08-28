@@ -158,4 +158,62 @@ test.describe('Noven · escrituras críticas Scanner', () => {
     expect(fixture.rpcCalls.filter((call) => call.name === 'guardar_vencimiento_y_stock_scanner_v1')).toHaveLength(1)
     expect(fixture.directTableWrites).toEqual([])
   })
+
+  test('marcar vendido confirma y cierra por la RPC terminal sin DML directo', async ({ page }) => {
+    const fixture = await installScannerWriteFixture(page, { hasActiveControl: true })
+    await login(page)
+    await buscarProductoScanner(page)
+
+    const dialog = page.getByRole('dialog', { name: 'Control de vencimiento' })
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('button', { name: 'Marcar como vendido' }).click()
+    const confirmar = page.getByRole('button', { name: 'Confirmar vendido' })
+    await expect(confirmar).toBeVisible()
+    await confirmar.click()
+
+    await expect(page.getByRole('heading', { name: 'Registrar vencimiento' })).toBeVisible()
+    await expect.poll(() => fixture.rpcCalls.filter((call) => call.name === 'cerrar_vencimiento_operativo').length).toBe(1)
+
+    const call = fixture.rpcCalls.find((item) => item.name === 'cerrar_vencimiento_operativo')
+    expect(call?.body).toEqual({
+      p_vencimiento_id: SCANNER_IDS.control,
+      p_resultado: 'vendido',
+      p_observaciones: null,
+    })
+    expect(fixture.directTableWrites).toEqual([])
+  })
+
+  test('un control urgente registra un nuevo porcentaje RAG dentro de la RPC de control', async ({ page }) => {
+    const fixture = await installScannerWriteFixture(page, {
+      hasActiveControl: true,
+      activeControlQuantity: 20,
+      activeControlDate: '2026-09-12',
+      productStock: 30,
+      productVmd: 2,
+    })
+    await login(page)
+    await buscarProductoScanner(page)
+
+    const dialog = page.getByRole('dialog', { name: 'Control de vencimiento' })
+    await expect(dialog).toBeVisible()
+    const rag = dialog.getByPlaceholder('Ej. 30')
+    await expect(rag).toBeVisible()
+    await expect(rag).toBeEnabled()
+    await rag.fill('30')
+    await dialog.getByRole('button', { name: 'Registrar control' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Registrar vencimiento' })).toBeVisible()
+    await expect.poll(() => fixture.rpcCalls.filter((call) => call.name === 'registrar_control_vencimiento_dashboard').length).toBe(1)
+
+    const call = fixture.rpcCalls.find((item) => item.name === 'registrar_control_vencimiento_dashboard')
+    expect(call?.body).toEqual({
+      p_vencimiento_id: SCANNER_IDS.control,
+      p_cantidad_comprometida: 20,
+      p_fecha_vencimiento: '2026-09-12',
+      p_stock_actual: 30,
+      p_porcentaje_rag: 30,
+      p_nota: null,
+    })
+    expect(fixture.directTableWrites).toEqual([])
+  })
 })
