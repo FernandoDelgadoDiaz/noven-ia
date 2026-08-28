@@ -64,4 +64,35 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.replace(/\\/g, '/')
+          if (!normalizedId.includes('/node_modules/')) return undefined
+
+          if (
+            normalizedId.includes('/node_modules/react/') ||
+            normalizedId.includes('/node_modules/react-dom/') ||
+            normalizedId.includes('/node_modules/scheduler/')
+          ) {
+            return 'vendor-react'
+          }
+
+          if (
+            normalizedId.includes('/node_modules/react-router/') ||
+            normalizedId.includes('/node_modules/react-router-dom/')
+          ) {
+            return 'vendor-router'
+          }
+
+          if (normalizedId.includes('/node_modules/@supabase/')) {
+            return 'vendor-supabase'
+          }
+
+          return undefined
+        },
+      },
+    },
+  },
 })
