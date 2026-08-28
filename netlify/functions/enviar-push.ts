@@ -3,21 +3,32 @@ import { createClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
 
 /**
- * enviar-push — disparada por el webhook de DB de Supabase cuando un
- * vencimiento transiciona a nivel 'urgente'.
+ * enviar-push — disparada por el trigger de DB cuando un vencimiento entra en
+ * nivel urgente.
  *
- * Autenticación: header `x-webhook-secret` debe coincidir con WEBHOOK_SECRET.
- * Destinatarios: operadores de la familia del producto + admins.
+ * Seguridad:
+ * - autenticación por WEBHOOK_SECRET;
+ * - el vencimiento se vuelve a resolver en PostgreSQL por su id;
+ * - los destinatarios se calculan por la sucursal exacta del vencimiento;
+ * - gerentes/supervisores deben tener acceso local activo;
+ * - operadores deben tener acceso local activo Y ser responsables de la familia
+ *   en usuario_familias_sucursal.
+ *
+ * No usa usuarios.rol ni usuario_familias legacy para targeting.
  */
-
 interface WebhookBody {
-  // Contrato directo (lo arma el trigger de la DB)
   vencimiento_id?: string
+  sucursal_id?: string
   producto_nombre?: string
   dias_restantes?: number
   familia_id?: string | null
-  // Fallback: shape estándar de Supabase Database Webhook
-  record?: { id?: string; producto_id?: string; fecha_vencimiento?: string }
+  // Compatibilidad con el shape estándar de Database Webhook.
+  record?: { id?: string }
+}
+
+interface AccesoLocalRow {
+  usuario_id: string
+  rol: string
 }
 
 const handler: Handler = async (event: HandlerEvent) => {
@@ -25,7 +36,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     return { statusCode: 405, body: JSON.stringify({ success: false, error: 'Método no permitido' }) }
   }
 
-  // Auth: secreto compartido con el webhook de Supabase
   const expected = process.env.WEBHOOK_SECRET
   const provided = event.headers['x-webhook-secret']
   if (!expected || provided !== expected) {
@@ -43,9 +53,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     return { statusCode: 500, body: JSON.stringify({ success: false, error: 'Config de servidor incompleta' }) }
   }
 
-  webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate)
-  const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
-
   let body: WebhookBody
   try {
     body = JSON.parse(event.body ?? '{}') as WebhookBody
@@ -53,60 +60,120 @@ const handler: Handler = async (event: HandlerEvent) => {
     return { statusCode: 400, body: JSON.stringify({ success: false, error: 'JSON inválido' }) }
   }
 
-  // Resolver datos del producto (contrato directo o, si falta, desde el record)
-  const vencimientoId = body.vencimiento_id ?? body.record?.id ?? null
-  let familiaId = body.familia_id ?? null
-  let productoNombre = body.producto_nombre ?? ''
-  let diasRestantes = body.dias_restantes
-
-  if ((!familiaId || !productoNombre || diasRestantes === undefined) && body.record?.producto_id) {
-    const { data: prod } = await supabase
-      .from('productos')
-      .select('descripcion, familia_id')
-      .eq('id', body.record.producto_id)
-      .maybeSingle()
-    if (prod) {
-      productoNombre = productoNombre || (prod.descripcion as string)
-      familiaId = familiaId ?? (prod.familia_id as string | null)
-    }
-    if (diasRestantes === undefined && body.record.fecha_vencimiento) {
-      const venceMs = new Date(body.record.fecha_vencimiento).setHours(0, 0, 0, 0)
-      diasRestantes = Math.floor((venceMs - new Date().setHours(0, 0, 0, 0)) / 86400000)
-    }
+  const vencimientoId = body.vencimiento_id ?? body.record?.id ?? ''
+  if (!vencimientoId) {
+    return { statusCode: 400, body: JSON.stringify({ success: false, error: 'vencimiento_id requerido' }) }
   }
 
-  // Destinatarios: operadores de la familia + admins
+  webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate)
+  const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
+
+  // El body del webhook no es la fuente de verdad para sucursal/familia.
+  // Releemos el vencimiento y el producto con service role por el id exacto.
+  const { data: vencimiento, error: vencimientoError } = await supabase
+    .from('vencimientos')
+    .select('id, producto_id, sucursal_id, fecha_vencimiento')
+    .eq('id', vencimientoId)
+    .maybeSingle()
+
+  if (vencimientoError) {
+    console.error('[enviar-push] No se pudo resolver el vencimiento:', vencimientoError.message)
+    return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudo resolver el vencimiento' }) }
+  }
+  if (!vencimiento) {
+    return { statusCode: 404, body: JSON.stringify({ success: false, error: 'Vencimiento inexistente' }) }
+  }
+
+  const { data: producto, error: productoError } = await supabase
+    .from('productos')
+    .select('descripcion, familia_id')
+    .eq('id', vencimiento.producto_id)
+    .maybeSingle()
+
+  if (productoError) {
+    console.error('[enviar-push] No se pudo resolver el producto:', productoError.message)
+    return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudo resolver el producto' }) }
+  }
+
+  const sucursalId = vencimiento.sucursal_id as string
+  const familiaId = (producto?.familia_id as string | null | undefined) ?? null
+  const productoNombre = (producto?.descripcion as string | undefined) ?? body.producto_nombre ?? 'Un producto'
+  const diasRestantes = body.dias_restantes
+
+  // Accesos locales activos de ESTA sucursal. Admin de organización y gerente
+  // zonal no se agregan globalmente: el push operativo urgente es local.
+  const { data: accesosRaw, error: accesosError } = await supabase
+    .from('usuario_accesos')
+    .select('usuario_id, rol')
+    .eq('sucursal_id', sucursalId)
+    .eq('activo', true)
+    .in('rol', ['gerente_sucursal', 'supervisor', 'operador'])
+
+  if (accesosError) {
+    console.error('[enviar-push] No se pudieron resolver accesos locales:', accesosError.message)
+    return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudieron resolver destinatarios' }) }
+  }
+
+  const accesos = (accesosRaw ?? []) as AccesoLocalRow[]
   const userIds = new Set<string>()
-  if (familiaId) {
-    const { data: ops } = await supabase
-      .from('usuario_familias')
-      .select('usuario_id')
-      .eq('familia_id', familiaId)
-    for (const o of ops ?? []) userIds.add(o.usuario_id as string)
+  const operadoresLocales = new Set<string>()
+
+  for (const acceso of accesos) {
+    if (acceso.rol === 'operador') operadoresLocales.add(acceso.usuario_id)
+    else userIds.add(acceso.usuario_id)
   }
-  const { data: admins } = await supabase.from('usuarios').select('id').eq('rol', 'admin')
-  for (const a of admins ?? []) userIds.add(a.id as string)
+
+  // El operador recibe push únicamente si es responsable activo de la familia
+  // en la misma sucursal. No se consulta usuario_familias legacy.
+  if (familiaId && operadoresLocales.size > 0) {
+    const { data: responsables, error: responsablesError } = await supabase
+      .from('usuario_familias_sucursal')
+      .select('usuario_id')
+      .eq('sucursal_id', sucursalId)
+      .eq('familia_id', familiaId)
+      .eq('activo', true)
+
+    if (responsablesError) {
+      console.error('[enviar-push] No se pudo resolver responsable de familia:', responsablesError.message)
+      return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudo resolver responsable de familia' }) }
+    }
+
+    for (const responsable of responsables ?? []) {
+      const usuarioId = responsable.usuario_id as string
+      if (operadoresLocales.has(usuarioId)) userIds.add(usuarioId)
+    }
+  }
 
   if (userIds.size === 0) {
-    return { statusCode: 200, body: JSON.stringify({ success: true, sent: 0, note: 'sin destinatarios' }) }
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ success: true, sent: 0, note: 'sin destinatarios locales', sucursal_id: sucursalId }),
+    }
   }
 
-  // Suscripciones de esos usuarios
-  const { data: subs } = await supabase
+  const { data: subs, error: subsError } = await supabase
     .from('push_subscriptions')
-    .select('id, subscription')
+    .select('id, usuario_id, subscription')
     .in('usuario_id', Array.from(userIds))
 
+  if (subsError) {
+    console.error('[enviar-push] No se pudieron leer suscripciones:', subsError.message)
+    return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudieron leer suscripciones push' }) }
+  }
+
   if (!subs || subs.length === 0) {
-    return { statusCode: 200, body: JSON.stringify({ success: true, sent: 0, note: 'sin suscripciones' }) }
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ success: true, sent: 0, note: 'sin suscripciones', sucursal_id: sucursalId }),
+    }
   }
 
   const payload = JSON.stringify({
     title: '⚠️ Producto en riesgo',
-    body: `${productoNombre || 'Un producto'} vence en ${diasRestantes ?? '?'} días — Acción requerida`,
+    body: `${productoNombre} vence en ${diasRestantes ?? '?'} días — Acción requerida`,
     icon: '/favicon.svg',
     badge: '/favicon.svg',
-    data: { url: '/vencimientos?filtro=riesgo', vencimiento_id: vencimientoId },
+    data: { url: '/vencimientos?filtro=riesgo', vencimiento_id: vencimientoId, sucursal_id: sucursalId },
   })
 
   let sent = 0
@@ -118,7 +185,6 @@ const handler: Handler = async (event: HandlerEvent) => {
         sent++
       } catch (err: unknown) {
         const statusCode = (err as { statusCode?: number }).statusCode
-        // 410 Gone / 404 Not Found → suscripción expirada, eliminar de DB
         if (statusCode === 410 || statusCode === 404) {
           expiradas.push(row.id as string)
         } else {
@@ -132,7 +198,16 @@ const handler: Handler = async (event: HandlerEvent) => {
     await supabase.from('push_subscriptions').delete().in('id', expiradas)
   }
 
-  return { statusCode: 200, body: JSON.stringify({ success: true, sent, expiradas: expiradas.length }) }
+  return {
+    statusCode: 200,
+    body: JSON.stringify({
+      success: true,
+      sent,
+      expiradas: expiradas.length,
+      destinatarios: userIds.size,
+      sucursal_id: sucursalId,
+    }),
+  }
 }
 
 export { handler }
