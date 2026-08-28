@@ -1,4 +1,4 @@
-import { useNovenAccessContext } from '@/context/NovenAccessContext'
+import { useNovenAccessContext } from '@/hooks/useNovenAccessContext'
 import type { RolUsuario, UsuarioPerfil } from '@/types/index'
 
 interface UseUsuarioRolReturn {
