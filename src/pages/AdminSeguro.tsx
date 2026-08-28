@@ -361,6 +361,10 @@ function ModalUsuario({
       return
     }
     if (modo === 'crear') {
+      if (form.rol === 'admin') {
+        setError('Los gerentes de sucursal se crean desde Accesos y jerarquía mediante invitación.')
+        return
+      }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
         setError('El email no es válido.')
         return
@@ -403,7 +407,12 @@ function ModalUsuario({
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={guardando ? undefined : onClose} />
       <div className="relative z-10 w-full md:max-w-lg bg-white rounded-t-[28px] md:rounded-[24px] shadow-modal max-h-[92vh] flex flex-col overflow-hidden animate-slide-up">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/40 shrink-0">
-          <div><h2 className="font-bold text-base text-foreground">{modo === 'crear' ? 'Nuevo usuario' : 'Editar usuario'}</h2><p className="text-xs text-muted-foreground mt-0.5">{modo === 'crear' ? 'La cuenta y su alcance de sucursal se guardan coordinadamente.' : 'Los cambios afectan sólo esta sucursal.'}</p></div>
+          <div>
+            <h2 className="font-bold text-base text-foreground">{modo === 'crear' ? 'Nuevo usuario' : 'Editar usuario'}</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {modo === 'crear' ? 'Este flujo crea supervisores u operadores de la sucursal.' : 'Los cambios afectan sólo esta sucursal.'}
+            </p>
+          </div>
           <button type="button" onClick={onClose} disabled={guardando} className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-40"><X className="h-4 w-4" /></button>
         </div>
 
@@ -419,10 +428,15 @@ function ModalUsuario({
 
           <Campo label="Rol en esta sucursal">
             <select value={form.rol} onChange={(e) => setForm((p) => ({ ...p, rol: e.target.value as RolUi, familias: e.target.value === 'operador' ? p.familias : new Set() }))} className={inputCls}>
-              <option value="admin">Admin de sucursal</option>
+              {modo === 'editar' && usuario?.rol === 'admin' && <option value="admin">Admin de sucursal</option>}
               <option value="supervisor">Supervisor</option>
               <option value="operador">Operador</option>
             </select>
+            {modo === 'crear' && (
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Los gerentes de sucursal y gerentes zonales se crean desde Accesos y jerarquía y definen su propia contraseña al aceptar la invitación.
+              </p>
+            )}
           </Campo>
 
           <label className="flex items-center gap-3 bg-muted/50 rounded-xl px-4 py-3 cursor-pointer">
