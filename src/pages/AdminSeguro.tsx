@@ -488,14 +488,14 @@ function ModalUsuario({
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
           {error && <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex gap-2 text-sm text-red-700"><AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />{error}</div>}
 
-          <Campo label="Nombre"><input value={form.nombre} onChange={(e) => setForm((p) => ({ ...p, nombre: e.target.value }))} className={inputCls} /></Campo>
-          <Campo label="Email">
-            <input type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} disabled={modo === 'editar'} className={`${inputCls} disabled:bg-muted disabled:text-muted-foreground`} />
+          <Campo label="Nombre" htmlFor="admin-local-nombre"><input id="admin-local-nombre" value={form.nombre} onChange={(e) => setForm((p) => ({ ...p, nombre: e.target.value }))} className={inputCls} /></Campo>
+          <Campo label="Email" htmlFor="admin-local-email">
+            <input id="admin-local-email" type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} disabled={modo === 'editar'} className={`${inputCls} disabled:bg-muted disabled:text-muted-foreground`} />
             {modo === 'editar' && <p className="text-[11px] text-muted-foreground mt-1">El email no se modifica desde este flujo para evitar cambios parciales entre Auth y base.</p>}
           </Campo>
 
-          <Campo label="Rol en esta sucursal">
-            <select value={form.rol} onChange={(e) => setForm((p) => ({ ...p, rol: e.target.value as RolUi, familias: e.target.value === 'operador' ? p.familias : new Set() }))} className={inputCls}>
+          <Campo label="Rol en esta sucursal" htmlFor="admin-local-rol">
+            <select id="admin-local-rol" value={form.rol} onChange={(e) => setForm((p) => ({ ...p, rol: e.target.value as RolUi, familias: e.target.value === 'operador' ? p.familias : new Set() }))} className={inputCls}>
               {modo === 'editar' && usuario?.rol === 'admin' && <option value="admin">Admin de sucursal</option>}
               <option value="supervisor">Supervisor</option>
               <option value="operador">Operador</option>
@@ -577,8 +577,9 @@ function ModalUsuario({
   )
 }
 
-function Campo({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="space-y-1.5"><label className="text-xs font-semibold text-foreground">{label}</label>{children}</div>
+function Campo({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
+  const className = "text-xs font-semibold text-foreground"
+  return <div className="space-y-1.5">{htmlFor ? <label htmlFor={htmlFor} className={className}>{label}</label> : <p className={className}>{label}</p>}{children}</div>
 }
 
 const inputCls = 'w-full h-11 px-3 bg-surface-base border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all'
