@@ -2,7 +2,6 @@ import type { Producto, RiesgoNivel, Vencimiento, VencimientoConRiesgo } from '@
 import {
   calcularMetricasRiesgo,
   calcularNivelRiesgo,
-  diasDonacionLegacyPorSector,
   sugerirAcciones,
 } from '@/lib/riesgo'
 
@@ -19,22 +18,21 @@ function diasHastaVencimiento(fechaVencimiento: string, hoy: Date): number {
 }
 
 /**
- * El riesgo se evalúa contra la ventana comercial real, no contra el día cero:
- *   - RADAR: <=45 días y la venta proyectada no llega antes del retiro/donación.
- *   - URGENTE: <=20 días y el riesgo persiste.
- *   - DONACIÓN: umbral obligatorio del sector (2 o 10 días actualmente).
- *   - DECOMISO: vencido.
- *
- * La cantidad evaluada es el stock comprometido del vencimiento/lote, no el
- * stock total de Glaciar.
+ * El riesgo se evalúa contra la ventana comercial real, no contra el día cero.
+ * `dias_donacion` es obligatorio y proviene de la política configurada en DB.
+ * Un sector sin política no debe llegar a este cálculo.
  */
 export function calcularRiesgo(
   v: Vencimiento,
   p: Producto,
   hoy: Date,
 ): VencimientoConRiesgo {
+  if (v.dias_donacion == null) {
+    throw new Error('No se puede calcular riesgo sin política de vencimiento configurada.')
+  }
+
   const diasRestantes = diasHastaVencimiento(v.fecha_vencimiento, hoy)
-  const diasDonacion = v.dias_donacion ?? diasDonacionLegacyPorSector(p.sector)
+  const diasDonacion = v.dias_donacion
 
   const metricas = calcularMetricasRiesgo(
     diasRestantes,
