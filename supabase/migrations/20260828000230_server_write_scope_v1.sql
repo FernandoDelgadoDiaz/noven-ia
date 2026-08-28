@@ -1,10 +1,9 @@
 -- =============================================================================
 -- NOVEN · SCOPE SERVER-ONLY PARA IMPORTACIÓN/CATÁLOGO
 --
--- Los RPC legacy de escritura siguen siendo service_role-only. Estos gates son
--- la frontera obligatoria de sus Netlify callers:
+-- Los writers históricos quedan ocultos detrás de wrappers obligatorios:
 -- - gerente_sucursal / supervisor: pueden operar sólo su sucursal.
--- - gerente_zonal: sólo lectura, nunca pasa estos gates de escritura.
+-- - gerente_zonal: sólo lectura, nunca pasa gates de escritura.
 -- - admin_organizacion: no amplía alcance operativo.
 -- =============================================================================
 
@@ -119,6 +118,143 @@ AS $$
   ) q;
 $$;
 
+-- Encapsulamos los writers service-only existentes sin copiar su lógica de negocio.
+-- Sus implementaciones históricas pierden EXECUTE incluso para service_role;
+-- sólo los wrappers SECURITY DEFINER pueden alcanzarlas después del gate.
+ALTER FUNCTION public.aplicar_importacion_glaciar_familia_v1(
+  uuid,uuid,text,text,text,text,integer,integer,integer,jsonb,date
+) RENAME TO aplicar_importacion_glaciar_familia_legacy_v1;
+
+CREATE FUNCTION public.aplicar_importacion_glaciar_familia_v1(
+  p_sucursal_id uuid,
+  p_usuario_id uuid,
+  p_codigo_sucursal_fuente text,
+  p_codigo_familia text,
+  p_nombre_archivo text,
+  p_archivo_sha256 text,
+  p_filas_total integer,
+  p_filas_validas integer,
+  p_filas_descartadas integer,
+  p_operaciones jsonb,
+  p_fecha_reporte date DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $$
+BEGIN
+  IF NOT public.validar_operacion_local_server_v1(p_usuario_id,p_sucursal_id) THEN
+    RAISE EXCEPTION 'El usuario no tiene permiso operativo para importar esta familia en la sucursal'
+      USING ERRCODE='42501';
+  END IF;
+  RETURN public.aplicar_importacion_glaciar_familia_legacy_v1(
+    p_sucursal_id,p_usuario_id,p_codigo_sucursal_fuente,p_codigo_familia,
+    p_nombre_archivo,p_archivo_sha256,p_filas_total,p_filas_validas,
+    p_filas_descartadas,p_operaciones,p_fecha_reporte
+  );
+END;
+$$;
+
+ALTER FUNCTION public.aplicar_importacion_glaciar_masiva_v2(
+  uuid,uuid,text,text,text,integer,integer,integer,jsonb,date
+) RENAME TO aplicar_importacion_glaciar_masiva_legacy_v2;
+
+CREATE FUNCTION public.aplicar_importacion_glaciar_masiva_v2(
+  p_sucursal_id uuid,
+  p_usuario_id uuid,
+  p_codigo_sucursal_fuente text,
+  p_nombre_archivo text,
+  p_archivo_sha256 text,
+  p_filas_total integer,
+  p_filas_validas integer,
+  p_filas_descartadas integer,
+  p_items jsonb,
+  p_fecha_reporte date DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $$
+BEGIN
+  IF NOT public.validar_operacion_local_server_v1(p_usuario_id,p_sucursal_id) THEN
+    RAISE EXCEPTION 'El usuario no tiene permiso operativo para importar en la sucursal'
+      USING ERRCODE='42501';
+  END IF;
+  RETURN public.aplicar_importacion_glaciar_masiva_legacy_v2(
+    p_sucursal_id,p_usuario_id,p_codigo_sucursal_fuente,p_nombre_archivo,
+    p_archivo_sha256,p_filas_total,p_filas_validas,p_filas_descartadas,
+    p_items,p_fecha_reporte
+  );
+END;
+$$;
+
+ALTER FUNCTION public.resolver_producto_pendiente_catalogo(uuid,uuid,uuid)
+  RENAME TO resolver_producto_pendiente_catalogo_legacy_v1;
+
+CREATE FUNCTION public.resolver_producto_pendiente_catalogo(
+  p_pendiente_id uuid,
+  p_familia_id uuid,
+  p_usuario_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $$
+BEGIN
+  IF NOT public.validar_resolucion_pendiente_server_v1(p_usuario_id,p_pendiente_id) THEN
+    RAISE EXCEPTION 'El usuario no tiene permiso operativo para clasificar este producto'
+      USING ERRCODE='42501';
+  END IF;
+  RETURN public.resolver_producto_pendiente_catalogo_legacy_v1(
+    p_pendiente_id,p_familia_id,p_usuario_id
+  );
+END;
+$$;
+
+ALTER FUNCTION public.resolver_pendientes_catalogo_por_familia_csv(
+  uuid,uuid,text,text,jsonb
+) RENAME TO resolver_pendientes_catalogo_por_familia_csv_legacy_v1;
+
+CREATE FUNCTION public.resolver_pendientes_catalogo_por_familia_csv(
+  p_sucursal_id uuid,
+  p_usuario_id uuid,
+  p_codigo_sucursal_fuente text,
+  p_codigo_familia text,
+  p_cod_arts jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $$
+BEGIN
+  IF NOT public.validar_operacion_local_server_v1(p_usuario_id,p_sucursal_id) THEN
+    RAISE EXCEPTION 'El usuario no tiene permiso operativo para aprender catálogo desde esta sucursal'
+      USING ERRCODE='42501';
+  END IF;
+  RETURN public.resolver_pendientes_catalogo_por_familia_csv_legacy_v1(
+    p_sucursal_id,p_usuario_id,p_codigo_sucursal_fuente,p_codigo_familia,p_cod_arts
+  );
+END;
+$$;
+
+-- Implementaciones legacy fuera del API incluso para el service key.
+REVOKE ALL ON FUNCTION public.aplicar_importacion_glaciar_familia_legacy_v1(
+  uuid,uuid,text,text,text,text,integer,integer,integer,jsonb,date
+) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.aplicar_importacion_glaciar_masiva_legacy_v2(
+  uuid,uuid,text,text,text,integer,integer,integer,jsonb,date
+) FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.resolver_producto_pendiente_catalogo_legacy_v1(uuid,uuid,uuid)
+  FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON FUNCTION public.resolver_pendientes_catalogo_por_familia_csv_legacy_v1(
+  uuid,uuid,text,text,jsonb
+) FROM PUBLIC,anon,authenticated,service_role;
+
+-- Sólo service_role puede invocar gates, wrappers y lectura server-side.
 REVOKE ALL ON FUNCTION public.validar_operacion_local_server_v1(uuid,uuid)
   FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.validar_operacion_local_server_v1(uuid,uuid)
@@ -133,5 +269,31 @@ REVOKE ALL ON FUNCTION public.listar_productos_pendientes_catalogo_v2(uuid)
   FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.listar_productos_pendientes_catalogo_v2(uuid)
   TO service_role;
+
+REVOKE ALL ON FUNCTION public.aplicar_importacion_glaciar_familia_v1(
+  uuid,uuid,text,text,text,text,integer,integer,integer,jsonb,date
+) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.aplicar_importacion_glaciar_familia_v1(
+  uuid,uuid,text,text,text,text,integer,integer,integer,jsonb,date
+) TO service_role;
+
+REVOKE ALL ON FUNCTION public.aplicar_importacion_glaciar_masiva_v2(
+  uuid,uuid,text,text,text,integer,integer,integer,jsonb,date
+) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.aplicar_importacion_glaciar_masiva_v2(
+  uuid,uuid,text,text,text,integer,integer,integer,jsonb,date
+) TO service_role;
+
+REVOKE ALL ON FUNCTION public.resolver_producto_pendiente_catalogo(uuid,uuid,uuid)
+  FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.resolver_producto_pendiente_catalogo(uuid,uuid,uuid)
+  TO service_role;
+
+REVOKE ALL ON FUNCTION public.resolver_pendientes_catalogo_por_familia_csv(
+  uuid,uuid,text,text,jsonb
+) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.resolver_pendientes_catalogo_por_familia_csv(
+  uuid,uuid,text,text,jsonb
+) TO service_role;
 
 COMMIT;
