@@ -33,8 +33,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Dependency audit report
-        run: npm audit --json || true
+      - name: Runtime dependency audit before remediation
+        run: npm audit --omit=dev --json || true
+
+      - name: Generate safe lock remediation without force
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm audit fix --package-lock-only || true
+          echo '--- AUDIT AFTER SAFE LOCK FIX ---'
+          npm audit --json || true
+          echo '--- RUNTIME AUDIT AFTER SAFE LOCK FIX ---'
+          npm audit --omit=dev --json || true
+          echo '--- LOCK DIFF STAT ---'
+          git diff --stat -- package-lock.json
+          echo '--- TOP LEVEL AFTER FIX ---'
+          npm ls react-router-dom react-router vite esbuild postcss nanoid js-yaml brace-expansion @babel/core --depth=1 || true
 
       - name: Tests
         run: npm test
@@ -61,13 +75,14 @@ jobs:
       - name: Browser E2E critical flows
         run: "${PW_DIR}/node_modules/.bin/playwright test"
 
-      - name: Upload E2E diagnostics
-        if: failure()
+      - name: Upload remediated lock and E2E diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: dependency-remediation
           path: |
+            package-lock.json
             playwright-report/
             test-results/
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 7
