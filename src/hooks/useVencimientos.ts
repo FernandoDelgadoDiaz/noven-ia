@@ -206,12 +206,11 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
 
     const hoyDate = new Date()
     const conRiesgo: VencimientoConRiesgo[] = typed
+      // NULL significa fuera del circuito. Nunca inferimos una ventana alternativa.
+      .filter((row): row is typeof row & { dias_donacion: number } => row.dias_donacion != null)
       .map((row) => calcularRiesgo(row, row.producto, hoyDate))
       .sort((a, b) => a.dias_restantes - b.dias_restantes)
 
-    // `nivel_actual` es estado persistido de servidor. El cliente sólo calcula la
-    // presentación inmediata; el cron/RPC de PostgreSQL es quien persiste cambios
-    // usando VMD de producto_sucursal. No hay DML browser sobre vencimientos.
     setRawData(conRiesgo)
     setFetchLoading(false)
   }, [sucursalId])
