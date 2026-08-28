@@ -11,6 +11,7 @@ const migration = read('supabase/migrations/20260828000020_access_invitations_v1
 const backend = read('netlify/functions/admin-accesos.ts')
 const activar = read('src/pages/ActivarCuenta.tsx')
 const router = read('src/router/index.tsx')
+const accessContext = read('src/context/NovenAccessContext.tsx')
 const sucursalHook = read('src/hooks/useSucursalActual.ts')
 const adminRoute = read('src/components/auth/AdminRoute.tsx')
 const accessRoute = read('src/components/auth/AccessAdminRoute.tsx')
@@ -24,7 +25,7 @@ assert.match(migration, /Solo el administrador de organización puede crear gere
 assert.doesNotMatch(migration, /p_rol not in \([^)]*supervisor/)
 assert.doesNotMatch(migration, /p_rol not in \([^)]*operador/)
 
-// Bootstrap controlado: sólo el único gerente activo de 091 recibe admin_organizacion.
+// Bootstrap histórico protegido por contrato; producción lo revocó y la elevación actual fue explícita.
 assert.match(migration, /s\.codigo = '091'/)
 assert.match(migration, /v_candidatos <> 1/)
 assert.match(migration, /'admin_organizacion'/)
@@ -55,12 +56,15 @@ assert.match(router, /path: '\/activar'/)
 assert.match(activar, /auth\.updateUser\(\{ password \}\)/)
 assert.match(activar, /aceptar_invitacion_acceso_v1/)
 assert.match(activar, /aceptadas < 1/)
+assert.match(activar, /await refreshAuthorization\(\)/)
 
 // Un zonal/admin puede elegir únicamente sucursales que RLS le deja leer.
-assert.match(sucursalHook, /from\('sucursales'\)/)
-assert.match(sucursalHook, /noven_sucursal_actual/)
-assert.match(sucursalHook, /seleccionarSucursal/)
-assert.match(sucursalHook, /perfil\?\.sucursal_id && idsPermitidos\.has/)
+assert.match(accessContext, /from\('sucursales'\)/)
+assert.match(accessContext, /noven_sucursal_actual/)
+assert.match(accessContext, /const seleccionarSucursal/)
+assert.match(accessContext, /authorization\.perfil\?\.sucursal_id && idsPermitidos\.has/)
+assert.match(sucursalHook, /useNovenAccessContext/)
+assert.doesNotMatch(sucursalHook, /from\('sucursales'\)/)
 
 // Guards y navegación: admin local no equivale a admin jerárquico.
 assert.match(adminRoute, /tieneRol\('gerente_sucursal'\)/)

@@ -7,18 +7,24 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '..', '..')
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8')
 
+const context = read('src/context/NovenAccessContext.tsx')
 const sucursal = read('src/hooks/useSucursalActual.ts')
 const familias = read('src/hooks/useUsuarioFamilias.ts')
 
 assert.match(
-  sucursal,
+  context,
   /organizacion_id:\s*string/,
   'la sucursal operativa debe transportar organizacion_id para resolver scopes mixtos',
 )
 assert.match(
-  sucursal,
+  context,
   /select\('id, codigo, nombre, zona_id, organizacion_id'\)/,
-  'la consulta de sucursales debe traer la organización autoritativa',
+  'la consulta única de sucursales debe traer la organización autoritativa',
+)
+assert.match(
+  sucursal,
+  /useNovenAccessContext/,
+  'el hook operativo debe consumir la metadata de la fuente única',
 )
 
 assert.match(
