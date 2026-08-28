@@ -82,8 +82,12 @@ export function calcularNivelRiesgo(
   diasRestantes: number,
   cantidadLote: number,
   ventaMediaDiaria: number,
-  diasDonacion: number,
+  diasDonacion?: number,
 ): NivelRiesgo {
+  if (diasDonacion == null || !Number.isFinite(diasDonacion) || diasDonacion < 0) {
+    throw new Error('No se puede calcular riesgo sin una política de vencimientos configurada.')
+  }
+
   if (diasRestantes <= 0) return 'decomiso'
   if (diasRestantes <= diasDonacion) return 'donacion'
 
