@@ -4,6 +4,7 @@
 -- Supervisor/operador continúan administrándose desde cada sucursal.
 -- Bootstrap: el único gerente activo de la 091 queda además como admin_organizacion,
 -- preservando su rol operativo de gerente_sucursal.
+-- Los accesos invitados nacen inactivos y sólo se activan al crear la contraseña.
 
 create table if not exists public.invitaciones_acceso (
   id uuid primary key default gen_random_uuid(),
@@ -311,13 +312,14 @@ begin
   -- La tabla usuarios conserva tres valores legacy. Para evitar que un gerente
   -- zonal parezca un admin de sucursal en código viejo, se proyecta como supervisor;
   -- el permiso real y completo siempre vive en usuario_accesos.
+  -- Tanto el perfil como el acceso quedan inactivos hasta aceptar la invitación.
   insert into public.usuarios(id, nombre, rol, sucursal_id, activo)
   values (
     p_usuario_id,
     btrim(p_nombre),
     case when p_rol = 'gerente_sucursal' then 'admin' else 'supervisor' end,
     case when p_rol = 'gerente_sucursal' then p_sucursal_id else null end,
-    true
+    false
   );
 
   insert into public.usuario_accesos(
@@ -328,7 +330,7 @@ begin
     p_rol,
     case when p_rol = 'gerente_zonal' then p_zona_id else null end,
     case when p_rol = 'gerente_sucursal' then p_sucursal_id else null end,
-    true
+    false
   );
 
   insert into public.invitaciones_acceso(
@@ -366,13 +368,46 @@ begin
     raise exception 'No autenticado' using errcode = '42501';
   end if;
 
+  select count(*) into v_count
+  from public.invitaciones_acceso ia
+  where ia.usuario_id = auth.uid()
+    and ia.estado = 'pendiente';
+
+  if v_count = 0 then
+    return 0;
+  end if;
+
+  -- Activa únicamente los accesos respaldados por una invitación pendiente
+  -- del usuario autenticado. No activa otros scopes históricos/inactivos.
+  update public.usuario_accesos ua
+  set activo = true,
+      updated_at = now()
+  where ua.usuario_id = auth.uid()
+    and ua.activo = false
+    and exists (
+      select 1
+      from public.invitaciones_acceso ia
+      where ia.usuario_id = ua.usuario_id
+        and ia.organizacion_id = ua.organizacion_id
+        and ia.rol = ua.rol
+        and ia.estado = 'pendiente'
+        and (
+          (ia.rol = 'gerente_zonal' and ia.zona_id = ua.zona_id and ua.sucursal_id is null)
+          or
+          (ia.rol = 'gerente_sucursal' and ia.sucursal_id = ua.sucursal_id and ua.zona_id is null)
+        )
+    );
+
+  update public.usuarios
+  set activo = true
+  where id = auth.uid();
+
   update public.invitaciones_acceso
   set estado = 'aceptada',
       accepted_at = now()
   where usuario_id = auth.uid()
     and estado = 'pendiente';
 
-  get diagnostics v_count = row_count;
   return v_count;
 end;
 $$;
