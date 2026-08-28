@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-p1d-risk-functions-operational-date-deploy-check-20260828-a
+          EXPECTED_MARKER: noven-p1e-terminal-close-operational-quarter-deploy-check-20260828-a
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |
