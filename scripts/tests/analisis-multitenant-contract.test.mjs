@@ -11,9 +11,20 @@ assert.doesNotMatch(server, /\.from\('usuario_familias'\)/)
 assert.doesNotMatch(server, /select\('rol, sucursal_id'\)/)
 assert.match(server, /body\.sucursal_id/)
 assert.match(server, /\.from\('usuario_accesos'\)/)
-assert.match(server, /a\.rol === 'admin_organizacion'/)
-assert.match(server, /a\.rol === 'gerente_zonal' && a\.zona_id === sucursal\.zona_id/)
-assert.match(server, /a\.rol === 'gerente_sucursal' \|\| a\.rol === 'supervisor'/)
+
+const scopeCompleto = server.match(
+  /const scopeCompleto = accesos\.some\(\(a\) =>[\s\S]*?\n\s*\)/,
+)?.[0] ?? ''
+assert.ok(scopeCompleto, 'Análisis IA debe resolver el alcance completo explícitamente')
+assert.match(scopeCompleto, /a\.rol === 'gerente_zonal' && a\.zona_id === sucursal\.zona_id/,
+  'gerente zonal puede analizar una sucursal únicamente dentro de su zona')
+assert.match(scopeCompleto, /a\.rol === 'gerente_sucursal' \|\| a\.rol === 'supervisor'/,
+  'gerente/supervisor sólo obtienen alcance completo por su rol operativo local')
+assert.match(scopeCompleto, /a\.sucursal_id === sucursalId/,
+  'el alcance local debe coincidir con la sucursal solicitada')
+assert.doesNotMatch(scopeCompleto, /admin_organizacion/,
+  'admin_organizacion es jerarquía y no debe ampliar el alcance operativo de Análisis IA')
+
 assert.match(server, /a\.rol === 'operador' && a\.sucursal_id === sucursalId/)
 assert.match(server, /\.from\('usuario_familias_sucursal'\)/)
 assert.match(server, /\.eq\('sucursal_id', sucursalId\)/)
@@ -26,4 +37,4 @@ assert.match(hook, /analisis_cache:\$\{usuarioId\}:\$\{sucursalId\}/)
 assert.match(hook, /data\.sucursal_id !== sucursalSolicitada/)
 assert.match(hook, /sucursalActualRef\.current !== sucursalSolicitada/)
 
-console.log('✓ Análisis IA usa sucursal seleccionada, scope server-side y cache aislado')
+console.log('✓ Análisis IA: zonal por zona, local por sucursal y jerarquía sin expansión operativa')

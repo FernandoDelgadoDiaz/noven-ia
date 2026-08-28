@@ -37,7 +37,6 @@ interface EstadoLocalRow {
 
 interface AccesoImportacionRow {
   rol: string
-  zona_id: string | null
   sucursal_id: string | null
 }
 
@@ -160,9 +159,9 @@ const handler: Handler = async (event: HandlerEvent) => {
     return json(400, { success: false, error: 'Faltan sucursalId, nombreArchivo o archivoBase64' })
   }
 
-  // Gate temprano con el JWT del actor. Estas lecturas pasan por RLS y, por lo
-  // tanto, no exponen sucursales ni accesos fuera del alcance del usuario.
-  // El cliente service_role se crea únicamente después de demostrar el permiso.
+  // Gate temprano con el JWT del actor. El rol jerárquico no amplía operación y
+  // el gerente zonal es de sólo lectura: importar exige rol operativo en la
+  // sucursal exacta antes de procesar el archivo o crear un cliente service_role.
   const actorSupabase = createClient(supabaseUrl, anonKey, {
     auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
     accessToken: async () => token,
@@ -176,7 +175,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       .maybeSingle(),
     actorSupabase
       .from('sucursales')
-      .select('id, codigo, organizacion_id, zona_id')
+      .select('id, codigo, organizacion_id')
       .eq('id', sucursalId)
       .eq('activa', true)
       .maybeSingle(),
@@ -194,7 +193,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
   const { data: accesosActorRaw, error: accesosActorError } = await actorSupabase
     .from('usuario_accesos')
-    .select('rol, zona_id, sucursal_id')
+    .select('rol, sucursal_id')
     .eq('usuario_id', uid)
     .eq('organizacion_id', sucursalActor.organizacion_id)
     .eq('activo', true)
@@ -205,16 +204,12 @@ const handler: Handler = async (event: HandlerEvent) => {
 
   const accesosActor = (accesosActorRaw ?? []) as AccesoImportacionRow[]
   const puedeImportar = accesosActor.some((acceso) =>
-    acceso.rol === 'admin_organizacion'
-    || (acceso.rol === 'gerente_zonal' && acceso.zona_id === sucursalActor.zona_id)
-    || (
-      (acceso.rol === 'gerente_sucursal' || acceso.rol === 'supervisor')
-      && acceso.sucursal_id === sucursalId
-    ),
+    (acceso.rol === 'gerente_sucursal' || acceso.rol === 'supervisor')
+    && acceso.sucursal_id === sucursalId,
   )
 
   if (!puedeImportar) {
-    return json(403, { success: false, error: 'No tenés permiso para importar esta familia en la sucursal.' })
+    return json(403, { success: false, error: 'No tenés permiso operativo para importar esta familia en la sucursal.' })
   }
 
   let raw: Buffer

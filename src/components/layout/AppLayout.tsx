@@ -3,6 +3,8 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, ScanLine, Calendar, BrainCircuit, FileUp, Users, LogOut, Bell, X, Network } from 'lucide-react'
 import { useUsuarioRol } from '@/hooks/useUsuarioRol'
 import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
+import { useNovenAccessContext } from '@/hooks/useNovenAccessContext'
+import { usePuedeOperarSucursal } from '@/hooks/usePuedeOperarSucursal'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import SucursalContextSelector from './SucursalContextSelector'
 import InvitationManagementDock from '@/components/admin/InvitationManagementDock'
@@ -44,12 +46,27 @@ const MOBILE_NAV_RIGHT_BASE: NavItem[] = [
 
 export default function AppLayout() {
   const { isAdmin } = useUsuarioRol()
-  const { tieneRol, legacyMode } = useAccesosMultitenant()
+  const { accesos, legacyMode } = useAccesosMultitenant()
+  const { sucursalId, sucursalesPermitidas } = useNovenAccessContext()
+  const { puedeOperar } = usePuedeOperarSucursal()
   const navigate = useNavigate()
 
-  // usuario_accesos es la fuente de permisos cuando el modelo multitenant está activo.
-  const administraSucursal = legacyMode ? isAdmin : tieneRol('gerente_sucursal')
-  const administraJerarquia = !legacyMode && tieneRol(['admin_organizacion', 'gerente_zonal'])
+  // Las capacidades multirrol se acumulan, pero cada una conserva SU alcance.
+  // Un rol jerárquico no convierte a la cuenta en gerente operativo de otras sucursales.
+  const administraSucursal = legacyMode
+    ? isAdmin
+    : Boolean(sucursalId) && accesos.some((a) =>
+      a.activo && a.rol === 'gerente_sucursal' && a.sucursal_id === sucursalId,
+    )
+
+  const administraJerarquia = !legacyMode
+    && accesos.some((a) => a.activo && a.rol === 'admin_organizacion')
+    && accesos.some((a) =>
+      a.activo
+      && a.rol === 'gerente_sucursal'
+      && Boolean(a.sucursal_id)
+      && sucursalesPermitidas.some((s) => s.id === a.sucursal_id && s.codigo === '091'),
+    )
 
   const { soportado, permiso, activar } = usePushNotifications()
   const [pushDismissed, setPushDismissed] = useState(
@@ -69,13 +86,13 @@ export default function AppLayout() {
   }
 
   const navItems: NavItem[] = [
-    ...BASE_NAV_ITEMS,
+    ...BASE_NAV_ITEMS.filter((item) => item.to !== '/scanner' || puedeOperar),
     ...(administraSucursal ? SUCURSAL_ADMIN_NAV_ITEMS : []),
     ...(administraJerarquia ? [ACCESS_ADMIN_NAV_ITEM] : []),
   ]
 
-  // Evita saturar la mitad derecha del navbar móvil. Si una cuenta tiene a la vez
-  // administración de sucursal y de organización, Accesos aparece en la franja superior.
+  // Si la cuenta gerente 091 tiene además la capacidad jerárquica, Accesos se
+  // mantiene disponible sin alterar el alcance operativo local de la 091.
   const mobileNavRight: NavItem[] = [
     ...MOBILE_NAV_RIGHT_BASE,
     ...(administraSucursal ? SUCURSAL_ADMIN_NAV_ITEMS : []),
@@ -236,7 +253,7 @@ export default function AppLayout() {
             ))}
           </div>
 
-          <div className="w-16 shrink-0" aria-hidden="true" />
+          {puedeOperar && <div className="w-16 shrink-0" aria-hidden="true" />}
 
           <div className="flex flex-1 items-center justify-around h-full">
             {mobileNavRight.map(({ to, label, Icon }) => (
@@ -274,20 +291,22 @@ export default function AppLayout() {
         </div>
       </nav>
 
-      <div className="md:hidden fixed bottom-[calc(36px+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-30">
-        <NavLink to="/scanner" aria-label="Ir al Scanner">
-          {({ isActive }) => (
-            <div
-              className={[
-                'h-16 w-16 rounded-full flex items-center justify-center active:scale-[0.95] transition-transform duration-150 shadow-brand-lg ring-4 ring-white',
-                isActive ? 'bg-brand-hover' : 'bg-brand',
-              ].join(' ')}
-            >
-              <ScanLine className="h-7 w-7 text-white" aria-hidden="true" />
-            </div>
-          )}
-        </NavLink>
-      </div>
+      {puedeOperar && (
+        <div className="md:hidden fixed bottom-[calc(36px+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-30">
+          <NavLink to="/scanner" aria-label="Ir al Scanner">
+            {({ isActive }) => (
+              <div
+                className={[
+                  'h-16 w-16 rounded-full flex items-center justify-center active:scale-[0.95] transition-transform duration-150 shadow-brand-lg ring-4 ring-white',
+                  isActive ? 'bg-brand-hover' : 'bg-brand',
+                ].join(' ')}
+              >
+                <ScanLine className="h-7 w-7 text-white" aria-hidden="true" />
+              </div>
+            )}
+          </NavLink>
+        </div>
+      )}
     </div>
   )
 }

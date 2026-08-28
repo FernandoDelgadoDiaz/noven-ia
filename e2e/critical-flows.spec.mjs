@@ -16,28 +16,20 @@ async function buscarProductoScanner(page) {
 }
 
 test.describe('Noven · recorridos críticos multitenant', () => {
-  test('cuenta multirrol abre en 091 y cambiar sucursal actualiza el Dashboard en el acto', async ({ page }) => {
+  test('cuenta multirrol 091 no expone otras sucursales por el rol jerárquico', async ({ page }) => {
     const fixture = await installNovenFixture(page)
     await login(page)
 
-    // AppLayout mantiene simultáneamente las variantes desktop/mobile en el DOM;
-    // el test debe operar sobre el selector realmente visible en el viewport.
+    // La jerarquía corporativa no amplía el alcance operativo. Aunque el mock de
+    // sucursales devuelva más filas, la UI las intersecta con roles operativos.
+    // Con una sola sucursal resultante el selector se oculta deliberadamente.
     const selector = page.locator('select[aria-label="Seleccionar sucursal de trabajo"]:visible')
-    await expect(selector).toHaveCount(1)
-    await expect(selector).toBeVisible()
-    await expect(selector).toHaveValue(IDS.s091)
+    await expect(selector).toHaveCount(0)
 
     const riskCard = page.getByRole('button', { name: /UNIDADES EN RIESGO/i })
     await expect(riskCard).toContainText('5')
     await expect.poll(() => fixture.seenExpiryStores.includes(IDS.s091)).toBeTruthy()
-
-    await selector.selectOption(IDS.s043)
-    await expect(selector).toHaveValue(IDS.s043)
-    await expect(riskCard).toContainText('17')
-    await expect.poll(() => fixture.seenExpiryStores.at(-1)).toBe(IDS.s043)
-
-    const persisted = await page.evaluate(() => localStorage.getItem('noven_sucursal_actual'))
-    expect(persisted).toBe(IDS.s043)
+    expect(fixture.seenExpiryStores.includes(IDS.s043)).toBeFalsy()
   })
 
   test('una cuenta desactivada no entra al shell operativo', async ({ page }) => {
@@ -93,10 +85,20 @@ test.describe('Noven · recorridos críticos multitenant', () => {
     await page.goto('/analisis')
 
     await expect(page.getByRole('heading', { name: 'Análisis inteligente' })).toBeVisible()
+    const selector = page.locator('select[aria-label="Seleccionar sucursal de trabajo"]:visible')
+    await expect(selector).toBeVisible()
+    await expect(selector).toHaveValue('')
+
+    // Un zonal con más de una sucursal debe elegir explícitamente; Noven no inventa
+    // una sucursal por defecto y tampoco hace una llamada de análisis sin contexto.
+    await page.getByRole('button', { name: 'Generar análisis' }).click()
+    await expect(page.getByText('Seleccioná una sucursal antes de generar el análisis.')).toBeVisible()
+    expect(fixture.calls).toHaveLength(0)
+
+    await selector.selectOption(IDS.s091)
     await page.getByRole('button', { name: 'Generar análisis' }).click()
     await expect(page.getByRole('heading', { name: '1. INFORME SUCURSAL 091' })).toBeVisible()
 
-    const selector = page.locator('select[aria-label="Seleccionar sucursal de trabajo"]:visible')
     await selector.selectOption(IDS.s043)
     await expect(page.getByRole('heading', { name: '1. INFORME SUCURSAL 091' })).toHaveCount(0)
     await page.getByRole('button', { name: 'Generar análisis' }).click()

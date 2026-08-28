@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, CalendarX, Search, SlidersHorizontal, FolderX, X } from 'lucide-react'
 import { useVencimientosLista } from '@/hooks/useVencimientosLista'
+import { usePuedeOperarSucursal } from '@/hooks/usePuedeOperarSucursal'
 import type { VencimientoConProducto, FiltroNivel, NivelRiesgo } from '@/hooks/useVencimientosLista'
 import { RISK_VISUAL } from '@/lib/risk-config'
 import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
@@ -27,7 +28,7 @@ function SkeletonCard() {
 
 interface VencimientoCardProps {
   vencimiento: VencimientoConProducto
-  onClick: () => void
+  onClick?: () => void
 }
 
 function VencimientoCard({ vencimiento, onClick }: VencimientoCardProps) {
@@ -39,10 +40,11 @@ function VencimientoCard({ vencimiento, onClick }: VencimientoCardProps) {
     <button
       type="button"
       onClick={onClick}
+      disabled={!onClick}
       className={[
         'w-full text-left flex items-stretch rounded-card shadow-card overflow-hidden',
-        'hover:shadow-elevated hover:-translate-y-px transition-all duration-150 active:scale-[0.99] active:translate-y-0',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+        'transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+        onClick ? 'hover:shadow-elevated hover:-translate-y-px active:scale-[0.99] active:translate-y-0' : 'cursor-default',
         v.cardGradient,
       ].join(' ')}
     >
@@ -50,11 +52,7 @@ function VencimientoCard({ vencimiento, onClick }: VencimientoCardProps) {
       <div className="flex-1 px-4 py-3.5 min-w-0">
         <div className="flex items-start gap-2">
           <div className="flex-1 min-w-0">
-            <ProductIdentity
-              producto={vencimiento.productos}
-              compact
-              imageSize="sm"
-            />
+            <ProductIdentity producto={vencimiento.productos} compact imageSize="sm" />
           </div>
           <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full leading-tight ${v.badge}`}>
             {v.label.toUpperCase()}
@@ -103,6 +101,7 @@ const FILTRO_URL_LABEL: Record<FiltroUrl, string> = {
 
 export default function Vencimientos() {
   const navigate = useNavigate()
+  const { puedeOperar } = usePuedeOperarSucursal()
   const {
     vencimientos,
     vencimientosTodos,
@@ -148,7 +147,7 @@ export default function Vencimientos() {
 
   return (
     <div className="min-h-screen bg-surface-base">
-      {vencimientoEditando !== null && (
+      {puedeOperar && vencimientoEditando !== null && (
         <EditarVencimientoModal
           vencimiento={{
             id: vencimientoEditando.id,
@@ -194,14 +193,16 @@ export default function Vencimientos() {
             >
               <SlidersHorizontal className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={() => navigate('/scanner')}
-              className="flex items-center justify-center h-9 w-9 rounded-lg bg-brand hover:bg-brand-hover text-white shadow-brand transition-all duration-150 active:scale-[0.95]"
-              aria-label="Nuevo registro"
-            >
-              <Plus className="h-5 w-5" />
-            </button>
+            {puedeOperar && (
+              <button
+                type="button"
+                onClick={() => navigate('/scanner')}
+                className="flex items-center justify-center h-9 w-9 rounded-lg bg-brand hover:bg-brand-hover text-white shadow-brand transition-all duration-150 active:scale-[0.95]"
+                aria-label="Nuevo registro"
+              >
+                <Plus className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -321,7 +322,11 @@ export default function Vencimientos() {
         {!loading && !error && vencimientosMostrados.length > 0 && (
           <div className="space-y-2.5">
             {vencimientosMostrados.map((v) => (
-              <VencimientoCard key={v.id} vencimiento={v} onClick={() => setVencimientoEditando(v)} />
+              <VencimientoCard
+                key={v.id}
+                vencimiento={v}
+                onClick={puedeOperar ? () => setVencimientoEditando(v) : undefined}
+              />
             ))}
           </div>
         )}
@@ -336,7 +341,11 @@ export default function Vencimientos() {
                 {hayFiltrosActivos || filtroUrl ? 'Sin resultados' : 'Sin vencimientos registrados'}
               </p>
               <p className="text-muted-foreground text-sm mt-1">
-                {hayFiltrosActivos || filtroUrl ? 'Probá con otros filtros.' : 'Empezá escaneando un producto.'}
+                {hayFiltrosActivos || filtroUrl
+                  ? 'Probá con otros filtros.'
+                  : puedeOperar
+                    ? 'Empezá escaneando un producto.'
+                    : 'No hay vencimientos registrados en esta sucursal.'}
               </p>
             </div>
             {filtroUrl ? (
@@ -355,7 +364,7 @@ export default function Vencimientos() {
               >
                 Limpiar filtros
               </button>
-            ) : (
+            ) : puedeOperar ? (
               <button
                 type="button"
                 onClick={() => navigate('/scanner')}
@@ -363,7 +372,7 @@ export default function Vencimientos() {
               >
                 Ir al Scanner
               </button>
-            )}
+            ) : null}
           </div>
         )}
       </main>

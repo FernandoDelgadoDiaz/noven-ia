@@ -213,8 +213,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
   const accesos = (accesosRaw ?? []) as AccesoRow[]
   const scopeCompleto = accesos.some((a) =>
-    a.rol === 'admin_organizacion'
-    || (a.rol === 'gerente_zonal' && a.zona_id === sucursal.zona_id)
+    (a.rol === 'gerente_zonal' && a.zona_id === sucursal.zona_id)
     || ((a.rol === 'gerente_sucursal' || a.rol === 'supervisor') && a.sucursal_id === sucursalId),
   )
   const esOperadorLocal = accesos.some((a) => a.rol === 'operador' && a.sucursal_id === sucursalId)

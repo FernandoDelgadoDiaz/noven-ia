@@ -1,12 +1,21 @@
 import { Navigate, Outlet } from 'react-router-dom'
 import { useUsuarioRol } from '@/hooks/useUsuarioRol'
 import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
+import { useNovenAccessContext } from '@/hooks/useNovenAccessContext'
 
 export default function AdminRoute() {
   const { isAdmin, loading: rolLoading } = useUsuarioRol()
-  const { tieneRol, loading: accesosLoading, legacyMode } = useAccesosMultitenant()
+  const { accesos, loading: accesosLoading, legacyMode } = useAccesosMultitenant()
+  const { sucursalId } = useNovenAccessContext()
   const loading = rolLoading || accesosLoading
-  const puedeAdministrarSucursal = legacyMode ? isAdmin : tieneRol('gerente_sucursal')
+
+  const puedeAdministrarSucursal = legacyMode
+    ? isAdmin
+    : Boolean(sucursalId) && accesos.some((acceso) =>
+      acceso.activo
+      && acceso.rol === 'gerente_sucursal'
+      && acceso.sucursal_id === sucursalId,
+    )
 
   if (loading) {
     return (

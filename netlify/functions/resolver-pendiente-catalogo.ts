@@ -57,6 +57,17 @@ const handler: Handler = async (event: HandlerEvent) => {
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
+  const { data: puedeResolver, error: gateError } = await supabase.rpc('validar_resolucion_pendiente_server_v1', {
+    p_actor_id: uid,
+    p_pendiente_id: pendienteId,
+  })
+  if (gateError) {
+    return json(502, { success: false, error: 'No se pudo validar el alcance de clasificación.' })
+  }
+  if (puedeResolver !== true) {
+    return json(403, { success: false, error: 'No tenés permiso para clasificar este producto.' })
+  }
+
   const { data, error } = await supabase.rpc('resolver_producto_pendiente_catalogo', {
     p_pendiente_id: pendienteId,
     p_familia_id: familiaId,

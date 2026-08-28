@@ -6,6 +6,7 @@ import { useVencimientos } from '@/hooks/useVencimientos'
 import { useAuth } from '@/hooks/useAuth'
 import { useAccionesOperativas } from '@/hooks/useAccionesOperativas'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
+import { usePuedeOperarSucursal } from '@/hooks/usePuedeOperarSucursal'
 import AlertaItem from '@/components/dashboard/AlertaItem'
 import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
 import AccionOperativaModal from '@/components/dashboard/AccionOperativaModal'
@@ -44,6 +45,7 @@ function getGreeting(): string {
 export default function Dashboard() {
   const navigate = useNavigate()
   const { sucursalId } = useSucursalActual()
+  const { puedeOperar } = usePuedeOperarSucursal()
   const { data, loading, error, refetch, sinFamilias } = useVencimientos(sucursalId)
   const { user } = useAuth()
   const {
@@ -59,7 +61,6 @@ export default function Dashboard() {
   const [accionPendiente, setAccionPendiente] = useState<AccionPendiente | null>(null)
 
   // Lookup de nombres de familia (solo para mostrar en las cards de alerta).
-  // El producto ya trae familia_id; resolvemos el nombre sin tocar la lógica del hook.
   const [familiaNombres, setFamiliaNombres] = useState<Record<string, string>>({})
   const familiaIdsEnData = useMemo(() => {
     const set = new Set<string>()
@@ -102,6 +103,7 @@ export default function Dashboard() {
   const avatarLetter = user?.email?.[0]?.toUpperCase() ?? 'U'
 
   function handleRegistrarAccion(vencimiento: VencimientoConRiesgo, tipo: 'donacion' | 'decomiso'): void {
+    if (!puedeOperar) return
     setAccionPendiente({ vencimiento, tipo })
   }
 
@@ -112,9 +114,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-surface-base">
-
-      {/* Modal edición */}
-      {vencimientoEditando !== null && (
+      {puedeOperar && vencimientoEditando !== null && (
         <EditarVencimientoModal
           vencimiento={{
             id: vencimientoEditando.id,
@@ -141,8 +141,7 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Modal acción operativa */}
-      {accionPendiente !== null && (
+      {puedeOperar && accionPendiente !== null && (
         <AccionOperativaModal
           vencimiento={accionPendiente.vencimiento}
           tipo={accionPendiente.tipo}
@@ -151,21 +150,15 @@ export default function Dashboard() {
         />
       )}
 
-      {/* ── Header premium ──────────────────────────────────────────── */}
       <header className="sticky top-0 z-10 bg-white border-b border-border/40 px-4 md:px-8 py-4 md:py-5">
         <div className="flex items-center justify-between">
-
-          {/* Left: greeting + context */}
           <div>
             <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight leading-none">
               {getGreeting()}
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {formatFechaHeader()}
-            </p>
+            <p className="text-sm text-muted-foreground mt-1">{formatFechaHeader()}</p>
           </div>
 
-          {/* Right: actions + avatar */}
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -189,17 +182,13 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* ── Content ─────────────────────────────────────────────────── */}
       <main className="px-4 md:px-8 py-4 md:py-6 space-y-4 md:space-y-5">
-
-        {/* Error */}
         {error && (
           <div role="alert" className="rounded-[20px] bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600 animate-fade-in">
             No pudimos cargar los datos. Revisá tu conexión e intentá de nuevo.
           </div>
         )}
 
-        {/* Sin familias asignadas */}
         {!loading && sinFamilias && (
           <div role="alert" className="rounded-[20px] bg-amber-50 border border-amber-200 px-5 py-4 flex items-center gap-4 animate-fade-in">
             <div className="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
@@ -212,7 +201,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Skeleton — se muestra mientras loading sin importar si hay data o no */}
         {loading && (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
             {[0, 1, 2, 3, 4].map((i) => (
@@ -223,7 +211,6 @@ export default function Dashboard() {
 
         {!loading && (
           <>
-            {/* ── Critical hero banner ── */}
             {enRiesgo > 0 && (
               <div className="flex items-center gap-3 bg-red-50 border-l-4 border-red-600 rounded-r-2xl px-4 py-3 animate-fade-in">
                 <div className="h-9 w-9 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
@@ -245,7 +232,6 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* ── KPI command center compacto ── */}
             <section aria-label="Resumen de riesgos" className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <button
@@ -308,7 +294,6 @@ export default function Dashboard() {
               </div>
             </section>
 
-            {/* ── Alertas priorizadas ── */}
             <section aria-label="Alertas de vencimiento">
               <div className="flex items-center justify-between mb-3 md:mb-4">
                 <h2 className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
@@ -329,16 +314,20 @@ export default function Dashboard() {
                   <div>
                     <p className="text-foreground font-semibold text-base">Sin productos registrados</p>
                     <p className="text-muted-foreground text-sm mt-1">
-                      Usá el Scanner para cargar el primer vencimiento.
+                      {puedeOperar
+                        ? 'Usá el Scanner para cargar el primer vencimiento.'
+                        : 'No hay vencimientos registrados en esta sucursal.'}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/scanner')}
-                    className="px-6 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold shadow-brand transition-all duration-150 active:scale-[0.97]"
-                  >
-                    Ir al Scanner
-                  </button>
+                  {puedeOperar && (
+                    <button
+                      type="button"
+                      onClick={() => navigate('/scanner')}
+                      className="px-6 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold shadow-brand transition-all duration-150 active:scale-[0.97]"
+                    >
+                      Ir al Scanner
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3 pb-28 md:pb-10">
@@ -347,8 +336,8 @@ export default function Dashboard() {
                       key={v.id}
                       vencimiento={v}
                       familiaNombre={v.producto.familia_id ? (familiaNombres[v.producto.familia_id] ?? null) : null}
-                      onClick={() => setVencimientoEditando(v)}
-                      onRegistrarAccion={handleRegistrarAccion}
+                      onClick={puedeOperar ? () => setVencimientoEditando(v) : undefined}
+                      onRegistrarAccion={puedeOperar ? handleRegistrarAccion : undefined}
                     />
                   ))}
                 </div>

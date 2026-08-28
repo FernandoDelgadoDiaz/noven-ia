@@ -47,6 +47,23 @@ function tablaMultitenantNoDisponible(error: { code?: string; message?: string }
   return error.code === '42P01' || error.code === 'PGRST205' || /usuario_accesos/i.test(error.message ?? '')
 }
 
+function sucursalDentroScopeOperativo(sucursal: SucursalPermitida, accesos: UsuarioAcceso[]): boolean {
+  return accesos.some((acceso) => {
+    if (!acceso.activo || acceso.organizacion_id !== sucursal.organizacion_id) return false
+    if (acceso.rol === 'gerente_zonal') {
+      return Boolean(acceso.zona_id) && acceso.zona_id === sucursal.zona_id
+    }
+    if (
+      acceso.rol === 'gerente_sucursal'
+      || acceso.rol === 'supervisor'
+      || acceso.rol === 'operador'
+    ) {
+      return acceso.sucursal_id === sucursal.id
+    }
+    return false
+  })
+}
+
 export function NovenAccessProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
@@ -119,12 +136,17 @@ export function NovenAccessProvider({ children }: { children: ReactNode }) {
 
     if (runId !== authorizationRunRef.current) return
 
+    const sucursalesPermitidas = sucursalesError
+      ? []
+      : ((sucursalesData ?? []) as SucursalPermitida[])
+        .filter((sucursal) => sucursalDentroScopeOperativo(sucursal, accesos))
+
     setAuthorization({
       perfil,
       accesos,
       legacyMode: false,
       accesosError: sucursalesError ? `No se pudo resolver el alcance de sucursales: ${sucursalesError.message}` : null,
-      sucursalesPermitidas: sucursalesError ? [] : (sucursalesData ?? []) as SucursalPermitida[],
+      sucursalesPermitidas,
       loading: false,
     })
   }, [])
