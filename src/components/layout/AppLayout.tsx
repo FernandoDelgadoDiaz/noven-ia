@@ -4,6 +4,7 @@ import { LayoutDashboard, ScanLine, Calendar, BrainCircuit, FileUp, Users, LogOu
 import { useUsuarioRol } from '@/hooks/useUsuarioRol'
 import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
 import { useNovenAccessContext } from '@/hooks/useNovenAccessContext'
+import { usePuedeOperarSucursal } from '@/hooks/usePuedeOperarSucursal'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import SucursalContextSelector from './SucursalContextSelector'
 import InvitationManagementDock from '@/components/admin/InvitationManagementDock'
@@ -47,6 +48,7 @@ export default function AppLayout() {
   const { isAdmin } = useUsuarioRol()
   const { accesos, legacyMode } = useAccesosMultitenant()
   const { sucursalId, sucursalesPermitidas } = useNovenAccessContext()
+  const { puedeOperar } = usePuedeOperarSucursal()
   const navigate = useNavigate()
 
   // Las capacidades multirrol se acumulan, pero cada una conserva SU alcance.
@@ -84,7 +86,7 @@ export default function AppLayout() {
   }
 
   const navItems: NavItem[] = [
-    ...BASE_NAV_ITEMS,
+    ...BASE_NAV_ITEMS.filter((item) => item.to !== '/scanner' || puedeOperar),
     ...(administraSucursal ? SUCURSAL_ADMIN_NAV_ITEMS : []),
     ...(administraJerarquia ? [ACCESS_ADMIN_NAV_ITEM] : []),
   ]
@@ -251,7 +253,7 @@ export default function AppLayout() {
             ))}
           </div>
 
-          <div className="w-16 shrink-0" aria-hidden="true" />
+          {puedeOperar && <div className="w-16 shrink-0" aria-hidden="true" />}
 
           <div className="flex flex-1 items-center justify-around h-full">
             {mobileNavRight.map(({ to, label, Icon }) => (
@@ -289,20 +291,22 @@ export default function AppLayout() {
         </div>
       </nav>
 
-      <div className="md:hidden fixed bottom-[calc(36px+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-30">
-        <NavLink to="/scanner" aria-label="Ir al Scanner">
-          {({ isActive }) => (
-            <div
-              className={[
-                'h-16 w-16 rounded-full flex items-center justify-center active:scale-[0.95] transition-transform duration-150 shadow-brand-lg ring-4 ring-white',
-                isActive ? 'bg-brand-hover' : 'bg-brand',
-              ].join(' ')}
-            >
-              <ScanLine className="h-7 w-7 text-white" aria-hidden="true" />
-            </div>
-          )}
-        </NavLink>
-      </div>
+      {puedeOperar && (
+        <div className="md:hidden fixed bottom-[calc(36px+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-30">
+          <NavLink to="/scanner" aria-label="Ir al Scanner">
+            {({ isActive }) => (
+              <div
+                className={[
+                  'h-16 w-16 rounded-full flex items-center justify-center active:scale-[0.95] transition-transform duration-150 shadow-brand-lg ring-4 ring-white',
+                  isActive ? 'bg-brand-hover' : 'bg-brand',
+                ].join(' ')}
+              >
+                <ScanLine className="h-7 w-7 text-white" aria-hidden="true" />
+              </div>
+            )}
+          </NavLink>
+        </div>
+      )}
     </div>
   )
 }
