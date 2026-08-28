@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '../..')
 const migration = fs.readFileSync(
-  path.join(ROOT, 'supabase/migrations/20260828000190_global_profile_active_auth_boundary_v1.sql'),
+  path.join(ROOT, 'supabase/migrations/20260828000200_global_profile_active_auth_boundary_v1.sql'),
   'utf8',
 )
 
