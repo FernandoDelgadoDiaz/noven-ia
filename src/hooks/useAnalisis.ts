@@ -1,19 +1,21 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { useUsuarioRol } from '@/hooks/useUsuarioRol'
-import { useUsuarioFamilias } from '@/hooks/useUsuarioFamilias'
-
-const CACHE_KEY = 'analisis_cache'
+import { useSucursalActual } from '@/hooks/useSucursalActual'
 
 interface AnalisisCache {
   analisis: string
   generado_en: string
 }
 
-function leerCache(): AnalisisCache | null {
+function cacheKey(usuarioId: string, sucursalId: string): string {
+  return `analisis_cache:${usuarioId}:${sucursalId}`
+}
+
+function leerCache(usuarioId: string, sucursalId: string): AnalisisCache | null {
+  if (!usuarioId || !sucursalId) return null
   try {
-    return JSON.parse(localStorage.getItem(CACHE_KEY) ?? 'null') as AnalisisCache | null
+    return JSON.parse(localStorage.getItem(cacheKey(usuarioId, sucursalId)) ?? 'null') as AnalisisCache | null
   } catch {
     return null
   }
@@ -29,23 +31,43 @@ interface UseAnalisisReturn {
 
 export function useAnalisis(): UseAnalisisReturn {
   const { user } = useAuth()
-  const { rol } = useUsuarioRol()
-  const { familiaIds } = useUsuarioFamilias()
-
+  const { sucursalId, loading: sucursalLoading } = useSucursalActual()
   const [loading, setLoading] = useState(false)
-  const [resultado, setResultado] = useState<string | null>(() => leerCache()?.analisis ?? null)
+  const [resultado, setResultado] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [ultimaActualizacion, setUltimaActualizacion] = useState<string | null>(
-    () => leerCache()?.generado_en ?? null,
-  )
+  const [ultimaActualizacion, setUltimaActualizacion] = useState<string | null>(null)
+  const sucursalActualRef = useRef(sucursalId)
+
+  useEffect(() => {
+    sucursalActualRef.current = sucursalId
+    setError(null)
+    setLoading(false)
+
+    const usuarioId = user?.id ?? ''
+    const cache = leerCache(usuarioId, sucursalId)
+    setResultado(cache?.analisis ?? null)
+    setUltimaActualizacion(cache?.generado_en ?? null)
+  }, [user?.id, sucursalId])
 
   const generarAnalisis = useCallback(async (): Promise<void> => {
+    if (sucursalLoading) return
+    if (!sucursalId) {
+      setError('Seleccioná una sucursal antes de generar el análisis.')
+      return
+    }
+
+    const usuarioId = user?.id ?? ''
+    if (!usuarioId) {
+      setError('Sesión expirada. Volvé a iniciar sesión.')
+      return
+    }
+
+    const sucursalSolicitada = sucursalId
     setLoading(true)
     setError(null)
+
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+      const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token
       if (!token) {
         setError('Sesión expirada. Volvé a iniciar sesión.')
@@ -55,12 +77,13 @@ export function useAnalisis(): UseAnalisisReturn {
       const res = await fetch('/.netlify/functions/analisis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ usuario_id: user?.id, rol, familia_ids: familiaIds }),
+        body: JSON.stringify({ sucursal_id: sucursalSolicitada }),
       })
-      const data = (await res.json()) as {
+      const data = await res.json() as {
         success: boolean
         analisis?: string
         generado_en?: string
+        sucursal_id?: string
         error?: string
       }
 
@@ -69,16 +92,21 @@ export function useAnalisis(): UseAnalisisReturn {
         return
       }
 
+      if (data.sucursal_id !== sucursalSolicitada || sucursalActualRef.current !== sucursalSolicitada) {
+        return
+      }
+
       const generado = data.generado_en ?? new Date().toISOString()
-      setResultado(data.analisis)
-      setUltimaActualizacion(generado)
-      localStorage.setItem(CACHE_KEY, JSON.stringify({ analisis: data.analisis, generado_en: generado }))
+      const cache: AnalisisCache = { analisis: data.analisis, generado_en: generado }
+      setResultado(cache.analisis)
+      setUltimaActualizacion(cache.generado_en)
+      localStorage.setItem(cacheKey(usuarioId, sucursalSolicitada), JSON.stringify(cache))
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error de red al generar el análisis.')
     } finally {
-      setLoading(false)
+      if (sucursalActualRef.current === sucursalSolicitada) setLoading(false)
     }
-  }, [user, rol, familiaIds])
+  }, [user?.id, sucursalId, sucursalLoading])
 
   return { loading, resultado, error, ultimaActualizacion, generarAnalisis }
 }
