@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import { useNovenAccessContext } from '@/context/NovenAccessContext'
+import { useNovenAccessContext } from '@/hooks/useNovenAccessContext'
 import type { RolAccesoMultitenant, UsuarioAcceso } from '@/types/index'
 
 interface UseAccesosMultitenantReturn {
