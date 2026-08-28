@@ -9,7 +9,7 @@ on:
       - master
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: noven-ci-${{ github.ref }}
@@ -23,39 +23,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-
-      - name: Materialize stable hierarchy arrays
-        if: github.event_name == 'pull_request' && github.head_ref == 'chore/fix-admin-accesos-lint' && github.event.pull_request.head.repo.full_name == github.repository
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('src/pages/AdminAccesos.tsx')
-          text = path.read_text()
-          replacements = [
-              ('  const zonas = contexto.zonas ?? []', '  const zonas = useMemo(() => contexto.zonas ?? [], [contexto.zonas])'),
-              ('  const sucursales = contexto.sucursales ?? []', '  const sucursales = useMemo(() => contexto.sucursales ?? [], [contexto.sucursales])'),
-          ]
-          for before, after in replacements:
-              count = text.count(before)
-              if count != 1:
-                  raise SystemExit(f'Expected exactly one match, got {count}: {before}')
-              text = text.replace(before, after)
-          path.write_text(text)
-          PY
-
-          if git diff --quiet -- src/pages/AdminAccesos.tsx; then
-            echo 'Stable arrays already materialized'
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/pages/AdminAccesos.tsx
-          git commit -m 'fix(lint): estabilizar arrays de jerarquía en invitaciones'
-          git push origin HEAD:${GITHUB_HEAD_REF}
 
       - name: Node 22
         uses: actions/setup-node@v4
