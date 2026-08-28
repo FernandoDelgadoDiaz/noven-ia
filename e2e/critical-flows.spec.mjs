@@ -6,7 +6,10 @@ test.describe('Noven · recorridos críticos multitenant', () => {
     const fixture = await installNovenFixture(page)
     await login(page)
 
-    const selector = page.getByLabel('Seleccionar sucursal de trabajo')
+    // AppLayout mantiene simultáneamente las variantes desktop/mobile en el DOM;
+    // el test debe operar sobre el selector realmente visible en el viewport.
+    const selector = page.locator('select[aria-label="Seleccionar sucursal de trabajo"]:visible')
+    await expect(selector).toHaveCount(1)
     await expect(selector).toBeVisible()
     await expect(selector).toHaveValue(IDS.s091)
 
@@ -57,8 +60,9 @@ test.describe('Noven · recorridos críticos multitenant', () => {
     await expect(zona).toBeVisible()
     await zona.click()
 
-    await expect(page.getByText(/091/)).toBeVisible()
-    await expect(page.getByText(/043/)).toBeVisible()
+    // Validamos las filas reales de la jerarquía, no los <option> del selector global.
+    await expect(page.getByText('Sucursal 091', { exact: true })).toBeVisible()
+    await expect(page.getByText('Sucursal 043', { exact: true })).toBeVisible()
     await expect(page).toHaveURL(/\/admin\/accesos$/)
     expect(fixture.externalNavigations.some((url) => /google\./i.test(url))).toBeFalsy()
 
