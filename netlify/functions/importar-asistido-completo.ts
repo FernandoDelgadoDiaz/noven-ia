@@ -68,6 +68,20 @@ const handler: Handler = async (event: HandlerEvent) => {
     return json(400, { success: false, error: 'Faltan sucursalId, nombreArchivo o archivoBase64' })
   }
 
+  // Gate server-side antes de decodificar o procesar el archivo. El rol zonal es
+  // de lectura y admin_organizacion no amplía el scope operativo.
+  const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
+  const { data: puedeOperar, error: gateError } = await supabase.rpc('validar_operacion_local_server_v1', {
+    p_actor_id: uid,
+    p_sucursal_id: sucursalId,
+  })
+  if (gateError) {
+    return json(502, { success: false, error: 'No se pudo validar el alcance de la importación.' })
+  }
+  if (puedeOperar !== true) {
+    return json(403, { success: false, error: 'No tenés permiso para importar en la sucursal seleccionada.' })
+  }
+
   let raw: Buffer
   try {
     raw = Buffer.from(archivoBase64, 'base64')
@@ -116,7 +130,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     fila_origen: f.linea,
   }))
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
   const { data, error } = await supabase.rpc('aplicar_importacion_glaciar_masiva_v2', {
     p_sucursal_id: sucursalId,
     p_usuario_id: uid,
