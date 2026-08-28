@@ -3,7 +3,6 @@ import { supabase } from '@/lib/supabase'
 import {
   calcularDiasRestantes,
   calcularNivelRiesgo,
-  diasDonacionLegacyPorSector,
 } from '@/lib/riesgo'
 export type { NivelRiesgo } from '@/lib/riesgo'
 import type { NivelRiesgo } from '@/lib/riesgo'
@@ -118,9 +117,12 @@ function procesarFila(
     familia_id?: string | null
     dias_donacion?: number | null
   },
-): VencimientoConProducto {
+): VencimientoConProducto | null {
+  // NULL significa sector fuera del circuito. No hay fallback técnico.
+  if (row.dias_donacion == null) return null
+
   const diasRestantes = calcularDiasRestantes(row.fecha_vencimiento)
-  const diasDonacion = row.dias_donacion ?? diasDonacionLegacyPorSector(row.productos.sector)
+  const diasDonacion = row.dias_donacion
   const nivelRiesgo = calcularNivelRiesgo(
     diasRestantes,
     row.cantidad,
@@ -135,6 +137,10 @@ function procesarFila(
     dias_restantes: diasRestantes,
     nivel_riesgo: nivelRiesgo,
   }
+}
+
+function esVencimientoProcesado(row: VencimientoConProducto | null): row is VencimientoConProducto {
+  return row !== null
 }
 
 export function useVencimientosLista(): UseVencimientosListaReturn {
@@ -202,6 +208,7 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
             },
           }),
         )
+        .filter(esVencimientoProcesado)
         .sort((a, b) => a.dias_restantes - b.dias_restantes)
 
       setRawVencimientos(procesados)
@@ -236,6 +243,8 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
       return
     }
 
+    // El camino legacy no expone política autoritativa. Para mantener la regla
+    // de no inferencia, no convierte esas filas en riesgo operativo.
     const procesados = ((rows ?? []) as unknown as RawLegacyRow[])
       .filter((row): row is RawLegacyRow & { productos: NonNullable<RawLegacyRow['productos']> } =>
         row.productos !== null,
@@ -244,10 +253,11 @@ export function useVencimientosLista(): UseVencimientosListaReturn {
         procesarFila({
           ...row,
           familia_id: row.productos.familia_id,
+          dias_donacion: null,
           productos: row.productos,
         }),
       )
-      .sort((a, b) => a.dias_restantes - b.dias_restantes)
+      .filter(esVencimientoProcesado)
 
     setRawVencimientos(procesados)
     setFetchLoading(false)
