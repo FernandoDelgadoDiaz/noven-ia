@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-audit-post-e2e-deploy-check-20260828-b
+          EXPECTED_MARKER: noven-audit-post-performance-deploy-check-20260828-c
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |
