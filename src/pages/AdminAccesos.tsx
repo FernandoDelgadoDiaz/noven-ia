@@ -229,8 +229,8 @@ function Resumen({ titulo, valor, Icono }: { titulo: string; valor: number; Icon
 }
 
 function ModalInvitacion({ contexto, onClose }: { contexto: Contexto; onClose: () => void }) {
-  const zonas = contexto.zonas ?? []
-  const sucursales = contexto.sucursales ?? []
+  const zonas = useMemo(() => contexto.zonas ?? [], [contexto.zonas])
+  const sucursales = useMemo(() => contexto.sucursales ?? [], [contexto.sucursales])
   const puedeZonal = Boolean(contexto.puede_crear_zonal)
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
