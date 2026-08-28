@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, ScanLine, Calendar, BrainCircuit, FileUp, Users, LogOut, Bell, X } from 'lucide-react'
+import { LayoutDashboard, ScanLine, Calendar, BrainCircuit, FileUp, Users, LogOut, Bell, X, Network } from 'lucide-react'
 import { useUsuarioRol } from '@/hooks/useUsuarioRol'
+import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
+import SucursalContextSelector from './SucursalContextSelector'
 import { supabase } from '@/lib/supabase'
 
 interface NavItem {
@@ -19,12 +21,15 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { to: '/analisis', label: 'Análisis', Icon: BrainCircuit },
 ]
 
-// Items exclusivos de admin. Importar reescribe stock, venta media y familia de
-// productos de todos los operadores, así que no se ofrece fuera del rol admin.
-// La ruta además está protegida por AdminRoute: ocultar el link no alcanza.
-const ADMIN_NAV_ITEMS: NavItem[] = [
+// Acciones operativas exclusivas de un gerente de sucursal.
+const SUCURSAL_ADMIN_NAV_ITEMS: NavItem[] = [
   { to: '/importar', label: 'Importar', Icon: FileUp },
   { to: '/admin', label: 'Admin', Icon: Users },
+]
+
+// Administración superior de la estructura organizacional.
+const ACCESS_ADMIN_NAV_ITEMS: NavItem[] = [
+  { to: '/admin/accesos', label: 'Accesos', Icon: Network },
 ]
 
 // Mobile: izquierda del FAB central
@@ -33,14 +38,18 @@ const MOBILE_NAV_LEFT: NavItem[] = [
   { to: '/vencimientos', label: 'Vencimientos', Icon: Calendar },
 ]
 
-// Mobile: derecha del FAB central (los items de admin se añaden si es admin)
+// Mobile: derecha del FAB central
 const MOBILE_NAV_RIGHT_BASE: NavItem[] = [
   { to: '/analisis', label: 'Análisis', Icon: BrainCircuit },
 ]
 
 export default function AppLayout() {
   const { isAdmin } = useUsuarioRol()
+  const { tieneRol, legacyMode } = useAccesosMultitenant()
   const navigate = useNavigate()
+
+  const administraSucursal = legacyMode ? isAdmin : tieneRol('gerente_sucursal')
+  const administraJerarquia = tieneRol(['admin_organizacion', 'gerente_zonal'])
 
   // Notificaciones push — banner de activación no intrusivo
   const { soportado, permiso, activar } = usePushNotifications()
@@ -54,14 +63,22 @@ export default function AppLayout() {
   }
 
   async function handleSignOut() {
+    localStorage.removeItem('noven_sucursal_actual')
     await supabase.auth.signOut()
     navigate('/login')
   }
 
-  const navItems = isAdmin ? [...BASE_NAV_ITEMS, ...ADMIN_NAV_ITEMS] : BASE_NAV_ITEMS
-  const mobileNavRight = isAdmin
-    ? [...MOBILE_NAV_RIGHT_BASE, ...ADMIN_NAV_ITEMS]
-    : MOBILE_NAV_RIGHT_BASE
+  const navItems = [
+    ...BASE_NAV_ITEMS,
+    ...(administraSucursal ? SUCURSAL_ADMIN_NAV_ITEMS : []),
+    ...(administraJerarquia ? ACCESS_ADMIN_NAV_ITEMS : []),
+  ]
+  const mobileNavRight = [
+    ...MOBILE_NAV_RIGHT_BASE,
+    ...(administraSucursal ? SUCURSAL_ADMIN_NAV_ITEMS : []),
+    ...(administraJerarquia ? ACCESS_ADMIN_NAV_ITEMS : []),
+  ]
+
   return (
     <div className="flex min-h-screen bg-surface-base">
 
@@ -85,8 +102,11 @@ export default function AppLayout() {
 
         <div className="mx-5 h-px bg-border/60" />
 
+        {/* Selector visible sólo para scopes con más de una sucursal. */}
+        <SucursalContextSelector />
+
         {/* Nav items */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5" aria-label="Menú principal">
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto" aria-label="Menú principal">
           {navItems.map(({ to, label, Icon, isMain }) => (
             <NavLink
               key={to}
@@ -136,6 +156,10 @@ export default function AppLayout() {
 
       {/* ── Main area ───────────────────────────────────────────────── */}
       <div className="flex-1 md:ml-[230px] flex flex-col min-h-screen">
+        {/* En móvil, un zonal/organización elige acá la sucursal de trabajo. */}
+        <div className="md:hidden">
+          <SucursalContextSelector mobile />
+        </div>
         <main className="flex-1 pb-nav md:pb-0">
           <Outlet />
         </main>
@@ -174,12 +198,6 @@ export default function AppLayout() {
       )}
 
       {/* ── Mobile bottom nav con FAB central — hidden on desktop ─────── */}
-      {/*
-        Patrón Material Design: el FAB se eleva sobre el navbar. La nav se
-        divide en dos mitades (izquierda | hueco central | derecha) y el FAB
-        flota con bottom posicionado para que su centro quede en el borde
-        superior del navbar, creando el efecto "apoyo".
-      */}
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-border/40 shadow-nav"
         style={{
@@ -261,11 +279,6 @@ export default function AppLayout() {
       </nav>
 
       {/* ── FAB Scanner — encima del navbar, centrado ────────────────── */}
-      {/*
-        bottom = altura navbar (64px) - mitad FAB (32px) + 4px de margen visual
-        = 36px sobre el borde inferior de la pantalla
-        El FAB queda con su mitad sobre el navbar (patrón Material).
-      */}
       <div className="md:hidden fixed bottom-[calc(36px+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-30">
         <NavLink to="/scanner" aria-label="Ir al Scanner">
           {({ isActive }) => (
