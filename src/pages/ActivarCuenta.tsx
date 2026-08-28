@@ -2,7 +2,7 @@ import { type FormEvent, useState } from 'react'
 import { CheckCircle2, KeyRound, Loader2, ShieldCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { useNovenAccessContext } from '@/context/NovenAccessContext'
+import { useNovenAccessContext } from '@/hooks/useNovenAccessContext'
 
 export default function ActivarCuenta() {
   const navigate = useNavigate()
