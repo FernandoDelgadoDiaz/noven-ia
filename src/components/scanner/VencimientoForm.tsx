@@ -36,13 +36,16 @@ interface RiesgoPreview {
   coberturaTexto: string
 }
 
+type ProductoConPolitica = Producto & { dias_donacion?: number | null }
+
 function calcularPreview(
   cantidad: string,
   fechaVencimiento: string,
   producto: Producto,
   stockActual: string,
+  diasDonacion: number | null,
 ): RiesgoPreview | null {
-  if (!cantidad || !fechaVencimiento) return null
+  if (!cantidad || !fechaVencimiento || diasDonacion == null) return null
   const cantNum = parseInt(cantidad, 10)
   if (isNaN(cantNum) || cantNum <= 0) return null
   const stockNum = parseInt(stockActual, 10)
@@ -52,6 +55,7 @@ function calcularPreview(
     id: '', producto_id: producto.id, sucursal_id: '', usuario_id: '',
     cantidad: cantNum, lote: null, fecha_vencimiento: fechaVencimiento,
     fecha_carga: new Date().toISOString(), activo: true, created_at: new Date().toISOString(),
+    dias_donacion: diasDonacion,
   }
   const resultado = calcularRiesgo(vencimientoFake, productoConStock, new Date())
   const coberturaTexto = resultado.cobertura_dias === Infinity
@@ -81,6 +85,7 @@ const inputCls = 'w-full h-14 px-4 bg-surface-base border border-border rounded-
 
 export default function VencimientoForm({ producto, sucursalId, onSuccess, vencimientoExistente }: VencimientoFormProps) {
   const esEdicion = Boolean(vencimientoExistente)
+  const diasDonacion = (producto as ProductoConPolitica).dias_donacion ?? null
   const [form, setForm] = useState<FormData>({
     cantidad: vencimientoExistente ? String(vencimientoExistente.cantidad) : '',
     fechaVencimiento: vencimientoExistente ? vencimientoExistente.fecha_vencimiento.slice(0, 10) : '',
@@ -90,7 +95,7 @@ export default function VencimientoForm({ producto, sucursalId, onSuccess, venci
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const preview = calcularPreview(form.cantidad, form.fechaVencimiento, producto, form.stockActual)
+  const preview = calcularPreview(form.cantidad, form.fechaVencimiento, producto, form.stockActual, diasDonacion)
   const riskViz = preview ? RISK_VISUAL[preview.nivel] : null
   const PreviewIcon = preview ? getPreviewIcon(preview.nivel) : null
 
@@ -100,6 +105,7 @@ export default function VencimientoForm({ producto, sucursalId, onSuccess, venci
   }
 
   function validar(): string | null {
+    if (diasDonacion == null) return 'Este producto está fuera del circuito de vencimientos configurado.'
     const cantNum = parseInt(form.cantidad, 10)
     if (!form.cantidad || isNaN(cantNum) || cantNum <= 0) return 'Ingresá una cantidad válida (mayor a 0).'
     if (!form.fechaVencimiento) return 'Seleccioná la fecha de vencimiento.'
@@ -165,6 +171,23 @@ export default function VencimientoForm({ producto, sucursalId, onSuccess, venci
 
     setGuardando(false)
     onSuccess()
+  }
+
+  if (diasDonacion == null) {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="bg-white rounded-card shadow-card px-4 py-3.5">
+          <ProductIdentity producto={producto} label="Producto encontrado" imageSize="sm" compact />
+        </div>
+        <div className="rounded-card border border-amber-200 bg-amber-50 px-4 py-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-amber-900">Fuera del circuito de vencimientos</p>
+            <p className="text-sm text-amber-800 mt-1">Este sector no tiene una política de vencimiento/donación configurada en Noven. No corresponde crear un control.</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
