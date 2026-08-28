@@ -12,7 +12,7 @@ function jsonHeaders(extra = {}) {
   return { 'content-type': 'application/json; charset=utf-8', ...extra }
 }
 
-function scannerProduct() {
+function scannerProduct({ stockActual, ventaMediaDiaria, diasDonacion }) {
   return {
     id: SCANNER_IDS.product,
     organizacion_id: IDS.org,
@@ -30,25 +30,25 @@ function scannerProduct() {
     familia_id: SCANNER_IDS.family,
     sector_id: null,
     activo: true,
-    stock_actual: 12,
-    venta_media_diaria: 2,
-    dias_donacion: 10,
+    stock_actual: stockActual,
+    venta_media_diaria: ventaMediaDiaria,
+    dias_donacion: diasDonacion,
   }
 }
 
-function activeControl() {
+function activeControl({ cantidad, fechaVencimiento, diasDonacion }) {
   return {
     id: SCANNER_IDS.control,
     producto_id: SCANNER_IDS.product,
     sucursal_id: IDS.s091,
     usuario_id: IDS.user,
-    cantidad: 8,
+    cantidad,
     lote: 'L-E2E',
-    fecha_vencimiento: '2026-10-20',
+    fecha_vencimiento: fechaVencimiento,
     fecha_carga: '2026-08-28',
     activo: true,
     created_at: '2026-08-28T12:00:00Z',
-    dias_donacion: 10,
+    dias_donacion: diasDonacion,
   }
 }
 
@@ -70,12 +70,29 @@ export async function installScannerWriteFixture(page, options = {}) {
     hasActiveControl = false,
     atomicSaveError = null,
     controlSaveError = null,
+    terminalCloseError = null,
+    activeControlQuantity = 8,
+    activeControlDate = '2026-10-20',
+    productStock = 12,
+    productVmd = 2,
+    diasDonacion = 10,
+    ragPorcentaje = null,
   } = options
 
   await installNovenFixture(page)
 
   const rpcCalls = []
   const directTableWrites = []
+  const product = scannerProduct({
+    stockActual: productStock,
+    ventaMediaDiaria: productVmd,
+    diasDonacion,
+  })
+  const control = activeControl({
+    cantidad: activeControlQuantity,
+    fechaVencimiento: activeControlDate,
+    diasDonacion,
+  })
 
   // Se registra después del fixture base y usa fallback para no alterar los
   // recorridos multitenant existentes. Sólo intercepta contratos del Scanner.
@@ -101,7 +118,7 @@ export async function installScannerWriteFixture(page, options = {}) {
         return route.fulfill({
           status: 200,
           headers: jsonHeaders(),
-          body: JSON.stringify(encontrado ? scannerProduct() : null),
+          body: JSON.stringify(encontrado ? product : null),
         })
       }
 
@@ -125,6 +142,12 @@ export async function installScannerWriteFixture(page, options = {}) {
         return route.fulfill({ status: 200, headers: jsonHeaders(), body: 'null' })
       }
 
+      if (rpc === 'cerrar_vencimiento_operativo') {
+        rpcCalls.push({ name: rpc, body })
+        if (terminalCloseError) return route.fulfill(rpcError(terminalCloseError))
+        return route.fulfill({ status: 200, headers: jsonHeaders(), body: 'null' })
+      }
+
       return route.fallback()
     }
 
@@ -134,23 +157,23 @@ export async function installScannerWriteFixture(page, options = {}) {
       return route.fulfill({
         status: 200,
         headers: jsonHeaders(),
-        body: JSON.stringify(hasActiveControl ? [activeControl()] : []),
+        body: JSON.stringify(hasActiveControl ? [control] : []),
       })
     }
 
     if (table === 'v_seguimiento_rag_actual' && eqValue(url, 'vencimiento_id') === SCANNER_IDS.control) {
       const row = hasActiveControl
         ? {
-            dias_donacion: 10,
-            rag_porcentaje: null,
-            rag_aplicado_at: null,
-            cantidad_base_rag: null,
-            cantidad_observada: 8,
+            dias_donacion: diasDonacion,
+            rag_porcentaje: ragPorcentaje,
+            rag_aplicado_at: ragPorcentaje == null ? null : '2026-08-28T12:30:00Z',
+            cantidad_base_rag: ragPorcentaje == null ? null : activeControlQuantity,
+            cantidad_observada: activeControlQuantity,
             unidades_vendidas_observadas: null,
             velocidad_observada: null,
-            velocidad_necesaria: 0.25,
-            dias_comerciales_restantes: 43,
-            estado_seguimiento_rag: 'sin_rag',
+            velocidad_necesaria: null,
+            dias_comerciales_restantes: 0,
+            estado_seguimiento_rag: ragPorcentaje == null ? 'sin_rag' : 'pendiente_control_operador',
           }
         : null
       return route.fulfill({ status: 200, headers: jsonHeaders(), body: JSON.stringify(row) })
