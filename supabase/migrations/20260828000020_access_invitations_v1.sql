@@ -2,9 +2,8 @@
 -- Admin organización -> gerente zonal / gerente sucursal.
 -- Gerente zonal -> gerente sucursal de su propia zona.
 -- Supervisor/operador continúan administrándose desde cada sucursal.
--- Bootstrap: el único gerente activo de la 091 queda además como admin_organizacion,
--- preservando su rol operativo de gerente_sucursal.
 -- Los accesos invitados nacen inactivos y sólo se activan al crear la contraseña.
+-- Esta migración NO promueve automáticamente ninguna cuenta existente.
 
 create table if not exists public.invitaciones_acceso (
   id uuid primary key default gen_random_uuid(),
@@ -49,52 +48,6 @@ create index if not exists invitaciones_acceso_creador_idx
   on public.invitaciones_acceso(creado_por, created_at desc);
 create index if not exists invitaciones_acceso_email_idx
   on public.invitaciones_acceso(lower(email));
-
--- El propietario operativo actual de la implementación es el único gerente de la
--- sucursal 091. Le damos un segundo acceso, admin_organizacion, sin sustituir ni
--- ampliar el rol de ningún otro usuario. La aserción evita un bootstrap ambiguo.
-do $$
-declare
-  v_candidatos integer;
-begin
-  select count(*) into v_candidatos
-  from public.usuario_accesos ua
-  join public.sucursales s
-    on s.id = ua.sucursal_id
-   and s.organizacion_id = ua.organizacion_id
-  where ua.rol = 'gerente_sucursal'
-    and ua.activo = true
-    and s.codigo = '091'
-    and s.activa = true;
-
-  if v_candidatos <> 1 then
-    raise exception 'Bootstrap admin_organizacion ambiguo: gerentes activos 091 = %, esperado 1', v_candidatos;
-  end if;
-end $$;
-
-insert into public.usuario_accesos (
-  usuario_id, organizacion_id, rol, zona_id, sucursal_id, activo
-)
-select
-  ua.usuario_id,
-  ua.organizacion_id,
-  'admin_organizacion',
-  null,
-  null,
-  true
-from public.usuario_accesos ua
-join public.sucursales s
-  on s.id = ua.sucursal_id
- and s.organizacion_id = ua.organizacion_id
-where ua.rol = 'gerente_sucursal'
-  and ua.activo = true
-  and s.codigo = '091'
-  and s.activa = true
-on conflict (usuario_id, organizacion_id, rol)
-where zona_id is null and sucursal_id is null
-do update set
-  activo = true,
-  updated_at = now();
 
 create or replace function public.listar_contexto_altas_v1(p_actor_id uuid)
 returns jsonb
