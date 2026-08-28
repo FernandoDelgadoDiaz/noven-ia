@@ -1,40 +1,17 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useState } from 'react'
 import { CheckCircle2, KeyRound, Loader2, ShieldCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
+import { useNovenAccessContext } from '@/context/NovenAccessContext'
 
 export default function ActivarCuenta() {
   const navigate = useNavigate()
-  const [validando, setValidando] = useState(true)
-  const [sesionLista, setSesionLista] = useState(false)
+  const { session, authLoading, refreshAuthorization } = useNovenAccessContext()
   const [password, setPassword] = useState('')
   const [confirmacion, setConfirmacion] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [completado, setCompletado] = useState(false)
-
-  useEffect(() => {
-    let mounted = true
-
-    void supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return
-      setSesionLista(Boolean(data.session))
-      setValidando(false)
-    })
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return
-      if (session) {
-        setSesionLista(true)
-        setValidando(false)
-      }
-    })
-
-    return () => {
-      mounted = false
-      listener.subscription.unsubscribe()
-    }
-  }, [])
 
   async function activar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -66,6 +43,11 @@ export default function ActivarCuenta() {
       return
     }
 
+    // El provider pudo haber leído perfil/accesos mientras todavía estaban
+    // inactivos. Refrescamos el snapshot antes de entrar al shell para evitar un
+    // falso "Sin acceso activo" después de aceptar correctamente la invitación.
+    await refreshAuthorization()
+
     setCompletado(true)
     setGuardando(false)
     window.setTimeout(() => navigate('/dashboard', { replace: true }), 900)
@@ -83,12 +65,12 @@ export default function ActivarCuenta() {
         </div>
 
         <div className="bg-white rounded-card shadow-elevated p-6">
-          {validando ? (
+          {authLoading ? (
             <div className="py-10 flex flex-col items-center gap-3 text-muted-foreground">
               <Loader2 className="h-7 w-7 animate-spin text-brand" />
               <p className="text-sm">Validando invitación...</p>
             </div>
-          ) : !sesionLista ? (
+          ) : !session ? (
             <div className="py-6 text-center">
               <KeyRound className="h-9 w-9 mx-auto text-muted-foreground/50" />
               <p className="mt-4 font-semibold text-foreground">La invitación no es válida o venció</p>
