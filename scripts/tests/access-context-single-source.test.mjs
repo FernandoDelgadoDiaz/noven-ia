@@ -26,6 +26,27 @@ assert.match(context, /noven:sucursal-cambio/)
 assert.match(context, /a\.rol === 'gerente_sucursal'/)
 assert.match(context, /refreshAuthorization/)
 
+const operationalScope = context.match(
+  /function sucursalDentroScopeOperativo[\s\S]*?(?=\nexport function NovenAccessProvider)/,
+)?.[0] ?? ''
+assert.ok(operationalScope, 'debe existir el filtro cliente de sucursales operativas')
+assert.match(operationalScope, /acceso\.rol === 'gerente_zonal'/)
+assert.match(operationalScope, /acceso\.zona_id === sucursal\.zona_id/)
+assert.match(operationalScope, /acceso\.rol === 'gerente_sucursal'/)
+assert.match(operationalScope, /acceso\.rol === 'supervisor'/)
+assert.match(operationalScope, /acceso\.rol === 'operador'/)
+assert.match(operationalScope, /acceso\.sucursal_id === sucursal\.id/)
+assert.doesNotMatch(
+  operationalScope,
+  /admin_organizacion/,
+  'el privilegio jerárquico no debe ampliar sucursales operativas en cliente',
+)
+assert.match(
+  context,
+  /sucursalesPermitidas[\s\S]*?\.filter\(\(sucursal\) => sucursalDentroScopeOperativo\(sucursal, accesos\)\)/,
+  'la respuesta de sucursales debe intersectarse con el scope operativo aunque RLS devuelva filas de más',
+)
+
 for (const [name, source] of [
   ['useAuth', useAuth],
   ['useUsuarioRol', useRol],
@@ -43,4 +64,4 @@ assert.match(activar, /refreshAuthorization/)
 assert.match(activar, /aceptar_invitacion_acceso_v1/)
 assert.match(activar, /await refreshAuthorization\(\)/)
 
-console.log('✓ Sesión, perfil, accesos y sucursal comparten un único snapshot de autorización')
+console.log('✓ Sesión, perfil, accesos y sucursal comparten un único snapshot con scope operativo local/zonal')
