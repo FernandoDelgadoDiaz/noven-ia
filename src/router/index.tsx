@@ -3,11 +3,13 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import AppLayout from '../components/layout/AppLayout'
 import PrivateRoute from '../components/auth/PrivateRoute'
 import AdminRoute from '../components/auth/AdminRoute'
+import AccessAdminRoute from '../components/auth/AccessAdminRoute'
 import ErrorBoundary from '../components/ErrorBoundary'
 import RouteSkeleton from '../components/ui/RouteSkeleton'
 
-// Login se importa estáticamente — es la primera ruta que carga, sin overhead
+// Login y activación deben poder abrirse antes de una sesión normal.
 import Login from '../pages/Login'
+import ActivarCuenta from '../pages/ActivarCuenta'
 
 // Lazy loading por ruta — cada página genera su propio chunk en build
 const Dashboard = lazy(() => import('../pages/Dashboard'))
@@ -21,11 +23,13 @@ const ImportarMasivo = lazy(() => import('../pages/ImportarMasivoSeguro'))
 const PendientesCatalogo = lazy(() => import('../pages/PendientesCatalogo'))
 const AprenderPendientesCsv = lazy(() => import('../pages/AprenderPendientesCsv'))
 const Admin = lazy(() => import('../pages/Admin'))
+const AdminAccesos = lazy(() => import('../pages/AdminAccesos'))
 
 const suspenseProps = { fallback: <RouteSkeleton /> }
 
 export const router = createBrowserRouter([
   { path: '/login', element: <ErrorBoundary><Login /></ErrorBoundary> },
+  { path: '/activar', element: <ErrorBoundary><ActivarCuenta /></ErrorBoundary> },
   {
     path: '/',
     element: <PrivateRoute />,
@@ -36,97 +40,61 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="/dashboard" replace /> },
           {
             path: 'dashboard',
-            element: (
-              <ErrorBoundary>
-                <Suspense {...suspenseProps}><Dashboard /></Suspense>
-              </ErrorBoundary>
-            ),
+            element: <ErrorBoundary><Suspense {...suspenseProps}><Dashboard /></Suspense></ErrorBoundary>,
           },
           {
             path: 'scanner',
-            element: (
-              <ErrorBoundary>
-                <Suspense {...suspenseProps}><Scanner /></Suspense>
-              </ErrorBoundary>
-            ),
+            element: <ErrorBoundary><Suspense {...suspenseProps}><Scanner /></Suspense></ErrorBoundary>,
           },
           {
             path: 'vencimientos',
-            element: (
-              <ErrorBoundary>
-                <Suspense {...suspenseProps}><Vencimientos /></Suspense>
-              </ErrorBoundary>
-            ),
+            element: <ErrorBoundary><Suspense {...suspenseProps}><Vencimientos /></Suspense></ErrorBoundary>,
           },
           {
             path: 'historial',
-            element: (
-              <ErrorBoundary>
-                <Suspense {...suspenseProps}><Historial /></Suspense>
-              </ErrorBoundary>
-            ),
+            element: <ErrorBoundary><Suspense {...suspenseProps}><Historial /></Suspense></ErrorBoundary>,
           },
           {
             path: 'analisis',
-            element: (
-              <ErrorBoundary>
-                <Suspense {...suspenseProps}><Analisis /></Suspense>
-              </ErrorBoundary>
-            ),
+            element: <ErrorBoundary><Suspense {...suspenseProps}><Analisis /></Suspense></ErrorBoundary>,
           },
           {
             path: 'importar/pendientes',
-            element: (
-              <ErrorBoundary>
-                <Suspense {...suspenseProps}><PendientesCatalogo /></Suspense>
-              </ErrorBoundary>
-            ),
+            element: <ErrorBoundary><Suspense {...suspenseProps}><PendientesCatalogo /></Suspense></ErrorBoundary>,
           },
           {
             path: 'importar/pendientes/aprender',
-            element: (
-              <ErrorBoundary>
-                <Suspense {...suspenseProps}><AprenderPendientesCsv /></Suspense>
-              </ErrorBoundary>
-            ),
+            element: <ErrorBoundary><Suspense {...suspenseProps}><AprenderPendientesCsv /></Suspense></ErrorBoundary>,
           },
           {
-            // El flujo de importación todavía conserva el guard legacy de admin
-            // mientras terminamos el cutover de roles multitenant. Las operaciones
-            // masivas vuelven a validar usuario/sucursal en servidor y DB.
+            // Acciones que pertenecen exclusivamente a una sucursal concreta.
             element: <AdminRoute />,
             children: [
               {
                 path: 'importar',
-                element: (
-                  <ErrorBoundary>
-                    <Suspense {...suspenseProps}><ImportarInicio /></Suspense>
-                  </ErrorBoundary>
-                ),
+                element: <ErrorBoundary><Suspense {...suspenseProps}><ImportarInicio /></Suspense></ErrorBoundary>,
               },
               {
                 path: 'importar/familia',
-                element: (
-                  <ErrorBoundary>
-                    <Suspense {...suspenseProps}><ImportarFamilia /></Suspense>
-                  </ErrorBoundary>
-                ),
+                element: <ErrorBoundary><Suspense {...suspenseProps}><ImportarFamilia /></Suspense></ErrorBoundary>,
               },
               {
                 path: 'importar/masivo',
-                element: (
-                  <ErrorBoundary>
-                    <Suspense {...suspenseProps}><ImportarMasivo /></Suspense>
-                  </ErrorBoundary>
-                ),
+                element: <ErrorBoundary><Suspense {...suspenseProps}><ImportarMasivo /></Suspense></ErrorBoundary>,
               },
               {
                 path: 'admin',
-                element: (
-                  <ErrorBoundary>
-                    <Suspense {...suspenseProps}><Admin /></Suspense>
-                  </ErrorBoundary>
-                ),
+                element: <ErrorBoundary><Suspense {...suspenseProps}><Admin /></Suspense></ErrorBoundary>,
+              },
+            ],
+          },
+          {
+            // Administración superior: organización y zona.
+            element: <AccessAdminRoute />,
+            children: [
+              {
+                path: 'admin/accesos',
+                element: <ErrorBoundary><Suspense {...suspenseProps}><AdminAccesos /></Suspense></ErrorBoundary>,
               },
             ],
           },
