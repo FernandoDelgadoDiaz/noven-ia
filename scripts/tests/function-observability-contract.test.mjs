@@ -11,6 +11,9 @@ const helper = read('netlify/functions/_observability.ts')
 const listar = read('netlify/functions/listar-pendientes-catalogo.ts')
 const importar = read('netlify/functions/importar-asistido-completo.ts')
 const resolver = read('netlify/functions/resolver-pendiente-catalogo.ts')
+const adminAccesos = read('netlify/functions/admin-accesos.ts')
+const adminSucursal = read('netlify/functions/admin-sucursal.ts')
+const adminInvitaciones = read('netlify/functions/admin-invitaciones.ts')
 
 // El log es JSON estructurado y usa el request id de Netlify cuando está disponible.
 assert.match(helper, /x-nf-request-id/)
@@ -31,6 +34,9 @@ for (const [name, source] of [
   ['listar-pendientes-catalogo', listar],
   ['importar-asistido-completo', importar],
   ['resolver-pendiente-catalogo', resolver],
+  ['admin-accesos', adminAccesos],
+  ['admin-sucursal', adminSucursal],
+  ['admin-invitaciones', adminInvitaciones],
 ]) {
   assert.match(source, /import \{ logServerError \} from '\.\/_observability'/, `${name}: usa logger común`)
   assert.doesNotMatch(source, /console\.error\(/, `${name}: no imprime errores crudos`)
@@ -42,8 +48,23 @@ assert.match(importar, /operation: 'validar_operacion_local_server_v1'/)
 assert.match(importar, /operation: 'aplicar_importacion_glaciar_masiva_v2'/)
 assert.match(resolver, /operation: 'validar_resolucion_pendiente_server_v1'/)
 
-// Los 5xx de RPC devuelven mensajes estables; el detalle queda sólo en Netlify.
+// Admin distingue errores de negocio conocidos de fallos inesperados de DB/Auth.
+for (const source of [adminAccesos, adminSucursal, adminInvitaciones]) {
+  assert.match(source, /return 502/)
+  assert.match(source, /operation: 'session_verify'/)
+  assert.match(source, /statusCode: 502/)
+}
+assert.match(adminAccesos, /operation: 'registrar_invitacion_acceso_v1'/)
+assert.match(adminSucursal, /operation: 'guardar_usuario_sucursal_admin_v1'/)
+assert.match(adminSucursal, /operation: 'compensate_delete_auth_user'/)
+assert.match(adminInvitaciones, /operation: 'delete_pending_auth_user'/)
+assert.match(adminInvitaciones, /operation: 'rollback_invitation_after_auth_delete_failure'/)
+
+// Los 5xx devuelven mensajes estables; el detalle queda sólo en Netlify.
 assert.match(listar, /'No se pudo consultar el catálogo pendiente\.'/)
 assert.match(importar, /'No se pudo aplicar la importación\.'/)
+assert.match(adminAccesos, /'No se pudo consultar el contexto de accesos\.'/)
+assert.match(adminSucursal, /'No se pudo completar el listado de usuarios\.'/)
+assert.match(adminInvitaciones, /'No se pudo limpiar la cuenta pendiente en Auth\.'/)
 
-console.log('✓ Functions críticas emiten errores estructurados y redactados sin filtrar payloads sensibles')
+console.log('✓ Functions críticas y administrativas emiten errores estructurados y redactados sin filtrar payloads sensibles')
