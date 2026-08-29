@@ -3,6 +3,7 @@ import { ArrowLeft, CheckCircle, Loader2, RefreshCw, Tags, TriangleAlert } from 
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import ProductIdentity from '@/components/product/ProductIdentity'
+import { usePuedeGestionarCatalogo } from '@/hooks/usePuedeGestionarCatalogo'
 
 interface SucursalPendiente {
   id: string
@@ -57,6 +58,7 @@ async function tokenActual(): Promise<string> {
 
 export default function PendientesCatalogo() {
   const navigate = useNavigate()
+  const { puedeGestionar } = usePuedeGestionarCatalogo()
   const [pendientes, setPendientes] = useState<ProductoPendiente[]>([])
   const [familias, setFamilias] = useState<FamiliaInfo[]>([])
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
@@ -85,6 +87,11 @@ export default function PendientesCatalogo() {
       setFamiliaPorPendiente({})
       setFamiliaMasiva('')
 
+      if (!puedeGestionar) {
+        setFamilias([])
+        return
+      }
+
       const orgs = Array.from(new Set(lista.map((p) => p.organizacion_id)))
       if (orgs.length === 0) {
         setFamilias([])
@@ -103,7 +110,7 @@ export default function PendientesCatalogo() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [puedeGestionar])
 
   useEffect(() => {
     void cargar()
@@ -125,6 +132,7 @@ export default function PendientesCatalogo() {
   )
 
   async function resolverUno(pendienteId: string, familiaId: string): Promise<ResolveResponse> {
+    if (!puedeGestionar) throw new Error('No tenés permiso para clasificar productos.')
     const token = await tokenActual()
     const response = await fetch('/.netlify/functions/resolver-pendiente-catalogo', {
       method: 'POST',
@@ -140,6 +148,7 @@ export default function PendientesCatalogo() {
   }
 
   async function clasificarIndividual(pendiente: ProductoPendiente): Promise<void> {
+    if (!puedeGestionar) return
     const familiaId = familiaPorPendiente[pendiente.id]
     if (!familiaId) {
       setError('Elegí una familia antes de clasificar el producto.')
@@ -161,7 +170,7 @@ export default function PendientesCatalogo() {
   }
 
   async function clasificarSeleccionados(): Promise<void> {
-    if (seleccion.length === 0) return
+    if (!puedeGestionar || seleccion.length === 0) return
     if (!orgSeleccionada) {
       setError('La clasificación masiva sólo puede hacerse con productos de la misma organización.')
       return
@@ -190,6 +199,7 @@ export default function PendientesCatalogo() {
   }
 
   function toggle(id: string): void {
+    if (!puedeGestionar) return
     setSeleccionados((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -204,7 +214,7 @@ export default function PendientesCatalogo() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => navigate('/importar')}
+            onClick={() => navigate(puedeGestionar ? '/importar' : '/dashboard')}
             className="h-9 w-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             aria-label="Volver"
           >
@@ -237,6 +247,12 @@ export default function PendientesCatalogo() {
           </div>
         </div>
 
+        {!puedeGestionar && (
+          <div className="bg-sky-50 border border-sky-200 rounded-card p-4 text-sm text-sky-800">
+            Modo lectura. Podés revisar los pendientes dentro de tu alcance; la clasificación corresponde a responsables operativos de cada sucursal.
+          </div>
+        )}
+
         {loading && (
           <div className="bg-white rounded-card shadow-card p-6 flex items-center gap-3">
             <Loader2 className="h-5 w-5 text-brand animate-spin" />
@@ -266,7 +282,7 @@ export default function PendientesCatalogo() {
           </div>
         )}
 
-        {seleccion.length > 0 && (
+        {puedeGestionar && seleccion.length > 0 && (
           <div className="bg-white rounded-card shadow-card border border-brand/20 p-4 flex flex-col md:flex-row gap-3 md:items-end sticky top-[78px] z-[5]">
             <div className="flex-1">
               <p className="text-xs font-semibold text-foreground">{seleccion.length} producto(s) seleccionado(s)</p>
@@ -302,13 +318,15 @@ export default function PendientesCatalogo() {
               return (
                 <article key={p.id} className="bg-white rounded-card shadow-card border border-border/50 p-4">
                   <div className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={seleccionados.has(p.id)}
-                      onChange={() => toggle(p.id)}
-                      className="mt-1 h-4 w-4 accent-[color:var(--brand)]"
-                      aria-label={`Seleccionar ${p.cod_art}`}
-                    />
+                    {puedeGestionar && (
+                      <input
+                        type="checkbox"
+                        checked={seleccionados.has(p.id)}
+                        onChange={() => toggle(p.id)}
+                        className="mt-1 h-4 w-4 accent-[color:var(--brand)]"
+                        aria-label={`Seleccionar ${p.cod_art}`}
+                      />
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
                         <ProductIdentity
@@ -337,27 +355,29 @@ export default function PendientesCatalogo() {
                         ))}
                       </div>
 
-                      <div className="mt-4 flex flex-col sm:flex-row gap-2">
-                        <select
-                          value={familiaPorPendiente[p.id] ?? ''}
-                          onChange={(e) => setFamiliaPorPendiente((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                          disabled={guardando}
-                          className="flex-1 min-h-10 rounded-lg border border-border bg-white px-3 text-sm text-foreground disabled:opacity-50"
-                        >
-                          <option value="">Elegir familia...</option>
-                          {familiasProducto.map((f) => (
-                            <option key={f.id} value={f.id}>{f.codigo} · {f.nombre}</option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          disabled={!familiaPorPendiente[p.id] || guardando}
-                          onClick={() => void clasificarIndividual(p)}
-                          className="min-h-10 px-4 rounded-lg bg-brand hover:bg-brand-hover text-white text-sm font-semibold disabled:opacity-50"
-                        >
-                          Clasificar para toda la organización
-                        </button>
-                      </div>
+                      {puedeGestionar && (
+                        <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                          <select
+                            value={familiaPorPendiente[p.id] ?? ''}
+                            onChange={(e) => setFamiliaPorPendiente((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                            disabled={guardando}
+                            className="flex-1 min-h-10 rounded-lg border border-border bg-white px-3 text-sm text-foreground disabled:opacity-50"
+                          >
+                            <option value="">Elegir familia...</option>
+                            {familiasProducto.map((f) => (
+                              <option key={f.id} value={f.id}>{f.codigo} · {f.nombre}</option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={!familiaPorPendiente[p.id] || guardando}
+                            onClick={() => void clasificarIndividual(p)}
+                            className="min-h-10 px-4 rounded-lg bg-brand hover:bg-brand-hover text-white text-sm font-semibold disabled:opacity-50"
+                          >
+                            Clasificar para toda la organización
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </article>
