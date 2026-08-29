@@ -50,6 +50,11 @@ interface VencimientoOperativoRow {
   venta_media_diaria: number
 }
 
+interface SeguimientoRagResumenRow {
+  vencimiento_id: string
+  rag_porcentaje: number | null
+}
+
 /** Narrowing helper para el camino legacy. */
 function hasProducto(
   row: Vencimiento & { producto: Producto | null },
@@ -205,11 +210,36 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
     }
 
     const hoyDate = new Date()
-    const conRiesgo: VencimientoConRiesgo[] = typed
+    const conRiesgoBase: VencimientoConRiesgo[] = typed
       // NULL significa fuera del circuito. Nunca inferimos una ventana alternativa.
       .filter((row): row is typeof row & { dias_donacion: number } => row.dias_donacion != null)
       .map((row) => calcularRiesgo(row, row.producto, hoyDate))
       .sort((a, b) => a.dias_restantes - b.dias_restantes)
+
+    let conRiesgo: VencimientoConRiesgo[] = conRiesgoBase
+
+    if (conRiesgoBase.length > 0) {
+      const { data: seguimientoRag, error: seguimientoRagError } = await supabase
+        .from('v_seguimiento_rag_actual')
+        .select('vencimiento_id, rag_porcentaje')
+        .in('vencimiento_id', conRiesgoBase.map((row) => row.id))
+
+      if (!seguimientoRagError) {
+        const ragPorVencimiento = new Map<string, number>()
+        for (const row of (seguimientoRag ?? []) as SeguimientoRagResumenRow[]) {
+          if (row.rag_porcentaje != null && Number.isFinite(row.rag_porcentaje) && row.rag_porcentaje > 0) {
+            ragPorVencimiento.set(row.vencimiento_id, row.rag_porcentaje)
+          }
+        }
+
+        conRiesgo = conRiesgoBase.map((row) => ({
+          ...row,
+          rag_porcentaje: ragPorVencimiento.get(row.id) ?? null,
+        }))
+      } else if (!vistaOperativaNoDisponible(seguimientoRagError)) {
+        console.error('[useVencimientos] seguimiento RAG:', seguimientoRagError)
+      }
+    }
 
     setRawData(conRiesgo)
     setFetchLoading(false)
