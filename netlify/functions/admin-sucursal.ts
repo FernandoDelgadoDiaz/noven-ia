@@ -309,7 +309,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     })
     if (error) {
       const status = statusRpc(error.message)
-      return json(status, publicRpcErrorPayload(event, 'admin-sucursal', 'listar_admin_sucursal_failed', error, status, 'No se pudo cargar la administración de la sucursal.'))
+      return json(status, publicRpcErrorPayload(event, 'admin-sucursal', 'guardar_usuario_sucursal_failed', error, status, 'No se pudo guardar el usuario de la sucursal.'))
     }
     return json(200, { success: true, usuario: data })
   }

@@ -1,6 +1,6 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
-import { getCorsHeaders, logServerError, publicRpcErrorPayload, serverErrorPayload } from './_auth'
+import { getCorsHeaders, logServerError, serverErrorPayload } from './_auth'
 import { SYSTEM_ADMIN, SYSTEM_OPERADOR } from './_analisis_policy'
 
 const UMBRAL_RADAR = 45
@@ -240,9 +240,9 @@ const handler: Handler = async (event: HandlerEvent) => {
       .eq('sucursal_id', sucursalId)
       .eq('activo', true)
     if (familiasError) {
-    logServerError(event, 'analisis', 'familias_read_failed', familiasError)
-    return json(502, serverErrorPayload(event, 'No se pudieron validar las familias.'))
-  }
+      logServerError(event, 'analisis', 'familias_read_failed', familiasError)
+      return json(502, serverErrorPayload(event, 'No se pudieron validar las familias.'))
+    }
     familiaIds = (familiasAsignadas ?? []).map((r) => r.familia_id as string)
     if (familiaIds.length === 0) {
       return json(200, {

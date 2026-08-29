@@ -190,24 +190,27 @@ const handler: Handler = async (event) => {
     if (deleteError) {
       // La operación se considera fallida completa: dejamos la invitación nuevamente
       // pendiente para que el administrador pueda reintentar sin quedar bloqueado.
-      await supabase
+      const { error: restoreError } = await supabase
         .from('invitaciones_acceso')
         .update({ estado: 'pendiente', anulada_at: null })
         .eq('id', invitacionId)
+      if (restoreError) logServerError(event, 'admin-invitaciones', 'rollback_pending_failed', restoreError)
       logServerError(event, 'admin-invitaciones', 'auth_delete_failed', deleteError)
       return jsonResponse(event, 502, serverErrorPayload(event, 'No se pudo limpiar la cuenta pendiente en Auth.'))
     }
-    await supabase
+    const { error: markDeletedError } = await supabase
       .from('invitaciones_acceso')
       .update({ auth_deleted_at: new Date().toISOString() })
       .eq('id', invitacionId)
+    if (markDeletedError) logServerError(event, 'admin-invitaciones', 'mark_auth_deleted_failed', markDeletedError)
   } else if (anulacion.usuario_id) {
     // Un pendiente nunca debería tener otro acceso activo. Fallamos cerrado para no
     // borrar una identidad que pueda estar siendo usada por otro alcance válido.
-    await supabase
+    const { error: restoreError } = await supabase
       .from('invitaciones_acceso')
       .update({ estado: 'pendiente', anulada_at: null })
       .eq('id', invitacionId)
+    if (restoreError) logServerError(event, 'admin-invitaciones', 'rollback_pending_failed', restoreError)
     return jsonResponse(event, 409, {
       success: false,
       error: 'La cuenta asociada tiene otro acceso activo y no puede limpiarse desde esta invitación.',
