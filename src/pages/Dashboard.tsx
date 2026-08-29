@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Package, ScanLine, RefreshCw, AlertTriangle, FolderX, HandHeart, Trash2, CircleCheckBig } from 'lucide-react'
+import { Package, ScanLine, RefreshCw, AlertTriangle, FolderX, Trash2, CircleCheckBig } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useVencimientos } from '@/hooks/useVencimientos'
 import { useAuth } from '@/hooks/useAuth'
@@ -54,6 +54,9 @@ export default function Dashboard() {
     vendidos,
     donaciones,
     decomisos: decomisosTrimestrales,
+    recuperado,
+    perdido,
+    hayValorizacionRetrospectiva,
     loading: loadingAcciones,
     trimestreInfo,
     refetch: refetchAcciones,
@@ -64,7 +67,6 @@ export default function Dashboard() {
   const [costosSinIva, setCostosSinIva] = useState<Record<string, number>>({})
   const [costosLoading, setCostosLoading] = useState(false)
 
-  // Lookup de nombres de familia (solo para mostrar en las cards de alerta).
   const [familiaNombres, setFamiliaNombres] = useState<Record<string, string>>({})
   const familiaIdsEnData = useMemo(() => {
     const set = new Set<string>()
@@ -130,9 +132,14 @@ export default function Dashboard() {
   )
 
   const itemsEnRiesgo = data.filter(
-    (v) => v.nivel_riesgo === 'decomiso' || v.nivel_riesgo === 'donacion' || v.nivel_riesgo === 'urgente',
+    (v) => v.nivel_riesgo === 'decomiso' || v.nivel_riesgo === 'donacion' || v.nivel_riesgo === 'urgente' || v.nivel_riesgo === 'radar',
   )
   const enRiesgo = itemsEnRiesgo.length
+
+  const itemsAccionInmediata = data.filter(
+    (v) => v.nivel_riesgo === 'decomiso' || v.nivel_riesgo === 'donacion' || v.nivel_riesgo === 'urgente',
+  )
+  const accionInmediata = itemsAccionInmediata.length
 
   const exposiciones = itemsEnRiesgo.map((v) => ({
     productoId: v.producto_id,
@@ -152,6 +159,7 @@ export default function Dashboard() {
 
   const enRadar = data.filter((v) => v.nivel_riesgo === 'radar').length
   const hayCriticos = data.some((v) => v.nivel_riesgo === 'decomiso' || v.nivel_riesgo === 'donacion')
+  const perdidaUnidades = donaciones + decomisosTrimestrales
 
   const avatarLetter = user?.email?.[0]?.toUpperCase() ?? 'U'
 
@@ -264,7 +272,7 @@ export default function Dashboard() {
 
         {!loading && (
           <>
-            {enRiesgo > 0 && (
+            {accionInmediata > 0 && (
               <div className="flex items-center gap-3 bg-red-50 border-l-4 border-red-600 rounded-r-2xl px-4 py-3 animate-fade-in">
                 <div className="h-9 w-9 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
                   <AlertTriangle className="h-4 w-4 text-red-600" aria-hidden="true" />
@@ -272,7 +280,7 @@ export default function Dashboard() {
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-red-800 text-sm leading-snug">Atención requerida</p>
                   <p className="text-red-600 text-xs mt-0.5">
-                    {enRiesgo} producto{enRiesgo !== 1 ? 's' : ''} requieren acción inmediata.
+                    {accionInmediata} producto{accionInmediata !== 1 ? 's' : ''} requieren acción inmediata.
                   </p>
                 </div>
                 <button
@@ -341,23 +349,46 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between gap-3 mb-2.5">
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Resultados</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{trimestreInfo.label}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{trimestreInfo.label} · costo s/IVA</p>
                   </div>
                   <button type="button" onClick={() => navigate('/historial')} className="text-[10px] font-semibold text-brand">Ver historial →</button>
                 </div>
-                <div className="grid grid-cols-3 divide-x divide-border">
-                  <button type="button" onClick={() => navigate('/historial?tipo=vendido')} className="px-2 text-left">
-                    <div className="flex items-center gap-1.5"><CircleCheckBig className="h-3.5 w-3.5 text-emerald-600" /><span className="text-xl font-black tabular-nums text-emerald-600">{loadingAcciones ? '–' : vendidos}</span></div>
-                    <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mt-1">Vendidos</p>
+
+                <div className="grid grid-cols-2 divide-x divide-border">
+                  <button type="button" onClick={() => navigate('/historial?tipo=vendido')} className="pr-3 text-left">
+                    <div className="flex items-center gap-1.5">
+                      <CircleCheckBig className="h-3.5 w-3.5 text-emerald-600" />
+                      <span className="text-xl font-black tabular-nums text-emerald-600">{loadingAcciones ? '–' : formatearUnidades(vendidos)}</span>
+                      <span className="text-[9px] font-bold uppercase text-muted-foreground">un.</span>
+                    </div>
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mt-1">Recuperadas por venta</p>
+                    <p className="text-sm font-black tabular-nums text-emerald-700 mt-1">
+                      {loadingAcciones ? '–' : recuperado.accionesConCosto > 0 ? formatearPesos(recuperado.pesos) : 'Costo pendiente'}
+                    </p>
+                    {recuperado.accionesSinCosto > 0 && !loadingAcciones && (
+                      <p className="text-[8px] text-muted-foreground mt-0.5">{recuperado.accionesSinCosto} cierre{recuperado.accionesSinCosto !== 1 ? 's' : ''} sin costo</p>
+                    )}
                   </button>
-                  <button type="button" onClick={() => navigate('/historial?tipo=donacion')} className="px-3 text-left">
-                    <div className="flex items-center gap-1.5"><HandHeart className="h-3.5 w-3.5 text-orange-600" /><span className="text-xl font-black tabular-nums text-orange-600">{loadingAcciones ? '–' : donaciones}</span></div>
-                    <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mt-1">Donación</p>
+
+                  <button type="button" onClick={() => navigate('/historial')} className="pl-3 text-left">
+                    <div className="flex items-center gap-1.5">
+                      <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                      <span className="text-xl font-black tabular-nums text-red-600">{loadingAcciones ? '–' : formatearUnidades(perdidaUnidades)}</span>
+                      <span className="text-[9px] font-bold uppercase text-muted-foreground">un.</span>
+                    </div>
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mt-1">Perdidas · donación + decomiso</p>
+                    <p className="text-sm font-black tabular-nums text-red-700 mt-1">
+                      {loadingAcciones ? '–' : perdido.accionesConCosto > 0 ? formatearPesos(perdido.pesos) : 'Costo pendiente'}
+                    </p>
+                    {perdido.accionesSinCosto > 0 && !loadingAcciones && (
+                      <p className="text-[8px] text-muted-foreground mt-0.5">{perdido.accionesSinCosto} cierre{perdido.accionesSinCosto !== 1 ? 's' : ''} sin costo</p>
+                    )}
                   </button>
-                  <button type="button" onClick={() => navigate('/historial?tipo=decomiso')} className="px-3 text-left">
-                    <div className="flex items-center gap-1.5"><Trash2 className="h-3.5 w-3.5 text-red-600" /><span className="text-xl font-black tabular-nums text-red-600">{loadingAcciones ? '–' : decomisosTrimestrales}</span></div>
-                    <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mt-1">Decomiso</p>
-                  </button>
+                </div>
+
+                <div className="mt-2.5 pt-2 border-t border-border/60 flex items-center justify-between gap-2 text-[9px] text-muted-foreground">
+                  <span>Donación: {donaciones} un. · Decomiso: {decomisosTrimestrales} un.</span>
+                  {hayValorizacionRetrospectiva && <span title="Acciones anteriores al registro de costos 0258 se valorizaron con el primer costo disponible." className="text-right">histórico valorizado*</span>}
                 </div>
               </div>
             </section>
