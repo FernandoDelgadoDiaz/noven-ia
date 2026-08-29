@@ -81,7 +81,13 @@ const handler: Handler = async (event: HandlerEvent) => {
 
   if (error) {
     const status = /alcance|permiso|organización|familia/i.test(error.message) ? 403 : 409
-    return json(status, { success: false, error: error.message })
+    logServerError(event, { endpoint: ENDPOINT, operation: 'resolver_producto_pendiente_catalogo', statusCode: status, error })
+    return json(status, {
+      success: false,
+      error: status === 403
+        ? 'No tenés permiso para clasificar este producto.'
+        : 'No se pudo completar la clasificación del producto.',
+    })
   }
 
   return json(200, { success: true, resultado: data })
