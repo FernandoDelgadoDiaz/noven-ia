@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Package, ScanLine, RefreshCw, AlertTriangle, FolderX, HandHeart, Trash2, CircleCheckBig } from 'lucide-react'
+import { Package, ScanLine, RefreshCw, AlertTriangle, FolderX, Trash2, CircleCheckBig } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useVencimientos } from '@/hooks/useVencimientos'
 import { useAuth } from '@/hooks/useAuth'
@@ -131,15 +131,11 @@ export default function Dashboard() {
     (a, b) => ORDEN_RIESGO[a.nivel_riesgo] - ORDEN_RIESGO[b.nivel_riesgo],
   )
 
-  // Riesgo económico actual: todo caso activo cuya proyección muestra exposición,
-  // incluido Radar. Seguro queda afuera porque no tiene unidades proyectadas a perder.
   const itemsEnRiesgo = data.filter(
     (v) => v.nivel_riesgo === 'decomiso' || v.nivel_riesgo === 'donacion' || v.nivel_riesgo === 'urgente' || v.nivel_riesgo === 'radar',
   )
   const enRiesgo = itemsEnRiesgo.length
 
-  // El aviso rojo mantiene una semántica distinta: acción inmediata. Radar forma
-  // parte del riesgo total, pero no debe inflar este contador operativo.
   const itemsAccionInmediata = data.filter(
     (v) => v.nivel_riesgo === 'decomiso' || v.nivel_riesgo === 'donacion' || v.nivel_riesgo === 'urgente',
   )
