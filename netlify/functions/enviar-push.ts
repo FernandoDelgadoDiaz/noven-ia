@@ -1,6 +1,7 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
+import { logServerError } from './_observability'
 
 /**
  * enviar-push — disparada por el trigger de DB cuando un vencimiento entra en
@@ -31,6 +32,8 @@ interface AccesoLocalRow {
   rol: string
 }
 
+const ENDPOINT = 'enviar-push'
+
 const handler: Handler = async (event: HandlerEvent) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ success: false, error: 'Método no permitido' }) }
@@ -49,7 +52,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const vapidSubject = process.env.VAPID_SUBJECT ?? 'mailto:gerente091@gmail.com'
 
   if (!supabaseUrl || !serviceRoleKey || !vapidPublic || !vapidPrivate) {
-    console.error('[enviar-push] Faltan variables de entorno')
+    logServerError(event, { endpoint: ENDPOINT, operation: 'server_config', statusCode: 500, error: 'Config de servidor incompleta' })
     return { statusCode: 500, body: JSON.stringify({ success: false, error: 'Config de servidor incompleta' }) }
   }
 
@@ -77,7 +80,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     .maybeSingle()
 
   if (vencimientoError) {
-    console.error('[enviar-push] No se pudo resolver el vencimiento:', vencimientoError.message)
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_expiry', statusCode: 500, error: vencimientoError })
     return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudo resolver el vencimiento' }) }
   }
   if (!vencimiento) {
@@ -91,7 +94,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     .maybeSingle()
 
   if (productoError) {
-    console.error('[enviar-push] No se pudo resolver el producto:', productoError.message)
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_product', statusCode: 500, error: productoError })
     return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudo resolver el producto' }) }
   }
 
@@ -110,7 +113,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     .in('rol', ['gerente_sucursal', 'supervisor', 'operador'])
 
   if (accesosError) {
-    console.error('[enviar-push] No se pudieron resolver accesos locales:', accesosError.message)
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_local_accesses', statusCode: 500, error: accesosError })
     return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudieron resolver destinatarios' }) }
   }
 
@@ -134,7 +137,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       .eq('activo', true)
 
     if (responsablesError) {
-      console.error('[enviar-push] No se pudo resolver responsable de familia:', responsablesError.message)
+      logServerError(event, { endpoint: ENDPOINT, operation: 'load_family_responsibles', statusCode: 500, error: responsablesError })
       return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudo resolver responsable de familia' }) }
     }
 
@@ -157,7 +160,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     .in('usuario_id', Array.from(userIds))
 
   if (subsError) {
-    console.error('[enviar-push] No se pudieron leer suscripciones:', subsError.message)
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_push_subscriptions', statusCode: 500, error: subsError })
     return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudieron leer suscripciones push' }) }
   }
 
@@ -188,14 +191,23 @@ const handler: Handler = async (event: HandlerEvent) => {
         if (statusCode === 410 || statusCode === 404) {
           expiradas.push(row.id as string)
         } else {
-          console.error('[enviar-push] error enviando push:', statusCode, (err as Error).message)
+          logServerError(event, { endpoint: ENDPOINT, operation: 'send_notification', statusCode: 502, error: err })
         }
       }
     }),
   )
 
   if (expiradas.length > 0) {
-    await supabase.from('push_subscriptions').delete().in('id', expiradas)
+    const { error: cleanupError } = await supabase
+      .from('push_subscriptions')
+      .delete()
+      .in('id', expiradas)
+
+    if (cleanupError) {
+      // Los pushes ya fueron procesados; un fallo de limpieza no debe convertir
+      // un despacho parcialmente exitoso en 500 ni inducir un reintento duplicado.
+      logServerError(event, { endpoint: ENDPOINT, operation: 'delete_expired_subscriptions', statusCode: 500, error: cleanupError })
+    }
   }
 
   return {
