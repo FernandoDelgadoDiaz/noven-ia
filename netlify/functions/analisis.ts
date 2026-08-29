@@ -1,11 +1,13 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import { getCorsHeaders } from './_auth'
+import { logServerError } from './_observability'
 import { SYSTEM_ADMIN, SYSTEM_OPERADOR } from './_analisis_policy'
 
 const UMBRAL_RADAR = 45
 const UMBRAL_URGENTE = 20
 const TZ_OPERATIVA = 'America/Argentina/Buenos_Aires'
+const ENDPOINT = 'analisis'
 
 type RolAcceso = 'admin_organizacion' | 'gerente_zonal' | 'gerente_sucursal' | 'supervisor' | 'operador'
 
@@ -159,6 +161,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const deepseekKey = process.env.DEEPSEEK_API_KEY
   if (!supabaseUrl || !anonKey || !serviceRoleKey || !deepseekKey) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'server_config', statusCode: 500, error: 'Configuración de servidor incompleta' })
     return json(500, { success: false, error: 'Configuración de servidor incompleta' })
   }
 
@@ -176,7 +179,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     uid = user.id ?? ''
     if (!uid) return json(401, { success: false, error: 'No autorizado' })
   } catch (err) {
-    return json(502, { success: false, error: `No se pudo validar la sesión: ${err instanceof Error ? err.message : String(err)}` })
+    logServerError(event, { endpoint: ENDPOINT, operation: 'session_verify', statusCode: 502, error: err })
+    return json(502, { success: false, error: 'No se pudo validar la sesión.' })
   }
 
   let body: Body
@@ -198,9 +202,15 @@ const handler: Handler = async (event: HandlerEvent) => {
     supabase.from('usuarios').select('activo').eq('id', uid).maybeSingle(),
     supabase.from('sucursales').select('id, codigo, nombre, organizacion_id, zona_id, activa').eq('id', sucursalId).maybeSingle(),
   ])
-  if (perfilError) return json(502, { success: false, error: `No se pudo validar el perfil: ${perfilError.message}` })
+  if (perfilError) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_profile', statusCode: 502, error: perfilError })
+    return json(502, { success: false, error: 'No se pudo validar el perfil.' })
+  }
   if (!perfil?.activo) return json(403, { success: false, error: 'La cuenta no está activa en Noven.' })
-  if (sucursalError) return json(502, { success: false, error: `No se pudo validar la sucursal: ${sucursalError.message}` })
+  if (sucursalError) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_store', statusCode: 502, error: sucursalError })
+    return json(502, { success: false, error: 'No se pudo validar la sucursal.' })
+  }
   if (!sucursal?.activa) return json(404, { success: false, error: 'La sucursal no existe o está inactiva.' })
 
   const { data: accesosRaw, error: accesosError } = await supabase
@@ -209,7 +219,10 @@ const handler: Handler = async (event: HandlerEvent) => {
     .eq('usuario_id', uid)
     .eq('organizacion_id', sucursal.organizacion_id)
     .eq('activo', true)
-  if (accesosError) return json(502, { success: false, error: `No se pudo validar el alcance: ${accesosError.message}` })
+  if (accesosError) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_access_scope', statusCode: 502, error: accesosError })
+    return json(502, { success: false, error: 'No se pudo validar el alcance.' })
+  }
 
   const accesos = (accesosRaw ?? []) as AccesoRow[]
   const scopeCompleto = accesos.some((a) =>
@@ -229,7 +242,10 @@ const handler: Handler = async (event: HandlerEvent) => {
       .eq('usuario_id', uid)
       .eq('sucursal_id', sucursalId)
       .eq('activo', true)
-    if (familiasError) return json(502, { success: false, error: `No se pudieron validar las familias: ${familiasError.message}` })
+    if (familiasError) {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'load_operator_families', statusCode: 502, error: familiasError })
+      return json(502, { success: false, error: 'No se pudieron validar las familias.' })
+    }
     familiaIds = (familiasAsignadas ?? []).map((r) => r.familia_id as string)
     if (familiaIds.length === 0) {
       return json(200, {
@@ -246,7 +262,10 @@ const handler: Handler = async (event: HandlerEvent) => {
     .select('id, cantidad, fecha_vencimiento, descripcion, marca, gramaje, cod_art, codigo_barras, venta_media_diaria, familia_id, categoria, sector_nombre, dias_donacion')
     .eq('activo', true)
     .eq('sucursal_id', sucursalId)
-  if (vErr) return json(502, { success: false, error: `Error al leer vencimientos: ${vErr.message}` })
+  if (vErr) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_expiries', statusCode: 502, error: vErr })
+    return json(502, { success: false, error: 'No se pudieron leer los vencimientos.' })
+  }
 
   let vencs = (rows ?? []) as unknown as VencRow[]
   if (!scopeCompleto) vencs = vencs.filter((r) => r.familia_id != null && familiaIds.includes(r.familia_id))
@@ -254,11 +273,15 @@ const handler: Handler = async (event: HandlerEvent) => {
   const famIds = Array.from(new Set(vencs.map((r) => r.familia_id).filter((x): x is string => Boolean(x))))
   const famNombre = new Map<string, string>()
   if (famIds.length > 0) {
-    const { data: fams } = await supabase
+    const { data: fams, error: famsError } = await supabase
       .from('familias')
       .select('id, nombre')
       .eq('organizacion_id', sucursal.organizacion_id)
       .in('id', famIds)
+    if (famsError) {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'load_family_names', statusCode: 502, error: famsError })
+      return json(502, { success: false, error: 'No se pudieron cargar los nombres de familias.' })
+    }
     for (const f of fams ?? []) famNombre.set(f.id as string, f.nombre as string)
   }
 
@@ -266,7 +289,10 @@ const handler: Handler = async (event: HandlerEvent) => {
     .from('v_seguimiento_rag_actual')
     .select('vencimiento_id, familia_id, rag_porcentaje, estado_seguimiento_rag, velocidad_observada, velocidad_necesaria, cantidad_observada, unidades_vendidas_observadas')
     .eq('sucursal_id', sucursalId)
-  if (ragError) return json(502, { success: false, error: `Error al leer seguimiento RAG: ${ragError.message}` })
+  if (ragError) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_rag', statusCode: 502, error: ragError })
+    return json(502, { success: false, error: 'No se pudo leer el seguimiento RAG.' })
+  }
   let rags = (ragRaw ?? []) as unknown as RagRow[]
   if (!scopeCompleto) rags = rags.filter((r) => r.familia_id != null && familiaIds.includes(r.familia_id))
   const ragPorVencimiento = new Map(rags.map((r) => [r.vencimiento_id, r]))
@@ -282,7 +308,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     supabase.from('acciones_operativas').select(accionSelect).eq('sucursal_id', sucursalId).eq('trimestre', trimestreAnterior).eq('anio', anioAnterior),
   ])
   if (accActualError || accAnteriorError) {
-    return json(502, { success: false, error: `Error al leer historial: ${(accActualError ?? accAnteriorError)?.message}` })
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_action_history', statusCode: 502, error: accActualError ?? accAnteriorError })
+    return json(502, { success: false, error: 'No se pudo leer el historial operativo.' })
   }
 
   const filtrarAccion = (a: AccionRow) => scopeCompleto || (a.productos?.familia_id != null && familiaIds.includes(a.productos.familia_id))
@@ -411,12 +438,20 @@ const handler: Handler = async (event: HandlerEvent) => {
       }),
     })
     if (!dsRes.ok) {
-      console.error('[analisis] DeepSeek error', dsRes.status, await dsRes.text().catch(() => ''))
-      return json(502, { success: false, error: `Error del modelo de análisis (${dsRes.status})` })
+      logServerError(event, {
+        endpoint: ENDPOINT,
+        operation: 'deepseek_http',
+        statusCode: 502,
+        error: { name: 'DeepSeekHttpError', code: String(dsRes.status), message: 'El proveedor devolvió un estado HTTP no exitoso' },
+      })
+      return json(502, { success: false, error: 'No se pudo completar el análisis con el modelo.' })
     }
     const dsData = await dsRes.json() as { choices?: Array<{ message?: { content?: string } }> }
     const contenido = dsData.choices?.[0]?.message?.content?.trim() ?? ''
-    if (!contenido) return json(502, { success: false, error: 'El modelo no devolvió contenido' })
+    if (!contenido) {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'deepseek_empty', statusCode: 502, error: 'El modelo devolvió contenido vacío' })
+      return json(502, { success: false, error: 'El modelo no devolvió contenido.' })
+    }
     return json(200, {
       success: true,
       analisis: contenido,
@@ -425,7 +460,8 @@ const handler: Handler = async (event: HandlerEvent) => {
       sucursal_codigo: sucursal.codigo,
     })
   } catch (err) {
-    return json(502, { success: false, error: `Error al contactar el modelo: ${err instanceof Error ? err.message : String(err)}` })
+    logServerError(event, { endpoint: ENDPOINT, operation: 'deepseek_request', statusCode: 502, error: err })
+    return json(502, { success: false, error: 'No se pudo contactar el modelo de análisis.' })
   }
 }
 
