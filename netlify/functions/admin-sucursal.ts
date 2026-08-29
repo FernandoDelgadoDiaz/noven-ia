@@ -1,6 +1,7 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import { getCorsHeaders } from './_auth'
+import { logServerError } from './_observability'
 
 type CanalInvitacion = 'link' | 'email'
 type RolLocalInvitable = 'supervisor' | 'operador'
@@ -44,33 +45,36 @@ interface AdminPayload {
   usuarios?: Array<Record<string, unknown> & { id?: string }>
 }
 
+const ENDPOINT = 'admin-sucursal'
+
 function statusRpc(message: string): number {
   if (/permiso|prohibido|alcance|administrar/i.test(message)) return 403
   if (/inexistente|no encontr/i.test(message)) return 404
   if (/familia|rol|nombre|email|canal|obligatorio|inválid|requiere/i.test(message)) return 400
   if (/registrada|responsable|duplicate|unique/i.test(message)) return 409
-  return 409
+  return 502
 }
 
 async function validarSesion(
   event: HandlerEvent,
   supabaseUrl: string,
   anonKey: string,
-): Promise<{ uid: string } | { error: string }> {
+): Promise<{ uid: string } | { error: string; status: number }> {
   const authHeader = event.headers.authorization ?? event.headers.Authorization ?? ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
-  if (!token) return { error: 'No autorizado: token ausente' }
+  if (!token) return { error: 'No autorizado: token ausente', status: 401 }
 
   try {
     const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: { Authorization: `Bearer ${token}`, apikey: anonKey },
     })
-    if (!res.ok) return { error: 'No autorizado: sesión inválida o expirada' }
+    if (!res.ok) return { error: 'No autorizado: sesión inválida o expirada', status: 401 }
     const user = await res.json() as { id?: string }
-    if (!user.id) return { error: 'No autorizado: usuario no resoluble' }
+    if (!user.id) return { error: 'No autorizado: usuario no resoluble', status: 401 }
     return { uid: user.id }
   } catch (err) {
-    return { error: `No se pudo verificar la sesión: ${err instanceof Error ? err.message : String(err)}` }
+    logServerError(event, { endpoint: ENDPOINT, operation: 'session_verify', statusCode: 502, error: err })
+    return { error: 'No se pudo verificar la sesión.', status: 502 }
   }
 }
 
@@ -101,6 +105,7 @@ async function listarEmailsAuth(
 }
 
 async function eliminarAuthUser(
+  event: HandlerEvent,
   supabaseUrl: string,
   serviceRoleKey: string,
   userId: string,
@@ -113,7 +118,12 @@ async function eliminarAuthUser(
     },
   })
   if (!res.ok) {
-    console.error('[admin-sucursal] compensación Auth falló', res.status, userId)
+    logServerError(event, {
+      endpoint: ENDPOINT,
+      operation: 'compensate_delete_auth_user',
+      statusCode: 502,
+      error: `Auth delete HTTP ${res.status}`,
+    })
   }
 }
 
@@ -132,11 +142,12 @@ const handler: Handler = async (event: HandlerEvent) => {
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'server_config', statusCode: 500, error: 'Configuración de servidor incompleta' })
     return json(500, { success: false, error: 'Configuración de servidor incompleta' })
   }
 
   const sesion = await validarSesion(event, supabaseUrl, anonKey)
-  if ('error' in sesion) return json(401, { success: false, error: sesion.error })
+  if ('error' in sesion) return json(sesion.status, { success: false, error: sesion.error })
 
   let body: Body
   try {
@@ -157,7 +168,16 @@ const handler: Handler = async (event: HandlerEvent) => {
       p_actor_id: sesion.uid,
       p_sucursal_id: sucursalId,
     })
-    if (error) return json(statusRpc(error.message), { success: false, error: error.message })
+    if (error) {
+      const status = statusRpc(error.message)
+      if (status >= 500) {
+        logServerError(event, { endpoint: ENDPOINT, operation: 'listar_admin_sucursal_v1', statusCode: status, error })
+      }
+      return json(status, {
+        success: false,
+        error: status >= 500 ? 'No se pudo consultar la administración de la sucursal.' : error.message,
+      })
+    }
 
     try {
       const payload = (data ?? {}) as AdminPayload
@@ -168,7 +188,8 @@ const handler: Handler = async (event: HandlerEvent) => {
       }))
       return json(200, { success: true, ...payload, usuarios })
     } catch (err) {
-      return json(502, { success: false, error: err instanceof Error ? err.message : String(err) })
+      logServerError(event, { endpoint: ENDPOINT, operation: 'listar_auth_users', statusCode: 502, error: err })
+      return json(502, { success: false, error: 'No se pudo completar el listado de usuarios.' })
     }
   }
 
@@ -205,7 +226,16 @@ const handler: Handler = async (event: HandlerEvent) => {
       p_actor_id: sesion.uid,
       p_sucursal_id: sucursalId,
     })
-    if (permisoError) return json(statusRpc(permisoError.message), { success: false, error: permisoError.message })
+    if (permisoError) {
+      const status = statusRpc(permisoError.message)
+      if (status >= 500) {
+        logServerError(event, { endpoint: ENDPOINT, operation: 'listar_admin_sucursal_v1.invitar_gate', statusCode: status, error: permisoError })
+      }
+      return json(status, {
+        success: false,
+        error: status >= 500 ? 'No se pudo validar el alcance de administración.' : permisoError.message,
+      })
+    }
 
     try {
       const emails = await listarEmailsAuth(supabaseUrl, serviceRoleKey)
@@ -213,10 +243,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         return json(409, { success: false, error: 'Ese email ya tiene una cuenta en Noven.' })
       }
     } catch (err) {
-      return json(502, {
-        success: false,
-        error: `No se pudo verificar el email: ${err instanceof Error ? err.message : String(err)}`,
-      })
+      logServerError(event, { endpoint: ENDPOINT, operation: 'verify_invite_email', statusCode: 502, error: err })
+      return json(502, { success: false, error: 'No se pudo verificar el email en Auth.' })
     }
 
     const redirectTo = `${(process.env.URL ?? 'https://noven-ia.netlify.app').replace(/\/$/, '')}/activar`
@@ -262,8 +290,15 @@ const handler: Handler = async (event: HandlerEvent) => {
     })
 
     if (registroError) {
-      await eliminarAuthUser(supabaseUrl, serviceRoleKey, usuarioId)
-      return json(statusRpc(registroError.message), { success: false, error: registroError.message })
+      await eliminarAuthUser(event, supabaseUrl, serviceRoleKey, usuarioId)
+      const status = statusRpc(registroError.message)
+      if (status >= 500) {
+        logServerError(event, { endpoint: ENDPOINT, operation: 'registrar_invitacion_local_v1', statusCode: status, error: registroError })
+      }
+      return json(status, {
+        success: false,
+        error: status >= 500 ? 'No se pudo registrar la invitación local.' : registroError.message,
+      })
     }
 
     return json(201, {
@@ -296,7 +331,16 @@ const handler: Handler = async (event: HandlerEvent) => {
       p_activo: activo,
       p_familias: rol === 'operador' && activo ? familias : [],
     })
-    if (error) return json(statusRpc(error.message), { success: false, error: error.message })
+    if (error) {
+      const status = statusRpc(error.message)
+      if (status >= 500) {
+        logServerError(event, { endpoint: ENDPOINT, operation: 'guardar_usuario_sucursal_admin_v1', statusCode: status, error })
+      }
+      return json(status, {
+        success: false,
+        error: status >= 500 ? 'No se pudo guardar el usuario de la sucursal.' : error.message,
+      })
+    }
     return json(200, { success: true, usuario: data })
   }
 

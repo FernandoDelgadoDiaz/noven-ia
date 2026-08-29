@@ -1,6 +1,7 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import { getCorsHeaders } from './_auth'
+import { logServerError } from './_observability'
 
 type RolInvitable = 'gerente_zonal' | 'gerente_sucursal'
 type CanalInvitacion = 'link' | 'email'
@@ -27,6 +28,8 @@ interface ContextoAltas {
   sucursales?: Array<{ id?: string; zona_id?: string }>
 }
 
+const ENDPOINT = 'admin-accesos'
+
 function jsonResponse(event: HandlerEvent, statusCode: number, payload: unknown) {
   return {
     statusCode,
@@ -40,28 +43,29 @@ function statusRpc(message: string): number {
   if (/inexistente|inactivo|no encontr/i.test(message)) return 404
   if (/obligatorio|inválid|requiere/i.test(message)) return 400
   if (/ya está registrada|duplicate|unique/i.test(message)) return 409
-  return 409
+  return 502
 }
 
 async function validarSesion(
   event: HandlerEvent,
   supabaseUrl: string,
   anonKey: string,
-): Promise<{ uid: string } | { error: string }> {
+): Promise<{ uid: string } | { error: string; status: number }> {
   const authHeader = event.headers.authorization ?? event.headers.Authorization ?? ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
-  if (!token) return { error: 'No autorizado: token ausente' }
+  if (!token) return { error: 'No autorizado: token ausente', status: 401 }
 
   try {
     const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: { Authorization: `Bearer ${token}`, apikey: anonKey },
     })
-    if (!res.ok) return { error: 'No autorizado: sesión inválida o expirada' }
+    if (!res.ok) return { error: 'No autorizado: sesión inválida o expirada', status: 401 }
     const user = await res.json() as { id?: string }
-    if (!user.id) return { error: 'No autorizado: usuario no resoluble' }
+    if (!user.id) return { error: 'No autorizado: usuario no resoluble', status: 401 }
     return { uid: user.id }
   } catch (err) {
-    return { error: `No se pudo verificar la sesión: ${err instanceof Error ? err.message : String(err)}` }
+    logServerError(event, { endpoint: ENDPOINT, operation: 'session_verify', statusCode: 502, error: err })
+    return { error: 'No se pudo verificar la sesión.', status: 502 }
   }
 }
 
@@ -94,11 +98,12 @@ const handler: Handler = async (event) => {
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'server_config', statusCode: 500, error: 'Configuración de servidor incompleta' })
     return jsonResponse(event, 500, { success: false, error: 'Configuración de servidor incompleta' })
   }
 
   const sesion = await validarSesion(event, supabaseUrl, anonKey)
-  if ('error' in sesion) return jsonResponse(event, 401, { success: false, error: sesion.error })
+  if ('error' in sesion) return jsonResponse(event, sesion.status, { success: false, error: sesion.error })
 
   let body: Body
   try {
@@ -115,7 +120,16 @@ const handler: Handler = async (event) => {
     const { data, error } = await supabase.rpc('listar_contexto_altas_v1', {
       p_actor_id: sesion.uid,
     })
-    if (error) return jsonResponse(event, statusRpc(error.message), { success: false, error: error.message })
+    if (error) {
+      const status = statusRpc(error.message)
+      if (status >= 500) {
+        logServerError(event, { endpoint: ENDPOINT, operation: 'listar_contexto_altas_v1', statusCode: status, error })
+      }
+      return jsonResponse(event, status, {
+        success: false,
+        error: status >= 500 ? 'No se pudo consultar el contexto de accesos.' : error.message,
+      })
+    }
     return jsonResponse(event, 200, { success: true, ...(data as Record<string, unknown>) })
   }
 
@@ -153,7 +167,14 @@ const handler: Handler = async (event) => {
     p_actor_id: sesion.uid,
   })
   if (permisoError) {
-    return jsonResponse(event, statusRpc(permisoError.message), { success: false, error: permisoError.message })
+    const status = statusRpc(permisoError.message)
+    if (status >= 500) {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'listar_contexto_altas_v1.invitar_gate', statusCode: status, error: permisoError })
+    }
+    return jsonResponse(event, status, {
+      success: false,
+      error: status >= 500 ? 'No se pudo validar el alcance de jerarquía.' : permisoError.message,
+    })
   }
 
   const contexto = (contextoData ?? {}) as ContextoAltas
@@ -183,9 +204,10 @@ const handler: Handler = async (event) => {
       return jsonResponse(event, 409, { success: false, error: 'Ese email ya tiene una cuenta en Noven.' })
     }
   } catch (err) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'verify_invite_email', statusCode: 502, error: err })
     return jsonResponse(event, 502, {
       success: false,
-      error: `No se pudo verificar el email: ${err instanceof Error ? err.message : String(err)}`,
+      error: 'No se pudo verificar el email en Auth.',
     })
   }
 
@@ -238,10 +260,16 @@ const handler: Handler = async (event) => {
   if (registroError) {
     // La cuenta Auth fue creada por ESTA llamada; si falla la asignación segura de
     // alcance, compensamos para no dejar una cuenta huérfana ni con permisos parciales.
-    await supabase.auth.admin.deleteUser(usuarioId).catch(() => undefined)
-    return jsonResponse(event, statusRpc(registroError.message), {
+    await supabase.auth.admin.deleteUser(usuarioId).catch((err) => {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'compensate_delete_auth_user', statusCode: 502, error: err })
+    })
+    const status = statusRpc(registroError.message)
+    if (status >= 500) {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'registrar_invitacion_acceso_v1', statusCode: status, error: registroError })
+    }
+    return jsonResponse(event, status, {
       success: false,
-      error: registroError.message,
+      error: status >= 500 ? 'No se pudo registrar la invitación de jerarquía.' : registroError.message,
     })
   }
 
