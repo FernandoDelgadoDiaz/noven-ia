@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle,
+  CircleOff,
   Percent,
   Save,
   Trash2,
@@ -67,6 +68,8 @@ interface Props {
   onImagenActualizada?: (url: string) => void
 }
 
+type MotivoFinalizacionRag = 'oferta_centralizada' | 'decision_comercial' | 'otro'
+
 const RAG_ESTADO_LABEL: Record<EstadoSeguimientoRag, string> = {
   decomiso: 'Producto vencido',
   donacion: 'En ventana de donación',
@@ -105,6 +108,10 @@ export default function EditarVencimientoModalSeguro({
   const [seguimientoRag, setSeguimientoRag] = useState<SeguimientoRagRow | null>(null)
   const [ragPorcentaje, setRagPorcentaje] = useState('')
   const [cargandoRag, setCargandoRag] = useState(true)
+  const [finalizandoRag, setFinalizandoRag] = useState(false)
+  const [confirmarFinalizarRag, setConfirmarFinalizarRag] = useState(false)
+  const [motivoFinalizacionRag, setMotivoFinalizacionRag] = useState<MotivoFinalizacionRag>('oferta_centralizada')
+  const [notaFinalizacionRag, setNotaFinalizacionRag] = useState('')
 
   const fotoInputRef = useRef<HTMLInputElement>(null)
   const [fotoUrl, setFotoUrl] = useState<string | null>(vencimiento.productos.imagen_url ?? null)
@@ -299,6 +306,43 @@ export default function EditarVencimientoModalSeguro({
     onClose()
   }
 
+  async function handleFinalizarRag(): Promise<void> {
+    setError(null)
+    if (seguimientoRag?.rag_porcentaje == null) {
+      setConfirmarFinalizarRag(false)
+      return
+    }
+    if (!Number.isFinite(cantidad) || cantidad <= 0 || !fechaVencimiento || !Number.isFinite(stockActual) || stockActual < 0) {
+      setError('Revisá stock, fecha y cantidad antes de finalizar el RAG.')
+      setConfirmarFinalizarRag(false)
+      return
+    }
+
+    const notaSegura = notaFinalizacionRag.replaceAll('|', '/').trim()
+    const comando = `FINALIZAR_RAG|${motivoFinalizacionRag}|${notaSegura}`
+
+    setFinalizandoRag(true)
+    const { error: rpcError } = await supabase.rpc('registrar_control_vencimiento_dashboard', {
+      p_vencimiento_id: vencimiento.id,
+      p_cantidad_comprometida: cantidad,
+      p_fecha_vencimiento: fechaVencimiento,
+      p_stock_actual: stockActual,
+      p_porcentaje_rag: 0,
+      p_nota: comando,
+    })
+    setFinalizandoRag(false)
+
+    if (rpcError) {
+      setError(`No se pudo finalizar el RAG: ${rpcError.message}`)
+      setConfirmarFinalizarRag(false)
+      return
+    }
+
+    setConfirmarFinalizarRag(false)
+    onGuardado()
+    onClose()
+  }
+
   async function handleCerrarVendido(): Promise<void> {
     setError(null)
     setCerrandoVendido(true)
@@ -334,7 +378,7 @@ export default function EditarVencimientoModalSeguro({
 
   const badge = BADGE_CONFIG[nivelCalculado]
   const riskViz = RISK_VISUAL[nivelCalculado]
-  const ocupado = guardando || cerrandoVendido || anulando || subiendoFoto
+  const ocupado = guardando || cerrandoVendido || anulando || subiendoFoto || finalizandoRag
   const puedeEditarFoto = modoFoto === 'agregar' || modoFoto === 'reemplazar'
   const inputCls = 'w-full h-11 px-3 bg-surface-base border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150'
 
@@ -396,11 +440,19 @@ export default function EditarVencimientoModalSeguro({
           {(puedeGestionarRag || seguimientoRag?.rag_porcentaje != null) && (
             <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3.5 space-y-3">
               <div className="flex items-center gap-2"><Percent className="h-4 w-4 text-amber-700" /><div><p className="text-xs font-bold">RAG · Retiro Anticipado de Góndola</p><p className="text-[11px] text-muted-foreground">Descuento aplicado en Glaciar.</p></div></div>
-              <input type="number" min={0} max={100} step="0.01" value={ragPorcentaje} onChange={(e) => setRagPorcentaje(e.target.value)} disabled={!puedeGestionarRag} placeholder="Ej. 30" className={inputCls} />
+              <input type="number" min={1} max={100} step="0.01" value={ragPorcentaje} onChange={(e) => setRagPorcentaje(e.target.value)} disabled={!puedeGestionarRag} placeholder="Ej. 30" className={inputCls} />
               {cargandoRag ? <p className="text-[11px] text-muted-foreground">Cargando seguimiento…</p> : seguimientoRag?.rag_porcentaje != null ? (
                 <div className="rounded-lg bg-white/80 border border-amber-100 p-3 text-[11px]">
                   <div className="flex items-center gap-1.5 font-semibold"><Activity className="h-3.5 w-3.5 text-amber-700" />{RAG_ESTADO_LABEL[seguimientoRag.estado_seguimiento_rag]}</div>
                   <div className="grid grid-cols-2 gap-1 mt-2 text-muted-foreground"><span>RAG vigente</span><span className="text-right font-medium text-foreground">{seguimientoRag.rag_porcentaje}%</span><span>Vel. observada</span><span className="text-right font-medium text-foreground">{fmtVelocidad(seguimientoRag.velocidad_observada)}</span></div>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmarFinalizarRag(true)}
+                    disabled={ocupado}
+                    className="mt-3 w-full h-9 flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white text-slate-700 font-semibold text-xs disabled:opacity-50"
+                  >
+                    <CircleOff className="h-3.5 w-3.5" />Finalizar RAG vigente
+                  </button>
                 </div>
               ) : <p className="text-[11px] text-muted-foreground">Todavía no hay un RAG registrado.</p>}
             </div>
@@ -434,6 +486,45 @@ export default function EditarVencimientoModalSeguro({
           <div className="w-full max-w-sm bg-white rounded-[24px] shadow-2xl p-5 space-y-4">
             <div><p className="font-bold text-foreground">Confirmar vendido</p><p className="text-sm text-muted-foreground mt-1">El vencimiento saldrá de activos y quedará registrado como resuelto por venta antes del vencimiento.</p></div>
             <div className="flex gap-2"><button type="button" onClick={() => setConfirmarVendido(false)} disabled={cerrandoVendido} className="flex-1 h-11 rounded-xl border border-border text-sm font-medium">Cancelar</button><button type="button" onClick={() => void handleCerrarVendido()} disabled={cerrandoVendido} className="flex-1 h-11 rounded-xl bg-emerald-600 text-white text-sm font-bold disabled:opacity-50">{cerrandoVendido ? 'Cerrando…' : 'Confirmar vendido'}</button></div>
+          </div>
+        </div>
+      )}
+
+      {confirmarFinalizarRag && seguimientoRag?.rag_porcentaje != null && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-white rounded-[24px] shadow-2xl p-5 space-y-4">
+            <div>
+              <p className="font-bold text-foreground">Finalizar RAG {seguimientoRag.rag_porcentaje}%</p>
+              <p className="text-sm text-muted-foreground mt-1">El producto seguirá en Radar/Urgente si mantiene riesgo. Sólo se cerrará esta intervención RAG.</p>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="rag-motivo-finalizacion" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Motivo</label>
+              <select
+                id="rag-motivo-finalizacion"
+                value={motivoFinalizacionRag}
+                onChange={(e) => setMotivoFinalizacionRag(e.target.value as MotivoFinalizacionRag)}
+                className={inputCls}
+              >
+                <option value="oferta_centralizada">Oferta/promoción centralizada</option>
+                <option value="decision_comercial">Decisión comercial</option>
+                <option value="otro">Otro motivo</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="rag-nota-finalizacion" className="block text-xs font-semibold text-foreground uppercase tracking-wide">Detalle opcional</label>
+              <input
+                id="rag-nota-finalizacion"
+                type="text"
+                value={notaFinalizacionRag}
+                onChange={(e) => setNotaFinalizacionRag(e.target.value)}
+                placeholder="Ej. 2x1 centralizado"
+                className={inputCls}
+              />
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setConfirmarFinalizarRag(false)} disabled={finalizandoRag} className="flex-1 h-11 rounded-xl border border-border text-sm font-medium">Cancelar</button>
+              <button type="button" onClick={() => void handleFinalizarRag()} disabled={finalizandoRag} className="flex-1 h-11 rounded-xl bg-slate-800 text-white text-sm font-bold disabled:opacity-50">{finalizandoRag ? 'Finalizando…' : 'Finalizar RAG'}</button>
+            </div>
           </div>
         </div>
       )}
