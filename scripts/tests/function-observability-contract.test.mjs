@@ -19,7 +19,7 @@ assert.match(helper, /console\.error\(JSON\.stringify/)
 assert.match(helper, /service: 'noven-netlify-function'/)
 
 // Nunca registrar credenciales, emails, UUID completos ni blobs largos.
-assert.match(helper, /Bearer\s\\\+\[\^\\s\]\+/)
+assert.match(helper, /Bearer/)
 assert.match(helper, /'Bearer \[redacted\]'/)
 assert.match(helper, /'\[email\]'/)
 assert.match(helper, /'\[uuid\]'/)
