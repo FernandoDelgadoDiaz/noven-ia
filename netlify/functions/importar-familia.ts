@@ -2,6 +2,7 @@ import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import { createHash } from 'node:crypto'
 import { getCorsHeaders } from './_auth'
+import { logServerError } from './_observability'
 import { decodificarCsv } from '../../src/lib/importar-csv'
 import { analizarReporteGlaciar } from '../../src/lib/importar-glaciar'
 import { reconciliar, type FilaConciliada, type ProductoDb } from '../../src/lib/importar-reconciliacion'
@@ -53,6 +54,8 @@ interface OperacionImportacion {
   corregir_cod_art: boolean
   asignar_familia: boolean
 }
+
+const ENDPOINT = 'importar-familia'
 
 function fechaIsoDesdeGlaciar(raw: string | null): string | null {
   if (!raw) return null
@@ -121,6 +124,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'server_config', statusCode: 500, error: 'Configuración de servidor incompleta' })
     return json(500, { success: false, error: 'Configuración de servidor incompleta' })
   }
 
@@ -138,8 +142,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (!user.id) return json(401, { success: false, error: 'No autorizado' })
     uid = user.id
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return json(502, { success: false, error: `No se pudo verificar la sesión: ${msg}` })
+    logServerError(event, { endpoint: ENDPOINT, operation: 'session_verify', statusCode: 502, error: err })
+    return json(502, { success: false, error: 'No se pudo verificar la sesión.' })
   }
 
   let body: Body
@@ -182,6 +186,12 @@ const handler: Handler = async (event: HandlerEvent) => {
   ])
 
   if (perfilActorError || sucursalActorError) {
+    logServerError(event, {
+      endpoint: ENDPOINT,
+      operation: 'load_actor_scope',
+      statusCode: 502,
+      error: perfilActorError ?? sucursalActorError,
+    })
     return json(502, { success: false, error: 'No se pudo validar el alcance de la importación.' })
   }
   if (!perfilActor?.activo) {
@@ -199,6 +209,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     .eq('activo', true)
 
   if (accesosActorError) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_actor_access', statusCode: 502, error: accesosActorError })
     return json(502, { success: false, error: 'No se pudo validar el permiso de importación.' })
   }
 
@@ -258,7 +269,11 @@ const handler: Handler = async (event: HandlerEvent) => {
     .eq('codigo', codigoFamilia)
     .maybeSingle()
 
-  if (errFamilia || !familia) {
+  if (errFamilia) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_family', statusCode: 502, error: errFamilia })
+    return json(502, { success: false, error: 'No se pudo validar la familia de importación.' })
+  }
+  if (!familia) {
     return json(409, { success: false, error: `La familia ${codigoFamilia} no existe en la organización.` })
   }
 
@@ -283,7 +298,13 @@ const handler: Handler = async (event: HandlerEvent) => {
         .in('codigo_barras', lote),
     ])
     if (errCod || errEan) {
-      return json(502, { success: false, error: `No se pudo reconstruir la reconciliación: ${(errCod ?? errEan)?.message}` })
+      logServerError(event, {
+        endpoint: ENDPOINT,
+        operation: 'load_catalog_candidates',
+        statusCode: 502,
+        error: errCod ?? errEan,
+      })
+      return json(502, { success: false, error: 'No se pudo reconstruir la reconciliación del catálogo.' })
     }
     sumar((porCod ?? []) as ProductoCatalogoRow[])
     sumar((porEan ?? []) as ProductoCatalogoRow[])
@@ -297,7 +318,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     .eq('activo', true)
 
   if (errPorFamilia) {
-    return json(502, { success: false, error: `No se pudo cargar el catálogo de la familia: ${errPorFamilia.message}` })
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_family_catalog', statusCode: 502, error: errPorFamilia })
+    return json(502, { success: false, error: 'No se pudo cargar el catálogo de la familia.' })
   }
   sumar((porFamilia ?? []) as ProductoCatalogoRow[])
 
@@ -310,7 +332,8 @@ const handler: Handler = async (event: HandlerEvent) => {
       .eq('sucursal_id', sucursalId)
       .in('producto_id', lote)
     if (errEstados) {
-      return json(502, { success: false, error: `No se pudo cargar el estado local: ${errEstados.message}` })
+      logServerError(event, { endpoint: ENDPOINT, operation: 'load_local_store_state', statusCode: 502, error: errEstados })
+      return json(502, { success: false, error: 'No se pudo cargar el estado local de la sucursal.' })
     }
     for (const estado of (estados ?? []) as EstadoLocalRow[]) estadoPorProducto.set(estado.producto_id, estado)
   }
@@ -389,9 +412,13 @@ const handler: Handler = async (event: HandlerEvent) => {
   })
 
   if (errAplicado) {
-    console.error('[importar-familia] RPC error:', errAplicado)
     const status = /permiso|sucursal|familia/i.test(errAplicado.message) ? 403 : 409
-    return json(status, { success: false, error: errAplicado.message })
+    return json(status, {
+      success: false,
+      error: status === 403
+        ? 'No tenés permiso para importar esta familia en la sucursal.'
+        : 'No se pudo aplicar la importación de la familia.',
+    })
   }
 
   return json(200, {
