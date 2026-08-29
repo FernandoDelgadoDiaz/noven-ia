@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useProductos } from '@/hooks/useProductos'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
+import { consumirLecturaCamara } from '@/lib/scanner-source'
 import type { Producto } from '@/types/index'
 
 interface ScannerState {
@@ -30,8 +31,9 @@ export function useScanner(sucursalId?: string): UseScannerReturn {
   })
 
   async function scanBarcode(barcode: string): Promise<Producto | null> {
-    if (!barcode.trim()) {
-      setState((prev) => ({ ...prev, error: 'Código de barras vacío', lastResult: null }))
+    const codigo = barcode.trim()
+    if (!codigo) {
+      setState((prev) => ({ ...prev, error: 'Código vacío', lastResult: null }))
       return null
     }
     if (!scope) {
@@ -39,10 +41,20 @@ export function useScanner(sucursalId?: string): UseScannerReturn {
       return null
     }
 
+    const desdeCamara = consumirLecturaCamara(codigo)
+    if (!desdeCamara && !/^\d{7}$/.test(codigo)) {
+      setState((prev) => ({
+        ...prev,
+        error: 'La búsqueda manual acepta únicamente el código interno de 7 dígitos de Glaciar. El EAN se registra sólo escaneándolo con la cámara.',
+        lastResult: null,
+      }))
+      return null
+    }
+
     setState({ scanning: true, error: null, lastResult: null })
 
     try {
-      const producto = await searchByBarcode(barcode, scope)
+      const producto = await searchByBarcode(codigo, scope)
       setState({ scanning: false, error: null, lastResult: producto })
       return producto
     } catch (err) {
