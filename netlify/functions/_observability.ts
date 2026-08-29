@@ -46,7 +46,8 @@ function summarizeError(error: unknown): { name: string; code: string | null; me
  * pero el contrato sigue siendo loggear el mínimo necesario para diagnosticar.
  */
 export function logServerError(event: HandlerEvent, input: FunctionErrorLog): void {
-  const requestId = event.headers['x-nf-request-id'] ?? event.headers['x-request-id'] ?? null
+  const rawRequestId = event.headers['x-nf-request-id'] ?? event.headers['x-request-id'] ?? null
+  const requestId = rawRequestId == null ? null : redactLogText(rawRequestId)
   console.error(JSON.stringify({
     timestamp: new Date().toISOString(),
     level: 'ERROR',
