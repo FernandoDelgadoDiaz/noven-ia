@@ -177,7 +177,7 @@ BEGIN
     ultimo_periodo numeric,
     venta_media_diaria numeric,
     fila_origen integer
-  ) x
+  )
   LEFT JOIN public.productos p
     ON p.organizacion_id = v_org_id
    AND p.cod_art = btrim(x.cod_art)
@@ -308,21 +308,22 @@ AS $function$
 DECLARE
   v_result jsonb;
   v_importacion_id uuid;
-  v_existente record;
+  v_existente_id uuid;
+  v_existente_estado text;
 BEGIN
   IF NOT public.validar_operacion_local_server_v1(p_usuario_id, p_sucursal_id) THEN
     RAISE EXCEPTION 'El usuario no tiene permiso operativo para importar esta familia en la sucursal'
       USING ERRCODE = '42501';
   END IF;
 
-  SELECT i.id, i.estado INTO v_existente
+  SELECT i.id, i.estado INTO v_existente_id, v_existente_estado
   FROM public.importaciones i
   WHERE i.sucursal_id = p_sucursal_id
     AND i.tipo_reporte = 'glaciar_0258'
     AND i.archivo_sha256 = p_archivo_sha256;
 
-  IF v_existente.id IS NOT NULL THEN
-    RETURN jsonb_build_object('duplicada', true, 'importacion_id', v_existente.id, 'estado', v_existente.estado, 'fuente', 'glaciar_0258');
+  IF v_existente_id IS NOT NULL THEN
+    RETURN jsonb_build_object('duplicada', true, 'importacion_id', v_existente_id, 'estado', v_existente_estado, 'fuente', 'glaciar_0258');
   END IF;
 
   v_result := public.aplicar_importacion_glaciar_familia_v1(
@@ -365,21 +366,22 @@ AS $function$
 DECLARE
   v_result jsonb;
   v_importacion_id uuid;
-  v_existente record;
+  v_existente_id uuid;
+  v_existente_estado text;
 BEGIN
   IF NOT public.validar_operacion_local_server_v1(p_usuario_id, p_sucursal_id) THEN
     RAISE EXCEPTION 'El usuario no tiene permiso operativo para importar en la sucursal'
       USING ERRCODE = '42501';
   END IF;
 
-  SELECT i.id, i.estado INTO v_existente
+  SELECT i.id, i.estado INTO v_existente_id, v_existente_estado
   FROM public.importaciones i
   WHERE i.sucursal_id = p_sucursal_id
     AND i.tipo_reporte = 'glaciar_0258'
     AND i.archivo_sha256 = p_archivo_sha256;
 
-  IF v_existente.id IS NOT NULL THEN
-    RETURN jsonb_build_object('duplicada', true, 'importacion_id', v_existente.id, 'estado', v_existente.estado, 'fuente', 'glaciar_0258');
+  IF v_existente_id IS NOT NULL THEN
+    RETURN jsonb_build_object('duplicada', true, 'importacion_id', v_existente_id, 'estado', v_existente_estado, 'fuente', 'glaciar_0258');
   END IF;
 
   v_result := public.aplicar_importacion_glaciar_masiva_v2(
