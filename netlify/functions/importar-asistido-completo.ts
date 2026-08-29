@@ -2,6 +2,7 @@ import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import { createHash } from 'node:crypto'
 import { getCorsHeaders } from './_auth'
+import { logServerError } from './_observability'
 import { decodificarCsv } from '../../src/lib/importar-csv'
 import { analizarReporteGlaciar } from '../../src/lib/importar-glaciar'
 
@@ -10,6 +11,8 @@ interface Body {
   nombreArchivo?: string
   archivoBase64?: string
 }
+
+const ENDPOINT = 'importar-asistido-completo'
 
 function fechaIsoDesdeGlaciar(raw: string | null): string | null {
   if (!raw) return null
@@ -33,6 +36,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'server_config', statusCode: 500, error: 'Configuración de servidor incompleta' })
     return json(500, { success: false, error: 'Configuración de servidor incompleta' })
   }
 
@@ -50,8 +54,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (!user.id) return json(401, { success: false, error: 'No autorizado' })
     uid = user.id
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return json(502, { success: false, error: `No se pudo verificar la sesión: ${msg}` })
+    logServerError(event, { endpoint: ENDPOINT, operation: 'session_verify', statusCode: 502, error: err })
+    return json(502, { success: false, error: 'No se pudo verificar la sesión.' })
   }
 
   let body: Body
@@ -76,6 +80,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     p_sucursal_id: sucursalId,
   })
   if (gateError) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'validar_operacion_local_server_v1', statusCode: 502, error: gateError })
     return json(502, { success: false, error: 'No se pudo validar el alcance de la importación.' })
   }
   if (puedeOperar !== true) {
@@ -144,9 +149,14 @@ const handler: Handler = async (event: HandlerEvent) => {
   })
 
   if (error) {
-    console.error('[importar-asistido-completo] RPC error:', error)
     const status = error.message.includes('permiso') ? 403 : 502
-    return json(status, { success: false, error: error.message })
+    if (status >= 500) {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'aplicar_importacion_glaciar_masiva_v2', statusCode: status, error })
+    }
+    return json(status, {
+      success: false,
+      error: status === 403 ? error.message : 'No se pudo aplicar la importación.',
+    })
   }
 
   return json(200, {
