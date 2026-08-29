@@ -124,6 +124,8 @@ DECLARE
   v_thumb_version uuid;
   v_full_path text;
   v_thumb_path text;
+  v_full_pos integer;
+  v_thumb_pos integer;
 BEGIN
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'No autenticado' USING ERRCODE='28000';
@@ -163,25 +165,20 @@ BEGIN
   END IF;
 
   v_fragmento := '/productos-imagenes/' || v_org::text || '/productos/' || p_producto_id::text || '/';
+  v_full_pos := pg_catalog.strpos(p_imagen_url, v_fragmento);
+  v_thumb_pos := pg_catalog.strpos(p_imagen_thumb_url, v_fragmento);
 
-  IF pg_catalog.position(v_fragmento IN p_imagen_url)=0
-     OR pg_catalog.position(v_fragmento IN p_imagen_thumb_url)=0 THEN
+  IF v_full_pos=0 OR v_thumb_pos=0 THEN
     RAISE EXCEPTION 'Ruta de imagen fuera del catálogo de la organización' USING ERRCODE='22023';
   END IF;
 
   v_full_tail := pg_catalog.split_part(
-    pg_catalog.substring(
-      p_imagen_url
-      FROM pg_catalog.position(v_fragmento IN p_imagen_url) + pg_catalog.length(v_fragmento)
-    ),
+    pg_catalog.substr(p_imagen_url, v_full_pos + pg_catalog.length(v_fragmento)),
     '?',
     1
   );
   v_thumb_tail := pg_catalog.split_part(
-    pg_catalog.substring(
-      p_imagen_thumb_url
-      FROM pg_catalog.position(v_fragmento IN p_imagen_thumb_url) + pg_catalog.length(v_fragmento)
-    ),
+    pg_catalog.substr(p_imagen_thumb_url, v_thumb_pos + pg_catalog.length(v_fragmento)),
     '?',
     1
   );
