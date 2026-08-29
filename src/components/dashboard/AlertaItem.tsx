@@ -7,6 +7,8 @@ import type { VencimientoConRiesgo } from '@/types/index'
 
 type AlertaVencimiento = VencimientoConRiesgo & {
   rag_porcentaje?: number | null
+  oferta_centralizada?: boolean
+  oferta_centralizada_nota?: string | null
 }
 
 interface AlertaItemProps {
@@ -69,11 +71,13 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
   const showPulse = cfg.dotPulse
   const showAccionBtn = (isDecomiso || isDonacion) && Boolean(onRegistrarAccion)
   const tieneRagActivo = vencimiento.rag_porcentaje != null && vencimiento.rag_porcentaje > 0
+  const tieneOfertaCentralizada = !tieneRagActivo && vencimiento.oferta_centralizada === true
+  const tieneIntervencionVisible = tieneRagActivo || tieneOfertaCentralizada
   const accionesBase = (isDecomiso || isDonacion) ? [] : vencimiento.acciones_sugeridas
-  const accionesSinRag = tieneRagActivo
+  const accionesSinRag = tieneIntervencionVisible
     ? accionesBase.filter((accion) => !/\bRAG\b/i.test(accion))
     : accionesBase
-  const accionesVisibles = accionesSinRag.slice(0, tieneRagActivo ? 1 : 2)
+  const accionesVisibles = accionesSinRag.slice(0, tieneIntervencionVisible ? 1 : 2)
   const accionesRestantes = Math.max(accionesSinRag.length - accionesVisibles.length, 0)
 
   function handleAccionClick(e: React.MouseEvent): void {
@@ -190,11 +194,19 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
         </div>
       </div>
 
-      {(tieneRagActivo || accionesVisibles.length > 0) && (
+      {(tieneIntervencionVisible || accionesVisibles.length > 0) && (
         <div className="flex items-center gap-1.5 px-3.5 md:px-4 pb-2 overflow-hidden">
           {tieneRagActivo && (
             <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap shrink-0">
               ✓ RAG activo · {vencimiento.rag_porcentaje}%
+            </span>
+          )}
+          {tieneOfertaCentralizada && (
+            <span
+              className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-sky-50 text-sky-700 border border-sky-200 whitespace-nowrap shrink-0"
+              title={vencimiento.oferta_centralizada_nota ?? undefined}
+            >
+              ✓ Oferta centralizada
             </span>
           )}
           {accionesVisibles.map((accion) => (
