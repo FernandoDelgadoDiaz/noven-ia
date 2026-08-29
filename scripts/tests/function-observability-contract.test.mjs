@@ -14,6 +14,8 @@ const resolver = read('netlify/functions/resolver-pendiente-catalogo.ts')
 
 // El log es JSON estructurado y usa el request id de Netlify cuando está disponible.
 assert.match(helper, /x-nf-request-id/)
+assert.match(helper, /x-request-id/)
+assert.match(helper, /rawRequestId == null \? null : redactLogText\(rawRequestId\)/)
 assert.match(helper, /request_id: requestId/)
 assert.match(helper, /console\.error\(JSON\.stringify/)
 assert.match(helper, /service: 'noven-netlify-function'/)
