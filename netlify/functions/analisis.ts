@@ -190,8 +190,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     return json(400, { success: false, error: 'JSON inválido' })
   }
   const sucursalId = body.sucursal_id?.trim() ?? ''
-  // Postgres acepta UUID canónicos que no necesariamente llevan bits RFC 4122 de versión/variante.
-  // La sucursal 091 productiva usa históricamente 00000000-0000-0000-0000-000000000001.
+  // PostgreSQL admite UUID canónicos aunque no declaren bits RFC 4122 de versión/variante.
+  // La autorización real se valida después contra la sucursal y los accesos activos.
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sucursalId)) {
     return json(400, { success: false, error: 'Seleccioná una sucursal válida para generar el análisis.' })
   }
