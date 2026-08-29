@@ -15,6 +15,8 @@ const adminAccesos = read('netlify/functions/admin-accesos.ts')
 const adminSucursal = read('netlify/functions/admin-sucursal.ts')
 const adminInvitaciones = read('netlify/functions/admin-invitaciones.ts')
 const analisis = read('netlify/functions/analisis.ts')
+const aprenderFamilia = read('netlify/functions/aprender-pendientes-familia.ts')
+const importarFamilia = read('netlify/functions/importar-familia.ts')
 
 // El log es JSON estructurado y usa el request id de Netlify cuando está disponible.
 assert.match(helper, /x-nf-request-id/)
@@ -41,6 +43,8 @@ for (const [name, source] of [
   ['admin-sucursal', adminSucursal],
   ['admin-invitaciones', adminInvitaciones],
   ['analisis', analisis],
+  ['aprender-pendientes-familia', aprenderFamilia],
+  ['importar-familia', importarFamilia],
 ]) {
   assert.match(source, /import \{ logServerError \} from '\.\/_observability'/, `${name}: usa logger común`)
   assert.doesNotMatch(source, /console\.error\(/, `${name}: no imprime errores crudos`)
@@ -51,6 +55,19 @@ assert.match(listar, /operation: 'listar_productos_pendientes_catalogo_v2'/)
 assert.match(importar, /operation: 'validar_operacion_local_server_v1'/)
 assert.match(importar, /operation: 'aplicar_importacion_glaciar_masiva_v2'/)
 assert.match(resolver, /operation: 'validar_resolucion_pendiente_server_v1'/)
+assert.match(aprenderFamilia, /operation: 'session_verify'/)
+assert.match(aprenderFamilia, /operation: 'validar_operacion_local_server_v1'/)
+for (const operation of [
+  'session_verify',
+  'load_actor_scope',
+  'load_actor_access',
+  'load_family',
+  'load_catalog_candidates',
+  'load_family_catalog',
+  'load_local_store_state',
+]) {
+  assert.match(importarFamilia, new RegExp(`operation: '${operation}'`), `importar-familia: registra ${operation}`)
+}
 
 // Admin distingue errores de negocio conocidos de fallos inesperados de DB/Auth.
 for (const source of [adminAccesos, adminSucursal, adminInvitaciones]) {
@@ -88,6 +105,16 @@ assert.doesNotMatch(analisis, /\$\{(?:perfilError|sucursalError|accesosError|fam
 assert.match(analisis, /'No se pudo completar el análisis con el modelo\.'/)
 assert.match(analisis, /'No se pudo contactar el modelo de análisis\.'/)
 
+// Importaciones de catálogo no filtran excepciones de Auth/Supabase al navegador.
+assert.doesNotMatch(importarFamilia, /\$\{(?:errCod|errEan|errPorFamilia|errEstados).*?\.message\}/)
+assert.doesNotMatch(importarFamilia, /error: errAplicado\.message/)
+assert.doesNotMatch(aprenderFamilia, /error: error\.message/)
+assert.match(aprenderFamilia, /'No se pudo completar el aprendizaje de catálogo\.'/)
+assert.match(importarFamilia, /'No se pudo reconstruir la reconciliación del catálogo\.'/)
+assert.match(importarFamilia, /'No se pudo cargar el catálogo de la familia\.'/)
+assert.match(importarFamilia, /'No se pudo cargar el estado local de la sucursal\.'/)
+assert.match(importarFamilia, /'No se pudo aplicar la importación de la familia\.'/)
+
 // Los 5xx devuelven mensajes estables; el detalle queda sólo en Netlify.
 assert.match(listar, /'No se pudo consultar el catálogo pendiente\.'/)
 assert.match(importar, /'No se pudo aplicar la importación\.'/)
@@ -95,4 +122,4 @@ assert.match(adminAccesos, /'No se pudo consultar el contexto de accesos\.'/)
 assert.match(adminSucursal, /'No se pudo completar el listado de usuarios\.'/)
 assert.match(adminInvitaciones, /'No se pudo limpiar la cuenta pendiente en Auth\.'/)
 
-console.log('✓ Functions críticas, administrativas y Análisis IA emiten errores estructurados y redactados sin filtrar payloads sensibles')
+console.log('✓ Functions críticas, administrativas, Análisis IA e importaciones de catálogo emiten errores estructurados y redactados sin filtrar payloads sensibles')
