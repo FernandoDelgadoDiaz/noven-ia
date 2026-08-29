@@ -5,6 +5,7 @@ import { getCorsHeaders } from './_auth'
 import { logServerError } from './_observability'
 import { decodificarCsv } from '../../src/lib/importar-csv'
 import { analizarReporteGlaciar } from '../../src/lib/importar-glaciar'
+import { parsear0258 } from '../../src/lib/importar-0258'
 
 interface Body {
   sucursalId?: string
@@ -135,23 +136,72 @@ const handler: Handler = async (event: HandlerEvent) => {
     fila_origen: f.linea,
   }))
 
-  const { data, error } = await supabase.rpc('aplicar_importacion_glaciar_masiva_v2', {
-    p_sucursal_id: sucursalId,
-    p_usuario_id: uid,
-    p_codigo_sucursal_fuente: codigoSucursal,
-    p_nombre_archivo: nombreArchivo,
-    p_archivo_sha256: archivoSha256,
-    p_filas_total: analisis.parser.filas.length + analisis.parser.descartadas.length,
-    p_filas_validas: analisis.parser.filas.length,
-    p_filas_descartadas: analisis.parser.descartadas.length,
-    p_items: items,
-    p_fecha_reporte: fechaIsoDesdeGlaciar(analisis.metadata.fechaReporteTexto),
-  })
+  const fechaReporte = fechaIsoDesdeGlaciar(analisis.metadata.fechaReporteTexto)
+  let data: unknown
+  let error: { message: string } | null
+  let operation: string
+
+  if (analisis.fuente === '0258') {
+    const detalleItems = parsear0258(texto).filas.map((f) => ({
+      cod_art: f.cod_art,
+      descripcion: f.descripcion,
+      marca: f.marca,
+      contenido: f.contenido,
+      unidad_medida: f.unidad_medida,
+      bulto: f.bulto,
+      dto_sec_fam: f.dto_sec_fam,
+      costo_unitario: f.costo_unitario,
+      costo_final: f.costo_final,
+      precio_sugerido: f.precio_sugerido,
+      precio_venta: f.precio_venta,
+      stock_transito: f.stock_transito,
+      stock: f.stock,
+      per_ant_3: f.per_ant_3,
+      per_ant_2: f.per_ant_2,
+      per_ant_1: f.per_ant_1,
+      ultimo_periodo: f.ultimo_periodo,
+      venta_media_diaria: f.venta_media_diaria,
+      fila_origen: f.linea,
+    }))
+
+    operation = 'aplicar_importacion_0258_masiva_v1'
+    const res = await supabase.rpc(operation, {
+      p_sucursal_id: sucursalId,
+      p_usuario_id: uid,
+      p_codigo_sucursal_fuente: codigoSucursal,
+      p_nombre_archivo: nombreArchivo,
+      p_archivo_sha256: archivoSha256,
+      p_filas_total: analisis.parser.filas.length + analisis.parser.descartadas.length,
+      p_filas_validas: analisis.parser.filas.length,
+      p_filas_descartadas: analisis.parser.descartadas.length,
+      p_items: items,
+      p_detalle_items: detalleItems,
+      p_fecha_reporte: fechaReporte,
+    })
+    data = res.data
+    error = res.error
+  } else {
+    operation = 'aplicar_importacion_glaciar_masiva_v2'
+    const res = await supabase.rpc(operation, {
+      p_sucursal_id: sucursalId,
+      p_usuario_id: uid,
+      p_codigo_sucursal_fuente: codigoSucursal,
+      p_nombre_archivo: nombreArchivo,
+      p_archivo_sha256: archivoSha256,
+      p_filas_total: analisis.parser.filas.length + analisis.parser.descartadas.length,
+      p_filas_validas: analisis.parser.filas.length,
+      p_filas_descartadas: analisis.parser.descartadas.length,
+      p_items: items,
+      p_fecha_reporte: fechaReporte,
+    })
+    data = res.data
+    error = res.error
+  }
 
   if (error) {
     const status = error.message.includes('permiso') ? 403 : 502
     if (status >= 500) {
-      logServerError(event, { endpoint: ENDPOINT, operation: 'aplicar_importacion_glaciar_masiva_v2', statusCode: status, error })
+      logServerError(event, { endpoint: ENDPOINT, operation, statusCode: status, error })
     }
     return json(status, {
       success: false,
@@ -162,6 +212,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   return json(200, {
     success: true,
     encoding,
+    fuente: analisis.fuente,
     codigo_sucursal: codigoSucursal,
     filas_validas: analisis.parser.filas.length,
     filas_descartadas: analisis.parser.descartadas.length,

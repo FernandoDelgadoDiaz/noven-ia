@@ -57,7 +57,9 @@ for (const [name, source] of [
 
 assert.match(listar, /operation: 'listar_productos_pendientes_catalogo_v2'/)
 assert.match(importar, /operation: 'validar_operacion_local_server_v1'/)
-assert.match(importar, /operation: 'aplicar_importacion_glaciar_masiva_v2'/)
+assert.match(importar, /operation = 'aplicar_importacion_glaciar_masiva_v2'/)
+assert.match(importar, /operation = 'aplicar_importacion_0258_masiva_v1'/)
+assert.match(importar, /logServerError\(event, \{ endpoint: ENDPOINT, operation, statusCode: status, error \}\)/)
 assert.match(resolver, /operation: 'validar_resolucion_pendiente_server_v1'/)
 assert.match(aprenderFamilia, /operation: 'session_verify'/)
 assert.match(aprenderFamilia, /operation: 'validar_operacion_local_server_v1'/)
