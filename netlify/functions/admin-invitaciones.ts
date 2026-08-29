@@ -1,6 +1,7 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import { getCorsHeaders } from './_auth'
+import { logServerError } from './_observability'
 
 type Canal = 'link' | 'email'
 type TipoListado = 'jerarquia' | 'local'
@@ -37,6 +38,8 @@ interface InvitacionDetalle {
   expires_at: string
 }
 
+const ENDPOINT = 'admin-invitaciones'
+
 function jsonResponse(event: HandlerEvent, statusCode: number, payload: unknown) {
   return {
     statusCode,
@@ -50,27 +53,28 @@ function statusRpc(message: string): number {
   if (/inexistente|no encontr/i.test(message)) return 404
   if (/inválid|obligatori|aceptada/i.test(message)) return 400
   if (/duplicate|unique|responsable|registrada/i.test(message)) return 409
-  return 409
+  return 502
 }
 
 async function validarSesion(
   event: HandlerEvent,
   supabaseUrl: string,
   anonKey: string,
-): Promise<{ uid: string } | { error: string }> {
+): Promise<{ uid: string } | { error: string; status: number }> {
   const authHeader = event.headers.authorization ?? event.headers.Authorization ?? ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
-  if (!token) return { error: 'No autorizado: token ausente' }
+  if (!token) return { error: 'No autorizado: token ausente', status: 401 }
   try {
     const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: { Authorization: `Bearer ${token}`, apikey: anonKey },
     })
-    if (!res.ok) return { error: 'No autorizado: sesión inválida o expirada' }
+    if (!res.ok) return { error: 'No autorizado: sesión inválida o expirada', status: 401 }
     const user = await res.json() as { id?: string }
-    if (!user.id) return { error: 'No autorizado: usuario no resoluble' }
+    if (!user.id) return { error: 'No autorizado: usuario no resoluble', status: 401 }
     return { uid: user.id }
   } catch (err) {
-    return { error: `No se pudo verificar la sesión: ${err instanceof Error ? err.message : String(err)}` }
+    logServerError(event, { endpoint: ENDPOINT, operation: 'session_verify', statusCode: 502, error: err })
+    return { error: 'No se pudo verificar la sesión.', status: 502 }
   }
 }
 
@@ -114,11 +118,12 @@ const handler: Handler = async (event) => {
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'server_config', statusCode: 500, error: 'Configuración de servidor incompleta' })
     return jsonResponse(event, 500, { success: false, error: 'Configuración de servidor incompleta' })
   }
 
   const sesion = await validarSesion(event, supabaseUrl, anonKey)
-  if ('error' in sesion) return jsonResponse(event, 401, { success: false, error: sesion.error })
+  if ('error' in sesion) return jsonResponse(event, sesion.status, { success: false, error: sesion.error })
 
   let body: Body
   try {
@@ -146,7 +151,16 @@ const handler: Handler = async (event) => {
       p_tipo: tipo,
       p_sucursal_id: tipo === 'local' ? sucursalId : null,
     })
-    if (error) return jsonResponse(event, statusRpc(error.message), { success: false, error: error.message })
+    if (error) {
+      const status = statusRpc(error.message)
+      if (status >= 500) {
+        logServerError(event, { endpoint: ENDPOINT, operation: 'listar_invitaciones_gestion_v1', statusCode: status, error })
+      }
+      return jsonResponse(event, status, {
+        success: false,
+        error: status >= 500 ? 'No se pudieron consultar las invitaciones.' : error.message,
+      })
+    }
     return jsonResponse(event, 200, { success: true, invitaciones: data ?? [] })
   }
 
@@ -160,7 +174,14 @@ const handler: Handler = async (event) => {
     p_invitacion_id: invitacionId,
   })
   if (detalleError) {
-    return jsonResponse(event, statusRpc(detalleError.message), { success: false, error: detalleError.message })
+    const status = statusRpc(detalleError.message)
+    if (status >= 500) {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'obtener_invitacion_gestion_v1', statusCode: status, error: detalleError })
+    }
+    return jsonResponse(event, status, {
+      success: false,
+      error: status >= 500 ? 'No se pudo consultar la invitación.' : detalleError.message,
+    })
   }
   const detalle = detalleData as InvitacionDetalle
   if (detalle.estado !== 'pendiente') {
@@ -172,7 +193,14 @@ const handler: Handler = async (event) => {
     p_invitacion_id: invitacionId,
   })
   if (anulacionError) {
-    return jsonResponse(event, statusRpc(anulacionError.message), { success: false, error: anulacionError.message })
+    const status = statusRpc(anulacionError.message)
+    if (status >= 500) {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'anular_invitacion_gestion_v1', statusCode: status, error: anulacionError })
+    }
+    return jsonResponse(event, status, {
+      success: false,
+      error: status >= 500 ? 'No se pudo anular la invitación.' : anulacionError.message,
+    })
   }
   const anulacion = (anulacionData ?? {}) as { usuario_id?: string | null; puede_eliminar_auth?: boolean }
 
@@ -181,26 +209,36 @@ const handler: Handler = async (event) => {
     if (deleteError) {
       // La operación se considera fallida completa: dejamos la invitación nuevamente
       // pendiente para que el administrador pueda reintentar sin quedar bloqueado.
-      await supabase
+      const { error: rollbackError } = await supabase
         .from('invitaciones_acceso')
         .update({ estado: 'pendiente', anulada_at: null })
         .eq('id', invitacionId)
+      logServerError(event, { endpoint: ENDPOINT, operation: 'delete_pending_auth_user', statusCode: 502, error: deleteError })
+      if (rollbackError) {
+        logServerError(event, { endpoint: ENDPOINT, operation: 'rollback_invitation_after_auth_delete_failure', statusCode: 502, error: rollbackError })
+      }
       return jsonResponse(event, 502, {
         success: false,
-        error: `No se pudo limpiar la cuenta pendiente en Auth: ${deleteError.message}`,
+        error: 'No se pudo limpiar la cuenta pendiente en Auth.',
       })
     }
-    await supabase
+    const { error: markDeletedError } = await supabase
       .from('invitaciones_acceso')
       .update({ auth_deleted_at: new Date().toISOString() })
       .eq('id', invitacionId)
+    if (markDeletedError) {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'mark_auth_deleted_at', statusCode: 502, error: markDeletedError })
+    }
   } else if (anulacion.usuario_id) {
     // Un pendiente nunca debería tener otro acceso activo. Fallamos cerrado para no
     // borrar una identidad que pueda estar siendo usada por otro alcance válido.
-    await supabase
+    const { error: rollbackError } = await supabase
       .from('invitaciones_acceso')
       .update({ estado: 'pendiente', anulada_at: null })
       .eq('id', invitacionId)
+    if (rollbackError) {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'rollback_invitation_active_access_guard', statusCode: 502, error: rollbackError })
+    }
     return jsonResponse(event, 409, {
       success: false,
       error: 'La cuenta asociada tiene otro acceso activo y no puede limpiarse desde esta invitación.',
@@ -258,10 +296,18 @@ const handler: Handler = async (event) => {
   }
 
   if (registroError) {
-    await supabase.auth.admin.deleteUser(nuevaAuth.usuarioId).catch(() => undefined)
-    return jsonResponse(event, statusRpc(registroError.message), {
+    await supabase.auth.admin.deleteUser(nuevaAuth.usuarioId).catch((err) => {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'compensate_regenerate_auth_user', statusCode: 502, error: err })
+    })
+    const status = statusRpc(registroError.message)
+    if (status >= 500) {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'register_regenerated_invitation', statusCode: status, error: registroError })
+    }
+    return jsonResponse(event, status, {
       success: false,
-      error: `La invitación anterior fue anulada, pero no se pudo registrar la nueva: ${registroError.message}`,
+      error: status >= 500
+        ? 'La invitación anterior fue anulada, pero no se pudo registrar la nueva.'
+        : `La invitación anterior fue anulada, pero no se pudo registrar la nueva: ${registroError.message}`,
     })
   }
 
