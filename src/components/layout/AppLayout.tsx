@@ -5,6 +5,7 @@ import { useUsuarioRol } from '@/hooks/useUsuarioRol'
 import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
 import { useNovenAccessContext } from '@/hooks/useNovenAccessContext'
 import { usePuedeOperarSucursal } from '@/hooks/usePuedeOperarSucursal'
+import { usePuedeGestionarCatalogoSucursal } from '@/hooks/usePuedeGestionarCatalogoSucursal'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import SucursalContextSelector from './SucursalContextSelector'
 import InvitationManagementDock from '@/components/admin/InvitationManagementDock'
@@ -24,10 +25,8 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { to: '/analisis', label: 'Análisis', Icon: BrainCircuit },
 ]
 
-const SUCURSAL_ADMIN_NAV_ITEMS: NavItem[] = [
-  { to: '/importar', label: 'Importar', Icon: FileUp },
-  { to: '/admin', label: 'Admin', Icon: Users },
-]
+const IMPORT_NAV_ITEM: NavItem = { to: '/importar', label: 'Importar', Icon: FileUp }
+const ADMIN_NAV_ITEM: NavItem = { to: '/admin', label: 'Admin', Icon: Users }
 
 const ACCESS_ADMIN_NAV_ITEM: NavItem = {
   to: '/admin/accesos',
@@ -49,6 +48,7 @@ export default function AppLayout() {
   const { accesos, legacyMode } = useAccesosMultitenant()
   const { sucursalId, sucursalesPermitidas } = useNovenAccessContext()
   const { puedeOperar } = usePuedeOperarSucursal()
+  const { puedeGestionar: gestionaCatalogo } = usePuedeGestionarCatalogoSucursal()
   const navigate = useNavigate()
 
   // Las capacidades multirrol se acumulan, pero cada una conserva SU alcance.
@@ -87,7 +87,8 @@ export default function AppLayout() {
 
   const navItems: NavItem[] = [
     ...BASE_NAV_ITEMS.filter((item) => item.to !== '/scanner' || puedeOperar),
-    ...(administraSucursal ? SUCURSAL_ADMIN_NAV_ITEMS : []),
+    ...(gestionaCatalogo ? [IMPORT_NAV_ITEM] : []),
+    ...(administraSucursal ? [ADMIN_NAV_ITEM] : []),
     ...(administraJerarquia ? [ACCESS_ADMIN_NAV_ITEM] : []),
   ]
 
@@ -95,7 +96,8 @@ export default function AppLayout() {
   // mantiene disponible sin alterar el alcance operativo local de la 091.
   const mobileNavRight: NavItem[] = [
     ...MOBILE_NAV_RIGHT_BASE,
-    ...(administraSucursal ? SUCURSAL_ADMIN_NAV_ITEMS : []),
+    ...(gestionaCatalogo ? [IMPORT_NAV_ITEM] : []),
+    ...(administraSucursal ? [ADMIN_NAV_ITEM] : []),
     ...(administraJerarquia && !administraSucursal ? [ACCESS_ADMIN_NAV_ITEM] : []),
   ]
 
