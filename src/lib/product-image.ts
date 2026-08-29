@@ -14,10 +14,11 @@ function esModoImagenProducto(value: unknown): value is ModoImagenProducto {
 }
 
 function nuevaVersionImagen(): string {
-  if (typeof crypto?.randomUUID !== 'function') {
+  const randomUUID = globalThis.crypto?.randomUUID
+  if (typeof randomUUID !== 'function') {
     throw new Error('Este navegador no puede generar una versión segura para la foto.')
   }
-  return crypto.randomUUID()
+  return randomUUID.call(globalThis.crypto)
 }
 
 export async function consultarModoImagenProducto(
