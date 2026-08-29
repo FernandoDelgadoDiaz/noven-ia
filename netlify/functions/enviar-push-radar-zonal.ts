@@ -1,6 +1,7 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
+import { logServerError } from './_observability'
 
 interface RadarZonalWebhookBody {
   alerta_zonal_id?: string
@@ -12,6 +13,8 @@ interface DestinoRow {
   stock_snapshot: number
   stock_actualizado_at: string | null
 }
+
+const ENDPOINT = 'enviar-push-radar-zonal'
 
 function formatFecha(fecha: string): string {
   const [year, month, day] = fecha.split('-')
@@ -37,7 +40,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const vapidSubject = process.env.VAPID_SUBJECT ?? 'mailto:gerente091@gmail.com'
 
   if (!supabaseUrl || !serviceRoleKey || !vapidPublic || !vapidPrivate) {
-    console.error('[radar-zonal-push] Config de servidor incompleta')
+    logServerError(event, { endpoint: ENDPOINT, operation: 'server_config', statusCode: 500, error: 'Config de servidor incompleta' })
     return { statusCode: 500, body: JSON.stringify({ success: false, error: 'Config de servidor incompleta' }) }
   }
 
@@ -63,14 +66,14 @@ const handler: Handler = async (event: HandlerEvent) => {
     .maybeSingle()
 
   if (alertaError) {
-    console.error('[radar-zonal-push] Error leyendo alerta', alertaError.message)
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_alert', statusCode: 500, error: alertaError })
     return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudo leer la alerta' }) }
   }
   if (!alerta) {
     return { statusCode: 404, body: JSON.stringify({ success: false, error: 'Alerta zonal inexistente' }) }
   }
 
-  const [{ data: producto }, { data: sucursalOrigen }, { data: destinos, error: destinosError }] = await Promise.all([
+  const [productoResult, sucursalResult, destinosResult] = await Promise.all([
     supabase
       .from('productos')
       .select('cod_art, descripcion')
@@ -90,12 +93,22 @@ const handler: Handler = async (event: HandlerEvent) => {
       .is('notificada_at', null),
   ])
 
-  if (destinosError) {
-    console.error('[radar-zonal-push] Error leyendo destinos', destinosError.message)
+  if (productoResult.error) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_product', statusCode: 500, error: productoResult.error })
+    return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudo resolver el producto de la alerta' }) }
+  }
+  if (sucursalResult.error) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_origin_store', statusCode: 500, error: sucursalResult.error })
+    return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudo resolver la sucursal origen' }) }
+  }
+  if (destinosResult.error) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_destinations', statusCode: 500, error: destinosResult.error })
     return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudieron resolver destinatarios' }) }
   }
 
-  const pendientes = (destinos ?? []) as DestinoRow[]
+  const producto = productoResult.data
+  const sucursalOrigen = sucursalResult.data
+  const pendientes = (destinosResult.data ?? []) as DestinoRow[]
   if (pendientes.length === 0) {
     return { statusCode: 200, body: JSON.stringify({ success: true, sent: 0, destinos: 0 }) }
   }
@@ -106,8 +119,13 @@ const handler: Handler = async (event: HandlerEvent) => {
     .select('id, usuario_id, subscription')
     .in('usuario_id', userIds)
 
+  // Un fallo técnico al consultar suscripciones NO equivale a "el usuario no
+  // tiene suscripción". Si continuáramos, terminaríamos marcando notificada_at
+  // sin haber podido determinar si había un push pendiente y perderíamos el
+  // reintento en una ejecución posterior.
   if (subsError) {
-    console.error('[radar-zonal-push] Error leyendo suscripciones', subsError.message)
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_push_subscriptions', statusCode: 500, error: subsError })
+    return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudieron leer suscripciones push' }) }
   }
 
   const subsPorUsuario = new Map<string, Array<{ id: string; subscription: webpush.PushSubscription }>>()
@@ -146,7 +164,7 @@ const handler: Handler = async (event: HandlerEvent) => {
           if (statusCode === 410 || statusCode === 404) {
             expiradas.add(sub.id)
           } else {
-            console.error('[radar-zonal-push] Error enviando push', statusCode, (err as Error).message)
+            logServerError(event, { endpoint: ENDPOINT, operation: 'send_notification', statusCode: 502, error: err })
           }
         }
       }
@@ -154,7 +172,14 @@ const handler: Handler = async (event: HandlerEvent) => {
   )
 
   if (expiradas.size > 0) {
-    await supabase.from('push_subscriptions').delete().in('id', Array.from(expiradas))
+    const { error: cleanupError } = await supabase
+      .from('push_subscriptions')
+      .delete()
+      .in('id', Array.from(expiradas))
+
+    if (cleanupError) {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'delete_expired_subscriptions', statusCode: 500, error: cleanupError })
+    }
   }
 
   // `notificada_at` significa que el despacho push fue procesado. Aunque el
@@ -167,8 +192,12 @@ const handler: Handler = async (event: HandlerEvent) => {
     .in('id', destinoIds)
     .eq('estado', 'pendiente')
 
+  // Los pushes ya pudieron haberse enviado: responder 500 en este punto podría
+  // provocar un reintento inmediato y duplicar notificaciones. Registramos el
+  // fallo para diagnóstico; al quedar notificada_at en null, una ejecución
+  // posterior vuelve a tener oportunidad de procesar el destino.
   if (markError) {
-    console.error('[radar-zonal-push] No se pudo marcar el despacho', markError.message)
+    logServerError(event, { endpoint: ENDPOINT, operation: 'mark_dispatch_processed', statusCode: 500, error: markError })
   }
 
   return {
