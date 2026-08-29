@@ -33,6 +33,15 @@ function sanitizeText(value: string, max = 500): string {
     .slice(0, max)
 }
 
+function messageFromError(error: unknown): string {
+  if (error instanceof Error) return sanitizeText(error.message)
+  if (error && typeof error === 'object') {
+    const obj = error as Record<string, unknown>
+    if (typeof obj.message === 'string') return sanitizeText(obj.message)
+  }
+  return sanitizeText(String(error))
+}
+
 function errorInfo(error: unknown): Record<string, LogScalar> {
   if (error instanceof Error) {
     return { error_name: error.name, error_message: sanitizeText(error.message) }
@@ -93,6 +102,21 @@ export function serverErrorPayload(event: HandlerEvent, message: string) {
     error: message,
     request_id: getRequestId(event),
   }
+}
+
+export function publicRpcErrorPayload(
+  event: HandlerEvent,
+  scope: string,
+  operation: string,
+  error: unknown,
+  statusCode: number,
+  fallback: string,
+) {
+  if (statusCode >= 500) {
+    logServerError(event, scope, operation, error, { status_code: statusCode })
+    return serverErrorPayload(event, fallback)
+  }
+  return { success: false, error: messageFromError(error) || fallback }
 }
 
 export function getCorsHeaders(event: HandlerEvent): Record<string, string> {
