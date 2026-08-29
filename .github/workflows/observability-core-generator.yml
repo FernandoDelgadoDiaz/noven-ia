@@ -1,0 +1,34 @@
+name: Observability Core Generator
+
+on:
+  push:
+    branches:
+      - hardening/netlify-observability-core-v1
+    paths:
+      - .github/workflows/observability-core-generator.yml
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: hardening/netlify-observability-core-v1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Apply audited observability patch
+        run: python3 scripts/observability_core_patch.py
+      - name: Commit generated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add netlify/functions
+          git diff --cached --quiet && exit 0
+          git commit -m "Harden Netlify error observability"
+          git push origin HEAD:hardening/netlify-observability-core-v1
