@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-audit-catalog-image-production-check-b2b88547
+          EXPECTED_MARKER: noven-audit-vite6-production-check-8f3094fc
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |
