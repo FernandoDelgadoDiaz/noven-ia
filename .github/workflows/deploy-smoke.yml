@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-radar-push-retry-prod-8bb45389
+          EXPECTED_MARKER: noven-urgent-push-observability-prod-8b942c2d
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |
