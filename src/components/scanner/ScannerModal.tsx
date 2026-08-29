@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { X, CameraOff } from 'lucide-react'
+import { marcarLecturaCamara } from '@/lib/scanner-source'
 
 const Html5QrcodeFallback = lazy(() => import('./Html5QrcodeFallback'))
 
@@ -54,6 +55,11 @@ export default function ScannerModal({ onScan, onClose }: ScannerModalProps) {
     }
   }
 
+  const entregarLectura = (codigo: string): void => {
+    marcarLecturaCamara(codigo)
+    onScan(codigo)
+  }
+
   useEffect(() => {
     if (!navigator.mediaDevices?.getUserMedia) {
       setStatus('no_soportado')
@@ -99,7 +105,7 @@ export default function ScannerModal({ onScan, onClose }: ScannerModalProps) {
             if (barcodes.length > 0 && !hasScanned.current) {
               hasScanned.current = true
               stopCamera()
-              onScan(barcodes[0].rawValue)
+              entregarLectura(barcodes[0].rawValue)
               return
             }
           } catch {
@@ -194,7 +200,7 @@ export default function ScannerModal({ onScan, onClose }: ScannerModalProps) {
               </div>
             }
           >
-            <Html5QrcodeFallback onScan={onScan} onClose={onClose} />
+            <Html5QrcodeFallback onScan={entregarLectura} onClose={onClose} />
           </Suspense>
         </div>
       </div>
