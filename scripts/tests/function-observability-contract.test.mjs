@@ -18,6 +18,7 @@ const analisis = read('netlify/functions/analisis.ts')
 const aprenderFamilia = read('netlify/functions/aprender-pendientes-familia.ts')
 const importarFamilia = read('netlify/functions/importar-familia.ts')
 const radarPush = read('netlify/functions/enviar-push-radar-zonal.ts')
+const urgentPush = read('netlify/functions/enviar-push.ts')
 
 // El log es JSON estructurado y usa el request id de Netlify cuando está disponible.
 assert.match(helper, /x-nf-request-id/)
@@ -47,6 +48,7 @@ for (const [name, source] of [
   ['aprender-pendientes-familia', aprenderFamilia],
   ['importar-familia', importarFamilia],
   ['enviar-push-radar-zonal', radarPush],
+  ['enviar-push', urgentPush],
 ]) {
   assert.match(source, /import \{ logServerError \} from '\.\/_observability'/, `${name}: usa logger común`)
   assert.doesNotMatch(source, /console\.error\(/, `${name}: no imprime errores crudos`)
@@ -82,6 +84,18 @@ for (const operation of [
   'mark_dispatch_processed',
 ]) {
   assert.match(radarPush, new RegExp(`operation: '${operation}'`), `radar push: registra ${operation}`)
+}
+for (const operation of [
+  'server_config',
+  'load_expiry',
+  'load_product',
+  'load_local_accesses',
+  'load_family_responsibles',
+  'load_push_subscriptions',
+  'send_notification',
+  'delete_expired_subscriptions',
+]) {
+  assert.match(urgentPush, new RegExp(`operation: '${operation}'`), `urgent push: registra ${operation}`)
 }
 
 // Admin distingue errores de negocio conocidos de fallos inesperados de DB/Auth.
@@ -140,6 +154,15 @@ const subsFailureBlock = radarPush.slice(subsFailureStart, markDispatchStart)
 assert.match(subsFailureBlock, /return \{ statusCode: 500/, 'radar push: aborta si falla la consulta de suscripciones')
 assert.match(radarPush, /'No se pudieron leer suscripciones push'/)
 
+// Push urgente: los fallos técnicos previos al envío conservan los status y
+// mensajes funcionales existentes; fallos posteriores al envío sólo se registran
+// para no inducir reintentos que puedan duplicar notificaciones.
+assert.match(urgentPush, /'No se pudo resolver el vencimiento'/)
+assert.match(urgentPush, /'No se pudieron resolver destinatarios'/)
+assert.match(urgentPush, /'No se pudieron leer suscripciones push'/)
+assert.match(urgentPush, /const \{ error: cleanupError \} = await supabase/)
+assert.match(urgentPush, /if \(cleanupError\)/)
+
 // Los 5xx devuelven mensajes estables; el detalle queda sólo en Netlify.
 assert.match(listar, /'No se pudo consultar el catálogo pendiente\.'/)
 assert.match(importar, /'No se pudo aplicar la importación\.'/)
@@ -147,4 +170,4 @@ assert.match(adminAccesos, /'No se pudo consultar el contexto de accesos\.'/)
 assert.match(adminSucursal, /'No se pudo completar el listado de usuarios\.'/)
 assert.match(adminInvitaciones, /'No se pudo limpiar la cuenta pendiente en Auth\.'/)
 
-console.log('✓ Functions críticas, administrativas, Análisis IA, importaciones y Radar push emiten errores estructurados; Radar conserva retry ante fallo de suscripciones')
+console.log('✓ Functions críticas, administrativas, Análisis IA, importaciones y pushes emiten errores estructurados; Radar conserva retry ante fallo de suscripciones')
