@@ -5,6 +5,7 @@ import { getCorsHeaders } from './_auth'
 import { logServerError } from './_observability'
 import { decodificarCsv } from '../../src/lib/importar-csv'
 import { analizarReporteGlaciar } from '../../src/lib/importar-glaciar'
+import { parsear0258 } from '../../src/lib/importar-0258'
 import { reconciliar, type FilaConciliada, type ProductoDb } from '../../src/lib/importar-reconciliacion'
 
 interface DecisionInput {
@@ -397,22 +398,72 @@ const handler: Handler = async (event: HandlerEvent) => {
   }
 
   const archivoSha256 = createHash('sha256').update(raw).digest('hex')
-  const { data: aplicado, error: errAplicado } = await supabase.rpc('aplicar_importacion_glaciar_familia_v1', {
-    p_sucursal_id: sucursalId,
-    p_usuario_id: uid,
-    p_codigo_sucursal_fuente: codigoSucursal,
-    p_codigo_familia: codigoFamilia,
-    p_nombre_archivo: nombreArchivo,
-    p_archivo_sha256: archivoSha256,
-    p_filas_total: analisis.parser.filas.length + analisis.parser.descartadas.length,
-    p_filas_validas: analisis.parser.filas.length,
-    p_filas_descartadas: analisis.parser.descartadas.length,
-    p_operaciones: operaciones,
-    p_fecha_reporte: fechaIsoDesdeGlaciar(analisis.metadata.fechaReporteTexto),
-  })
+  const fechaReporte = fechaIsoDesdeGlaciar(analisis.metadata.fechaReporteTexto)
+  let aplicado: unknown
+  let errAplicado: { message: string } | null
+
+  if (analisis.fuente === '0258') {
+    const detalleItems = parsear0258(texto).filas.map((f) => ({
+      cod_art: f.cod_art,
+      descripcion: f.descripcion,
+      marca: f.marca,
+      contenido: f.contenido,
+      unidad_medida: f.unidad_medida,
+      bulto: f.bulto,
+      dto_sec_fam: f.dto_sec_fam,
+      costo_unitario: f.costo_unitario,
+      costo_final: f.costo_final,
+      precio_sugerido: f.precio_sugerido,
+      precio_venta: f.precio_venta,
+      stock_transito: f.stock_transito,
+      stock: f.stock,
+      per_ant_3: f.per_ant_3,
+      per_ant_2: f.per_ant_2,
+      per_ant_1: f.per_ant_1,
+      ultimo_periodo: f.ultimo_periodo,
+      venta_media_diaria: f.venta_media_diaria,
+      fila_origen: f.linea,
+    }))
+
+    const res = await supabase.rpc('aplicar_importacion_0258_familia_v1', {
+      p_sucursal_id: sucursalId,
+      p_usuario_id: uid,
+      p_codigo_sucursal_fuente: codigoSucursal,
+      p_codigo_familia: codigoFamilia,
+      p_nombre_archivo: nombreArchivo,
+      p_archivo_sha256: archivoSha256,
+      p_filas_total: analisis.parser.filas.length + analisis.parser.descartadas.length,
+      p_filas_validas: analisis.parser.filas.length,
+      p_filas_descartadas: analisis.parser.descartadas.length,
+      p_operaciones: operaciones,
+      p_detalle_items: detalleItems,
+      p_fecha_reporte: fechaReporte,
+    })
+    aplicado = res.data
+    errAplicado = res.error
+  } else {
+    const res = await supabase.rpc('aplicar_importacion_glaciar_familia_v1', {
+      p_sucursal_id: sucursalId,
+      p_usuario_id: uid,
+      p_codigo_sucursal_fuente: codigoSucursal,
+      p_codigo_familia: codigoFamilia,
+      p_nombre_archivo: nombreArchivo,
+      p_archivo_sha256: archivoSha256,
+      p_filas_total: analisis.parser.filas.length + analisis.parser.descartadas.length,
+      p_filas_validas: analisis.parser.filas.length,
+      p_filas_descartadas: analisis.parser.descartadas.length,
+      p_operaciones: operaciones,
+      p_fecha_reporte: fechaReporte,
+    })
+    aplicado = res.data
+    errAplicado = res.error
+  }
 
   if (errAplicado) {
     const status = /permiso|sucursal|familia/i.test(errAplicado.message) ? 403 : 409
+    if (status >= 500) {
+      logServerError(event, { endpoint: ENDPOINT, operation: analisis.fuente === '0258' ? 'aplicar_importacion_0258_familia_v1' : 'aplicar_importacion_glaciar_familia_v1', statusCode: status, error: errAplicado })
+    }
     return json(status, {
       success: false,
       error: status === 403
@@ -424,6 +475,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   return json(200, {
     success: true,
     encoding,
+    fuente: analisis.fuente,
     codigo_sucursal: codigoSucursal,
     codigo_familia: codigoFamilia,
     resultado: aplicado,
