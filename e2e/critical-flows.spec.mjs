@@ -20,13 +20,10 @@ test.describe('Noven · recorridos críticos multitenant', () => {
     const fixture = await installNovenFixture(page)
     await login(page)
 
-    // La jerarquía corporativa no amplía el alcance operativo. Aunque el mock de
-    // sucursales devuelva más filas, la UI las intersecta con roles operativos.
-    // Con una sola sucursal resultante el selector se oculta deliberadamente.
     const selector = page.locator('select[aria-label="Seleccionar sucursal de trabajo"]:visible')
     await expect(selector).toHaveCount(0)
 
-    const riskCard = page.getByRole('button', { name: /UNIDADES EN RIESGO/i })
+    const riskCard = page.getByRole('button', { name: /UN.*EN RIESGO/i })
     await expect(riskCard).toContainText('5')
     await expect.poll(() => fixture.seenExpiryStores.includes(IDS.s091)).toBeTruthy()
     expect(fixture.seenExpiryStores.includes(IDS.s043)).toBeFalsy()
@@ -66,7 +63,6 @@ test.describe('Noven · recorridos críticos multitenant', () => {
     await expect(zona).toBeVisible()
     await zona.click()
 
-    // Validamos las filas reales de la jerarquía, no los <option> del selector global.
     await expect(page.getByText('Sucursal 091', { exact: true })).toBeVisible()
     await expect(page.getByText('Sucursal 043', { exact: true })).toBeVisible()
     await expect(page).toHaveURL(/\/admin\/accesos$/)
@@ -89,8 +85,6 @@ test.describe('Noven · recorridos críticos multitenant', () => {
     await expect(selector).toBeVisible()
     await expect(selector).toHaveValue('')
 
-    // Un zonal con más de una sucursal debe elegir explícitamente; Noven no inventa
-    // una sucursal por defecto y tampoco hace una llamada de análisis sin contexto.
     await page.getByRole('button', { name: 'Generar análisis' }).click()
     await expect(page.getByText('Seleccioná una sucursal antes de generar el análisis.')).toBeVisible()
     expect(fixture.calls).toHaveLength(0)

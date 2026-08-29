@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useAccionesOperativas } from '@/hooks/useAccionesOperativas'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
 import { usePuedeOperarSucursal } from '@/hooks/usePuedeOperarSucursal'
+import { calcularCostoEnRiesgo, calcularUnidadesExpuestas, formatearPesos, formatearUnidades } from '@/lib/economia-riesgo'
 import AlertaItem from '@/components/dashboard/AlertaItem'
 import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
 import AccionOperativaModal from '@/components/dashboard/AccionOperativaModal'
@@ -26,8 +27,9 @@ interface AccionPendiente {
   tipo: 'donacion' | 'decomiso'
 }
 
-function calcularUnidadesEnRiesgo(items: VencimientoConRiesgo[]): number {
-  return items.reduce((acc, v) => acc + v.cantidad, 0)
+interface CostoRiesgoResponse {
+  success: boolean
+  costos?: Array<{ producto_id: string; costo_sin_iva: number; observado_at: string }>
 }
 
 function formatFechaHeader(): string {
@@ -59,6 +61,8 @@ export default function Dashboard() {
 
   const [vencimientoEditando, setVencimientoEditando] = useState<VencimientoConRiesgo | null>(null)
   const [accionPendiente, setAccionPendiente] = useState<AccionPendiente | null>(null)
+  const [costosSinIva, setCostosSinIva] = useState<Record<string, number>>({})
+  const [costosLoading, setCostosLoading] = useState(false)
 
   // Lookup de nombres de familia (solo para mostrar en las cards de alerta).
   const [familiaNombres, setFamiliaNombres] = useState<Record<string, string>>({})
@@ -85,17 +89,66 @@ export default function Dashboard() {
       })
   }, [familiaIdsEnData, familiaNombres])
 
+  const productoIdsEnData = useMemo(
+    () => Array.from(new Set(data.map((v) => v.producto_id))),
+    [data],
+  )
+
+  useEffect(() => {
+    let cancelado = false
+    async function cargarCostos(): Promise<void> {
+      if (!sucursalId || productoIdsEnData.length === 0) {
+        setCostosSinIva({})
+        return
+      }
+      setCostosLoading(true)
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData.session?.access_token
+        if (!token) return
+        const response = await fetch('/.netlify/functions/costos-riesgo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ sucursalId, productoIds: productoIdsEnData }),
+        })
+        if (!response.ok) return
+        const payload = await response.json() as CostoRiesgoResponse
+        if (!payload.success || cancelado) return
+        const next: Record<string, number> = {}
+        for (const row of payload.costos ?? []) next[row.producto_id] = row.costo_sin_iva
+        setCostosSinIva(next)
+      } finally {
+        if (!cancelado) setCostosLoading(false)
+      }
+    }
+    void cargarCostos()
+    return () => { cancelado = true }
+  }, [sucursalId, productoIdsEnData])
+
   const alertasOrdenadas = [...data].sort(
     (a, b) => ORDEN_RIESGO[a.nivel_riesgo] - ORDEN_RIESGO[b.nivel_riesgo],
   )
 
-  const enRiesgo = data.filter(
+  const itemsEnRiesgo = data.filter(
     (v) => v.nivel_riesgo === 'decomiso' || v.nivel_riesgo === 'donacion' || v.nivel_riesgo === 'urgente',
-  ).length
-
-  const unidadesEnRiesgo = calcularUnidadesEnRiesgo(
-    data.filter((v) => v.nivel_riesgo === 'decomiso' || v.nivel_riesgo === 'donacion' || v.nivel_riesgo === 'urgente'),
   )
+  const enRiesgo = itemsEnRiesgo.length
+
+  const exposiciones = itemsEnRiesgo.map((v) => ({
+    productoId: v.producto_id,
+    unidades: calcularUnidadesExpuestas({
+      cantidad: v.cantidad,
+      venta_media_diaria: v.producto.venta_media_diaria,
+      dias_comerciales_restantes: v.dias_comerciales_restantes,
+    }),
+  }))
+  const unidadesEnRiesgo = exposiciones.reduce((acc, item) => acc + item.unidades, 0)
+  const exposicionesValorizadas = exposiciones.filter((item) => costosSinIva[item.productoId] != null)
+  const pesosEnRiesgo = exposicionesValorizadas.reduce(
+    (acc, item) => acc + calcularCostoEnRiesgo(item.unidades, costosSinIva[item.productoId]),
+    0,
+  )
+  const coberturaCostosCompleta = enRiesgo > 0 && exposicionesValorizadas.length === enRiesgo
 
   const enRadar = data.filter((v) => v.nivel_riesgo === 'radar').length
   const hayCriticos = data.some((v) => v.nivel_riesgo === 'decomiso' || v.nivel_riesgo === 'donacion')
@@ -237,7 +290,7 @@ export default function Dashboard() {
                 <button
                   type="button"
                   onClick={() => navigate('/vencimientos?filtro=riesgo')}
-                  className="bg-white rounded-[20px] shadow-card p-3.5 text-left min-h-[94px] hover:shadow-elevated transition-all active:scale-[0.98]"
+                  className="bg-white rounded-[20px] shadow-card p-3.5 text-left min-h-[122px] hover:shadow-elevated transition-all active:scale-[0.98]"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="h-8 w-8 rounded-xl bg-orange-50 flex items-center justify-center">
@@ -246,15 +299,30 @@ export default function Dashboard() {
                     <span className="text-[10px] font-semibold text-muted-foreground">{enRiesgo} productos</span>
                   </div>
                   <div className="mt-2 flex items-end gap-2">
-                    <span className="text-3xl font-black leading-none tabular-nums text-orange-600">{unidadesEnRiesgo}</span>
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-0.5">unidades en riesgo</span>
+                    <span className="text-3xl font-black leading-none tabular-nums text-orange-600">{formatearUnidades(unidadesEnRiesgo)}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-0.5">un. en riesgo</span>
+                  </div>
+                  <div className="mt-2 border-t border-border/60 pt-2">
+                    <p className="text-base font-black leading-none tabular-nums text-orange-700">
+                      {costosLoading
+                        ? 'Calculando…'
+                        : exposicionesValorizadas.length > 0
+                          ? formatearPesos(pesosEnRiesgo)
+                          : 'Costo pendiente'}
+                    </p>
+                    <p className="text-[9px] font-semibold text-muted-foreground mt-1">
+                      costo en riesgo s/IVA
+                      {!costosLoading && exposicionesValorizadas.length > 0 && !coberturaCostosCompleta
+                        ? ` · ${exposicionesValorizadas.length}/${enRiesgo} productos valorizados`
+                        : ''}
+                    </p>
                   </div>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => navigate('/vencimientos?filtro=radar')}
-                  className="bg-white rounded-[20px] shadow-card p-3.5 text-left min-h-[94px] hover:shadow-elevated transition-all active:scale-[0.98]"
+                  className="bg-white rounded-[20px] shadow-card p-3.5 text-left min-h-[122px] hover:shadow-elevated transition-all active:scale-[0.98]"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="h-8 w-8 rounded-xl bg-amber-50 flex items-center justify-center">
