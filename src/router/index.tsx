@@ -67,23 +67,14 @@ export const router = createBrowserRouter([
             element: <ErrorBoundary><Suspense {...suspenseProps}><Analisis /></Suspense></ErrorBoundary>,
           },
           {
-            // Lectura zonal permitida; las acciones de clasificación se ocultan en la página.
+            // Lectura zonal permitida; la propia página decide escritura ítem por ítem.
             path: 'importar/pendientes',
             element: <ErrorBoundary><Suspense {...suspenseProps}><PendientesCatalogo /></Suspense></ErrorBoundary>,
           },
           {
-            // Aprender catálogo desde CSV es escritura local: sólo gerente/supervisor de la sucursal exacta.
+            // Importación y aprendizaje son escrituras de catálogo local:
+            // sólo gerente de sucursal o supervisor de la sucursal exacta.
             element: <CatalogWriteRoute />,
-            children: [
-              {
-                path: 'importar/pendientes/aprender',
-                element: <ErrorBoundary><Suspense {...suspenseProps}><AprenderPendientesCsv /></Suspense></ErrorBoundary>,
-              },
-            ],
-          },
-          {
-            // Acciones que pertenecen exclusivamente a una sucursal concreta.
-            element: <AdminRoute />,
             children: [
               {
                 path: 'importar',
@@ -97,6 +88,16 @@ export const router = createBrowserRouter([
                 path: 'importar/masivo',
                 element: <ErrorBoundary><Suspense {...suspenseProps}><ImportarMasivo /></Suspense></ErrorBoundary>,
               },
+              {
+                path: 'importar/pendientes/aprender',
+                element: <ErrorBoundary><Suspense {...suspenseProps}><AprenderPendientesCsv /></Suspense></ErrorBoundary>,
+              },
+            ],
+          },
+          {
+            // Administración de personas: exclusivamente gerente de la sucursal exacta.
+            element: <AdminRoute />,
+            children: [
               {
                 path: 'admin',
                 element: <ErrorBoundary><Suspense {...suspenseProps}><Admin /></Suspense></ErrorBoundary>,
