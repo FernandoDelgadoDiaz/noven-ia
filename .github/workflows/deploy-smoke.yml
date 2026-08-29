@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-audit-vite6-production-check-8f3094fc
+          EXPECTED_MARKER: noven-audit-observability-production-check-95aa8564
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |
@@ -95,6 +95,22 @@ jobs:
         run: |
           set -euo pipefail
           status="$(curl -sS -o /tmp/push-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/enviar-push" -H 'Content-Type: application/json' -d '{}')"
+          test "${status}" = "401"
+
+      - name: Verify catalog and import functions exist
+        env:
+          SITE_URL: https://noven-ia.netlify.app
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          status="$(curl -sS -o /tmp/pending-catalog-body -w '%{http_code}' "${SITE_URL}/.netlify/functions/listar-pendientes-catalogo")"
+          test "${status}" = "401"
+
+          status="$(curl -sS -o /tmp/resolve-catalog-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/resolver-pendiente-catalogo" -H 'Content-Type: application/json' -d '{}')"
+          test "${status}" = "401"
+
+          status="$(curl -sS -o /tmp/import-full-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/importar-asistido-completo" -H 'Content-Type: application/json' -d '{}')"
           test "${status}" = "401"
 
       - name: Verify legacy admin endpoints are retired
