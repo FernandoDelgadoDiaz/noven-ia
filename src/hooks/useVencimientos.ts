@@ -50,9 +50,13 @@ interface VencimientoOperativoRow {
   venta_media_diaria: number
 }
 
-interface SeguimientoRagResumenRow {
+interface IntervencionRagResumenRow {
   vencimiento_id: string
-  rag_porcentaje: number | null
+  porcentaje_descuento: number
+  aplicado_at: string
+  finalizado_at: string | null
+  motivo_finalizacion: string | null
+  nota_finalizacion: string | null
 }
 
 /** Narrowing helper para el camino legacy. */
@@ -219,25 +223,46 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
     let conRiesgo: VencimientoConRiesgo[] = conRiesgoBase
 
     if (conRiesgoBase.length > 0) {
-      const { data: seguimientoRag, error: seguimientoRagError } = await supabase
-        .from('v_seguimiento_rag_actual')
-        .select('vencimiento_id, rag_porcentaje')
+      const { data: intervencionesRag, error: intervencionesRagError } = await supabase
+        .from('intervenciones_rag')
+        .select('vencimiento_id, porcentaje_descuento, aplicado_at, finalizado_at, motivo_finalizacion, nota_finalizacion')
         .in('vencimiento_id', conRiesgoBase.map((row) => row.id))
+        .order('aplicado_at', { ascending: false })
 
-      if (!seguimientoRagError) {
-        const ragPorVencimiento = new Map<string, number>()
-        for (const row of (seguimientoRag ?? []) as SeguimientoRagResumenRow[]) {
-          if (row.rag_porcentaje != null && Number.isFinite(row.rag_porcentaje) && row.rag_porcentaje > 0) {
-            ragPorVencimiento.set(row.vencimiento_id, row.rag_porcentaje)
-          }
+      if (!intervencionesRagError) {
+        const estadoPorVencimiento = new Map<string, {
+          rag_porcentaje: number | null
+          oferta_centralizada: boolean
+          oferta_centralizada_nota: string | null
+        }>()
+
+        for (const row of (intervencionesRag ?? []) as IntervencionRagResumenRow[]) {
+          if (estadoPorVencimiento.has(row.vencimiento_id)) continue
+
+          const ragActivo = row.finalizado_at == null
+            && Number.isFinite(row.porcentaje_descuento)
+            && row.porcentaje_descuento > 0
+
+          estadoPorVencimiento.set(row.vencimiento_id, {
+            rag_porcentaje: ragActivo ? row.porcentaje_descuento : null,
+            oferta_centralizada: !ragActivo && row.motivo_finalizacion === 'oferta_centralizada',
+            oferta_centralizada_nota: row.motivo_finalizacion === 'oferta_centralizada'
+              ? row.nota_finalizacion
+              : null,
+          })
         }
 
-        conRiesgo = conRiesgoBase.map((row) => ({
-          ...row,
-          rag_porcentaje: ragPorVencimiento.get(row.id) ?? null,
-        }))
-      } else if (!vistaOperativaNoDisponible(seguimientoRagError)) {
-        console.error('[useVencimientos] seguimiento RAG:', seguimientoRagError)
+        conRiesgo = conRiesgoBase.map((row) => {
+          const estado = estadoPorVencimiento.get(row.id)
+          return {
+            ...row,
+            rag_porcentaje: estado?.rag_porcentaje ?? null,
+            oferta_centralizada: estado?.oferta_centralizada ?? false,
+            oferta_centralizada_nota: estado?.oferta_centralizada_nota ?? null,
+          }
+        })
+      } else if (!vistaOperativaNoDisponible(intervencionesRagError)) {
+        console.error('[useVencimientos] intervenciones RAG:', intervencionesRagError)
       }
     }
 
