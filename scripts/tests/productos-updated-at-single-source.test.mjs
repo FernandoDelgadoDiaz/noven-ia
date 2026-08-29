@@ -12,17 +12,18 @@ const cleanupPath = path.join(migrationsDir, cleanupName);
 assert.ok(fs.existsSync(cleanupPath), 'Debe existir la migración que elimina el trigger updated_at duplicado de productos');
 
 const cleanupSql = fs.readFileSync(cleanupPath, 'utf8').toLowerCase();
-assert.match(cleanupSql, /drop\s+trigger\s+if\s+exists\s+productos_updated_at\s+on\s+public\.productos\s*;/, 'Debe retirar únicamente el trigger legacy productos_updated_at');
-assert.match(cleanupSql, /drop\s+function\s+if\s+exists\s+public\.handle_updated_at\s*\(\s*\)\s*;/, 'Debe retirar handle_updated_at al quedar sin consumidores');
-assert.doesNotMatch(cleanupSql, /\bcascade\b/i, 'La limpieza no puede usar CASCADE');
-assert.doesNotMatch(cleanupSql, /drop\s+trigger[^;]*productos_set_updated_at/i, 'Debe conservar productos_set_updated_at como fuente única');
+const executableSql = cleanupSql.replace(/--.*$/gm, '');
+assert.match(executableSql, /drop\s+trigger\s+if\s+exists\s+productos_updated_at\s+on\s+public\.productos\s*;/, 'Debe retirar únicamente el trigger legacy productos_updated_at');
+assert.match(executableSql, /drop\s+function\s+if\s+exists\s+public\.handle_updated_at\s*\(\s*\)\s*;/, 'Debe retirar handle_updated_at al quedar sin consumidores');
+assert.doesNotMatch(executableSql, /\bcascade\b/i, 'La limpieza no puede usar CASCADE');
+assert.doesNotMatch(executableSql, /drop\s+trigger[^;]*productos_set_updated_at/i, 'Debe conservar productos_set_updated_at como fuente única');
 
 const laterMigrations = fs.readdirSync(migrationsDir)
   .filter((name) => name.endsWith('.sql') && name > cleanupName)
   .sort();
 
 for (const name of laterMigrations) {
-  const sql = fs.readFileSync(path.join(migrationsDir, name), 'utf8').toLowerCase();
+  const sql = fs.readFileSync(path.join(migrationsDir, name), 'utf8').toLowerCase().replace(/--.*$/gm, '');
   assert.doesNotMatch(sql, /create\s+trigger\s+productos_updated_at\b/, `${name}: no debe reintroducir el trigger legacy productos_updated_at`);
   assert.doesNotMatch(sql, /execute\s+function\s+(public\.)?handle_updated_at\s*\(/, `${name}: no debe volver a usar handle_updated_at`);
 }
