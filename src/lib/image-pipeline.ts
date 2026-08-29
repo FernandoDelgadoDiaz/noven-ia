@@ -93,15 +93,11 @@ async function canvasAFormatoCompatible(
   canvas: HTMLCanvasElement,
   quality: number,
 ): Promise<{ blob: Blob; mimeType: ImagenMimeSalida }> {
-  // Algunos WebKit/iOS aceptan pedir WebP pero devuelven PNG. No debemos
-  // confiar solo en el tipo solicitado: validamos el MIME real del Blob.
   const webp = await canvasABlob(canvas, 'image/webp', quality)
   if (webp?.type === 'image/webp') {
     return { blob: webp, mimeType: 'image/webp' }
   }
 
-  // JPEG es el fallback universal para fotos de producto. El canvas se crea
-  // sin alpha, así que no dependemos de transparencia y evitamos PNG pesados.
   const jpeg = await canvasABlob(canvas, 'image/jpeg', quality)
   if (jpeg?.type === 'image/jpeg') {
     return { blob: jpeg, mimeType: 'image/jpeg' }
@@ -204,21 +200,17 @@ export async function prepararImagenProducto(file: File): Promise<ImagenProducto
 }
 
 /**
- * Las claves de Storage son estables y globales por organización + producto.
- * La extensión histórica .webp se conserva para no crear objetos duplicados;
- * el Content-Type real (WebP o JPEG fallback) viaja en la metadata del objeto.
+ * Cada publicación usa una ruta inmutable global por organización + producto + versión.
+ * La extensión histórica .webp se conserva aunque el Content-Type real pueda ser JPEG.
+ * Cambiar de versión evita sobrescribir el par publicado mientras se prepara un reemplazo.
  */
-export function pathImagenProducto(organizacionId: string, productoId: string): {
-  full: string
-  thumb: string
-} {
+export function pathImagenProducto(
+  organizacionId: string,
+  productoId: string,
+  versionId: string,
+): { full: string; thumb: string } {
   return {
-    full: `${organizacionId}/productos/${productoId}/full.webp`,
-    thumb: `${organizacionId}/productos/${productoId}/thumb.webp`,
+    full: `${organizacionId}/productos/${productoId}/${versionId}/full.webp`,
+    thumb: `${organizacionId}/productos/${productoId}/${versionId}/thumb.webp`,
   }
-}
-
-export function cacheBustPublicUrl(url: string, version: number): string {
-  const separator = url.includes('?') ? '&' : '?'
-  return `${url}${separator}v=${version}`
 }
