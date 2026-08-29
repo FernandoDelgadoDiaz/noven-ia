@@ -11,7 +11,7 @@ import {
 async function buscarProductoScanner(page) {
   await page.goto('/scanner')
   await expect(page.getByRole('heading', { name: 'Registrar vencimiento' })).toBeVisible()
-  await page.getByPlaceholder('Código de barras o cod. artículo').fill(SCANNER_IDS.ean)
+  await page.getByPlaceholder('Código de barras o cod. artículo').fill(SCANNER_IDS.codArt)
   await page.getByRole('button', { name: 'Buscar' }).click()
 }
 
