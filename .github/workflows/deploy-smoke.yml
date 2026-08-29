@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-audit-catalog-role-production-check-b90ced5c
+          EXPECTED_MARKER: noven-observability-catalog-imports-prod-fb21d4f2
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |
@@ -111,6 +111,12 @@ jobs:
           test "${status}" = "401"
 
           status="$(curl -sS -o /tmp/import-full-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/importar-asistido-completo" -H 'Content-Type: application/json' -d '{}')"
+          test "${status}" = "401"
+
+          status="$(curl -sS -o /tmp/learn-family-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/aprender-pendientes-familia" -H 'Content-Type: application/json' -d '{}')"
+          test "${status}" = "401"
+
+          status="$(curl -sS -o /tmp/import-family-body -w '%{http_code}' -X POST "${SITE_URL}/.netlify/functions/importar-familia" -H 'Content-Type: application/json' -d '{}')"
           test "${status}" = "401"
 
       - name: Verify legacy admin endpoints are retired
