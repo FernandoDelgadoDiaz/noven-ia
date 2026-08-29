@@ -27,6 +27,7 @@ export interface Resultado0258 {
   descartadas: Array<{ linea: number; motivo: string; contenido: string }>
   encabezados: string[]
   faltantes: string[]
+  codigoSucursal: string | null
   codigoDepartamento: string | null
   codigoSector: string | null
   codigoFamilia: string | null
@@ -40,12 +41,17 @@ function separar(linea: string): string[] {
   return linea.split('|').map((v) => v.trim())
 }
 
-function metadata(texto: string, etiqueta: RegExp): string | null {
+function metadata(texto: string, etiqueta: RegExp, ancho = 3): string | null {
   for (const linea of texto.split(/\r?\n/).slice(0, 40)) {
     const m = linea.match(etiqueta)
-    if (m?.[1]) return m[1].trim().padStart(3, '0')
+    if (m?.[1]) return m[1].trim().padStart(ancho, '0')
   }
   return null
+}
+
+function unico(valores: Array<string | null>): string | null {
+  const distintos = new Set(valores.filter((v): v is string => Boolean(v)))
+  return distintos.size === 1 ? [...distintos][0] : null
 }
 
 export function parsear0258(texto: string): Resultado0258 {
@@ -56,7 +62,11 @@ export function parsear0258(texto: string): Resultado0258 {
   })
 
   const vacio: Resultado0258 = {
-    filas: [], descartadas: [], encabezados: [], faltantes: ['Cód.Art.', 'Stock', 'Vta.Media'],
+    filas: [],
+    descartadas: [],
+    encabezados: [],
+    faltantes: ['Cód.Art.', 'Stock', 'Vta.Media'],
+    codigoSucursal: metadata(texto, /C[oó]d\.Suc\.(?:Padr[oó]n|Padron):\s*\t?\s*(\d{1,6})/i),
     codigoDepartamento: metadata(texto, /C[oó]d(?:igo)?\.?\s*Departamento\s*:?\s*(\d+)/i),
     codigoSector: metadata(texto, /C[oó]d(?:igo)?\.?\s*Sector\s*:?\s*(\d+)/i),
     codigoFamilia: metadata(texto, /C[oó]d(?:igo)?\.?\s*Familia\s*:?\s*(\d+)/i),
@@ -69,6 +79,17 @@ export function parsear0258(texto: string): Resultado0258 {
   const requerido = ['codart', 'descripcion', 'marca', 'cont', 'um', 'costounit', 'costofinal', 'stock', 'perant3', 'perant2', 'perant1', 'ultper', 'vtamedia']
   const faltantes = requerido.filter((r) => indice(r) < 0)
   const resultado: Resultado0258 = { ...vacio, encabezados, faltantes }
+
+  if (resultado.codigoSucursal === null) {
+    for (const h of norm) {
+      const m = h.match(/^stk(\d{1,6})$/)
+      if (m) {
+        resultado.codigoSucursal = m[1].padStart(3, '0')
+        break
+      }
+    }
+  }
+
   if (faltantes.length) return resultado
 
   for (let i = idxHeader + 1; i < lineas.length; i++) {
@@ -108,6 +129,15 @@ export function parsear0258(texto: string): Resultado0258 {
       venta_media_diaria: vmd,
     })
   }
+
+  const clasificaciones = resultado.filas.map((f) => {
+    const m = f.dto_sec_fam?.match(/^(\d+)-(\d+)-(\d+)$/)
+    return m ? { departamento: m[1], sector: m[2], familia: m[3] } : null
+  })
+  if (resultado.codigoDepartamento === null) resultado.codigoDepartamento = unico(clasificaciones.map((c) => c?.departamento ?? null))
+  if (resultado.codigoSector === null) resultado.codigoSector = unico(clasificaciones.map((c) => c?.sector ?? null))
+  if (resultado.codigoFamilia === null) resultado.codigoFamilia = unico(clasificaciones.map((c) => c?.familia ?? null))
+
   return resultado
 }
 
