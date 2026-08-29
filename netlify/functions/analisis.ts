@@ -190,7 +190,9 @@ const handler: Handler = async (event: HandlerEvent) => {
     return json(400, { success: false, error: 'JSON inválido' })
   }
   const sucursalId = body.sucursal_id?.trim() ?? ''
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sucursalId)) {
+  // Postgres acepta UUID canónicos que no necesariamente llevan bits RFC 4122 de versión/variante.
+  // La sucursal 091 productiva usa históricamente 00000000-0000-0000-0000-000000000001.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sucursalId)) {
     return json(400, { success: false, error: 'Seleccioná una sucursal válida para generar el análisis.' })
   }
 
