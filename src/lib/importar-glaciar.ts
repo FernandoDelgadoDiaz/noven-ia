@@ -10,6 +10,7 @@ export interface AnalisisReporteGlaciar {
   metadata: MetadataGlaciar
   modo: ModoImportacionGlaciar
   fuente: FuenteImportacionGlaciar
+  codigoSectorFuente: string | null
   /** Errores que impiden siquiera ofrecer el botón de confirmar importación. */
   erroresBloqueantes: string[]
 }
@@ -32,7 +33,11 @@ function parece0258(textoCompleto: string): boolean {
   return primeraLineaUtil.includes('|') && normalizada.includes('costo unit') && normalizada.includes('vta.media')
 }
 
-function parserDesde0258(textoCompleto: string): { parser: ResultadoParser; metadata: MetadataGlaciar } {
+function parserDesde0258(textoCompleto: string): {
+  parser: ResultadoParser
+  metadata: MetadataGlaciar
+  codigoSectorFuente: string | null
+} {
   const r = parsear0258(textoCompleto)
   const parser: ResultadoParser = {
     filas: r.filas.map((f) => ({
@@ -74,6 +79,7 @@ function parserDesde0258(textoCompleto: string): { parser: ResultadoParser; meta
       codigoFamilia: r.codigoFamilia,
       fechaReporteTexto: null,
     },
+    codigoSectorFuente: r.codigoSector,
   }
 }
 
@@ -89,8 +95,12 @@ export function analizarReporteGlaciar(
   const fuente: FuenteImportacionGlaciar = parece0258(textoCompleto) ? '0258' : 'reposicion_asistida'
   const analisisBase = fuente === '0258'
     ? parserDesde0258(textoCompleto)
-    : { parser: parsearCsvGlaciar(textoCompleto), metadata: extraerMetadataGlaciar(textoCompleto) }
-  const { parser, metadata } = analisisBase
+    : {
+        parser: parsearCsvGlaciar(textoCompleto),
+        metadata: extraerMetadataGlaciar(textoCompleto),
+        codigoSectorFuente: null,
+      }
+  const { parser, metadata, codigoSectorFuente } = analisisBase
   const erroresBloqueantes: string[] = []
 
   if (metadata.codigoSucursal === null) {
@@ -105,6 +115,13 @@ export function analizarReporteGlaciar(
     erroresBloqueantes.push(`No se encontró el encabezado válido de ${fuente === '0258' ? 'Glaciar 0258' : 'Reposición Asistida'} (Cod.Art.).`)
   } else if (parser.faltantes.length > 0) {
     erroresBloqueantes.push(`Faltan columnas requeridas: ${parser.faltantes.join(', ')}.`)
+  }
+
+  // El 0258 operativo se genera por sector. No aceptamos una carga departamental
+  // que mezcle Almacén, Bebidas, Limpieza, etc.; cada archivo debe tener un único
+  // sector verificable para evitar una actualización masiva fuera de alcance.
+  if (fuente === '0258' && modo === 'masiva' && codigoSectorFuente === null) {
+    erroresBloqueantes.push('El 0258 masivo debe corresponder a un único sector. No se admite una carga que mezcle varios sectores.')
   }
 
   // En la primera vuelta por familia, la familia debe ser inequívoca. En 0258
@@ -129,5 +146,5 @@ export function analizarReporteGlaciar(
     erroresBloqueantes.push('El reporte tiene estructura válida pero no contiene productos importables.')
   }
 
-  return { parser, metadata, modo, fuente, erroresBloqueantes }
+  return { parser, metadata, modo, fuente, codigoSectorFuente, erroresBloqueantes }
 }
