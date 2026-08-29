@@ -12,6 +12,18 @@ def replace(path: str, old: str, new: str, expected: int = 1) -> None:
     file.write_text(source.replace(old, new), encoding='utf-8')
 
 
+def replace_last(path: str, old: str, new: str, expected_total: int) -> None:
+    file = ROOT / path
+    source = file.read_text(encoding='utf-8')
+    found = source.count(old)
+    if found != expected_total:
+        raise SystemExit(f'{path}: expected total {expected_total}, found {found}: {old[:100]!r}')
+    pos = source.rfind(old)
+    if pos < 0:
+        raise SystemExit(f'{path}: last occurrence not found: {old[:100]!r}')
+    file.write_text(source[:pos] + new + source[pos + len(old):], encoding='utf-8')
+
+
 replace(
     'netlify/functions/analisis.ts',
     "import { getCorsHeaders, logServerError, publicRpcErrorPayload, serverErrorPayload } from './_auth'",
@@ -22,11 +34,14 @@ replace(
     "    if (familiasError) {\n    logServerError(event, 'analisis', 'familias_read_failed', familiasError)\n    return json(502, serverErrorPayload(event, 'No se pudieron validar las familias.'))\n  }",
     "    if (familiasError) {\n      logServerError(event, 'analisis', 'familias_read_failed', familiasError)\n      return json(502, serverErrorPayload(event, 'No se pudieron validar las familias.'))\n    }",
 )
-replace(
+
+# Hay exactamente dos retornos iguales en admin-sucursal: listar y guardar.
+# Sólo el segundo corresponde a guardar_usuario_sucursal_admin_v1.
+replace_last(
     'netlify/functions/admin-sucursal.ts',
     "return json(status, publicRpcErrorPayload(event, 'admin-sucursal', 'listar_admin_sucursal_failed', error, status, 'No se pudo cargar la administración de la sucursal.'))",
     "return json(status, publicRpcErrorPayload(event, 'admin-sucursal', 'guardar_usuario_sucursal_failed', error, status, 'No se pudo guardar el usuario de la sucursal.'))",
-    expected=1,
+    expected_total=2,
 )
 
 # Las compensaciones de invitaciones deben quedar trazables incluso si el rollback DB falla.
