@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import AppLayout from '../components/layout/AppLayout'
 import PrivateRoute from '../components/auth/PrivateRoute'
 import OperationalRoute from '../components/auth/OperationalRoute'
+import CatalogWriteRoute from '../components/auth/CatalogWriteRoute'
 import AdminRoute from '../components/auth/AdminRoute'
 import AccessAdminRoute from '../components/auth/AccessAdminRoute'
 import ErrorBoundary from '../components/ErrorBoundary'
@@ -66,12 +67,19 @@ export const router = createBrowserRouter([
             element: <ErrorBoundary><Suspense {...suspenseProps}><Analisis /></Suspense></ErrorBoundary>,
           },
           {
+            // Lectura zonal permitida; las acciones de clasificación se ocultan en la página.
             path: 'importar/pendientes',
             element: <ErrorBoundary><Suspense {...suspenseProps}><PendientesCatalogo /></Suspense></ErrorBoundary>,
           },
           {
-            path: 'importar/pendientes/aprender',
-            element: <ErrorBoundary><Suspense {...suspenseProps}><AprenderPendientesCsv /></Suspense></ErrorBoundary>,
+            // Aprender catálogo desde CSV es escritura local: sólo gerente/supervisor de la sucursal exacta.
+            element: <CatalogWriteRoute />,
+            children: [
+              {
+                path: 'importar/pendientes/aprender',
+                element: <ErrorBoundary><Suspense {...suspenseProps}><AprenderPendientesCsv /></Suspense></ErrorBoundary>,
+              },
+            ],
           },
           {
             // Acciones que pertenecen exclusivamente a una sucursal concreta.
