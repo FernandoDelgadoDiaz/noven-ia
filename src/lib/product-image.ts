@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { cacheBustPublicUrl, pathImagenProducto, prepararImagenProducto } from '@/lib/image-pipeline'
+import { pathImagenProducto, prepararImagenProducto } from '@/lib/image-pipeline'
 
 export type ModoImagenProducto = 'agregar' | 'reemplazar' | 'solo_lectura'
 
@@ -11,6 +11,14 @@ export interface ResultadoImagenProductoGlobal {
 
 function esModoImagenProducto(value: unknown): value is ModoImagenProducto {
   return value === 'agregar' || value === 'reemplazar' || value === 'solo_lectura'
+}
+
+function nuevaVersionImagen(): string {
+  const randomUUID = globalThis.crypto?.randomUUID
+  if (typeof randomUUID !== 'function') {
+    throw new Error('Este navegador no puede generar una versión segura para la foto.')
+  }
+  return randomUUID.call(globalThis.crypto)
 }
 
 export async function consultarModoImagenProducto(
@@ -41,34 +49,36 @@ export async function guardarImagenProductoGlobal(params: {
   }
 
   const preparada = await prepararImagenProducto(file)
-  const paths = pathImagenProducto(organizacionId, productoId)
+  const versionId = nuevaVersionImagen()
+  const paths = pathImagenProducto(organizacionId, productoId, versionId)
 
+  // Nunca pisamos la versión actualmente publicada. Ambos objetos se crean en
+  // una versión nueva e inmutable; si uno falla, la DB sigue apuntando al par anterior.
   const { error: fullError } = await supabase.storage
     .from('productos-imagenes')
     .upload(paths.full, preparada.full, {
-      upsert: true,
+      upsert: false,
       contentType: preparada.fullMimeType,
-      cacheControl: '3600',
+      cacheControl: '31536000',
     })
   if (fullError) throw fullError
 
   const { error: thumbError } = await supabase.storage
     .from('productos-imagenes')
     .upload(paths.thumb, preparada.thumb, {
-      upsert: true,
+      upsert: false,
       contentType: preparada.thumbMimeType,
-      cacheControl: '3600',
+      cacheControl: '31536000',
     })
   if (thumbError) throw thumbError
 
-  const version = Date.now()
   const { data: fullUrlData } = supabase.storage.from('productos-imagenes').getPublicUrl(paths.full)
   const { data: thumbUrlData } = supabase.storage.from('productos-imagenes').getPublicUrl(paths.thumb)
-  const publicUrl = cacheBustPublicUrl(fullUrlData.publicUrl, version)
-  const thumbUrl = cacheBustPublicUrl(thumbUrlData.publicUrl, version)
+  const publicUrl = fullUrlData.publicUrl
+  const thumbUrl = thumbUrlData.publicUrl
 
-  // La URL se persiste en productos, que es catálogo global por organización.
-  // No se guarda una foto por sucursal.
+  // Esta RPC es el punto de publicación: valida que full y thumb sean de la
+  // misma versión y actualiza ambas URLs juntas en el catálogo global.
   const { error: updateError } = await supabase.rpc('actualizar_imagen_producto_operador_v2', {
     p_sucursal_id: sucursalId,
     p_producto_id: productoId,
