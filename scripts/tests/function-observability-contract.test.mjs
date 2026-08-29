@@ -14,6 +14,7 @@ const resolver = read('netlify/functions/resolver-pendiente-catalogo.ts')
 const adminAccesos = read('netlify/functions/admin-accesos.ts')
 const adminSucursal = read('netlify/functions/admin-sucursal.ts')
 const adminInvitaciones = read('netlify/functions/admin-invitaciones.ts')
+const analisis = read('netlify/functions/analisis.ts')
 
 // El log es JSON estructurado y usa el request id de Netlify cuando está disponible.
 assert.match(helper, /x-nf-request-id/)
@@ -39,10 +40,11 @@ for (const [name, source] of [
   ['admin-accesos', adminAccesos],
   ['admin-sucursal', adminSucursal],
   ['admin-invitaciones', adminInvitaciones],
+  ['analisis', analisis],
 ]) {
   assert.match(source, /import \{ logServerError \} from '\.\/_observability'/, `${name}: usa logger común`)
   assert.doesNotMatch(source, /console\.error\(/, `${name}: no imprime errores crudos`)
-  assert.doesNotMatch(source, /No se pudo verificar la sesión: \$\{/, `${name}: no expone detalle de excepción de sesión`)
+  assert.doesNotMatch(source, /No se pudo (verificar|validar) la sesión: \$\{/, `${name}: no expone detalle de excepción de sesión`)
 }
 
 assert.match(listar, /operation: 'listar_productos_pendientes_catalogo_v2'/)
@@ -62,6 +64,30 @@ assert.match(adminSucursal, /operation: 'compensate_delete_auth_user'/)
 assert.match(adminInvitaciones, /operation: 'delete_pending_auth_user'/)
 assert.match(adminInvitaciones, /operation: 'rollback_invitation_after_auth_delete_failure'/)
 
+// Análisis IA registra sólo errores técnicos mínimos; nunca prompt, body del proveedor ni detalles crudos al cliente.
+for (const operation of [
+  'server_config',
+  'session_verify',
+  'load_profile',
+  'load_store',
+  'load_access_scope',
+  'load_operator_families',
+  'load_expiries',
+  'load_family_names',
+  'load_rag',
+  'load_action_history',
+  'deepseek_http',
+  'deepseek_empty',
+  'deepseek_request',
+]) {
+  assert.match(analisis, new RegExp(`operation: '${operation}'`), `analisis: registra ${operation}`)
+}
+assert.doesNotMatch(analisis, /dsRes\.text\(/, 'analisis: no registra body de error de DeepSeek')
+assert.doesNotMatch(analisis, /logServerError[^\n]*datosFormateados/, 'analisis: no envía prompt al logger')
+assert.doesNotMatch(analisis, /\$\{(?:perfilError|sucursalError|accesosError|familiasError|vErr|ragError).*?\.message\}/, 'analisis: no devuelve mensajes internos de Supabase')
+assert.match(analisis, /'No se pudo completar el análisis con el modelo\.'/)
+assert.match(analisis, /'No se pudo contactar el modelo de análisis\.'/)
+
 // Los 5xx devuelven mensajes estables; el detalle queda sólo en Netlify.
 assert.match(listar, /'No se pudo consultar el catálogo pendiente\.'/)
 assert.match(importar, /'No se pudo aplicar la importación\.'/)
@@ -69,4 +95,4 @@ assert.match(adminAccesos, /'No se pudo consultar el contexto de accesos\.'/)
 assert.match(adminSucursal, /'No se pudo completar el listado de usuarios\.'/)
 assert.match(adminInvitaciones, /'No se pudo limpiar la cuenta pendiente en Auth\.'/)
 
-console.log('✓ Functions críticas y administrativas emiten errores estructurados y redactados sin filtrar payloads sensibles')
+console.log('✓ Functions críticas, administrativas y Análisis IA emiten errores estructurados y redactados sin filtrar payloads sensibles')
