@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import AppLayout from '../components/layout/AppLayout'
 import PrivateRoute from '../components/auth/PrivateRoute'
 import OperationalRoute from '../components/auth/OperationalRoute'
+import CatalogWriteRoute from '../components/auth/CatalogWriteRoute'
 import AdminRoute from '../components/auth/AdminRoute'
 import AccessAdminRoute from '../components/auth/AccessAdminRoute'
 import ErrorBoundary from '../components/ErrorBoundary'
@@ -66,16 +67,14 @@ export const router = createBrowserRouter([
             element: <ErrorBoundary><Suspense {...suspenseProps}><Analisis /></Suspense></ErrorBoundary>,
           },
           {
+            // La bandeja mantiene lectura zonal; la propia página oculta acciones
+            // cuando el ítem no cae en una sucursal gestionable por el actor.
             path: 'importar/pendientes',
             element: <ErrorBoundary><Suspense {...suspenseProps}><PendientesCatalogo /></Suspense></ErrorBoundary>,
           },
           {
-            path: 'importar/pendientes/aprender',
-            element: <ErrorBoundary><Suspense {...suspenseProps}><AprenderPendientesCsv /></Suspense></ErrorBoundary>,
-          },
-          {
-            // Acciones que pertenecen exclusivamente a una sucursal concreta.
-            element: <AdminRoute />,
+            // Escrituras de importación/catálogo: gerente o supervisor local exacto.
+            element: <CatalogWriteRoute />,
             children: [
               {
                 path: 'importar',
@@ -89,6 +88,16 @@ export const router = createBrowserRouter([
                 path: 'importar/masivo',
                 element: <ErrorBoundary><Suspense {...suspenseProps}><ImportarMasivo /></Suspense></ErrorBoundary>,
               },
+              {
+                path: 'importar/pendientes/aprender',
+                element: <ErrorBoundary><Suspense {...suspenseProps}><AprenderPendientesCsv /></Suspense></ErrorBoundary>,
+              },
+            ],
+          },
+          {
+            // Administración de personas: exclusivamente gerente de la sucursal exacta.
+            element: <AdminRoute />,
+            children: [
               {
                 path: 'admin',
                 element: <ErrorBoundary><Suspense {...suspenseProps}><Admin /></Suspense></ErrorBoundary>,
