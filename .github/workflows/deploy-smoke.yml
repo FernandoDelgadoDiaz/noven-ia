@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Wait for exact Netlify deployment
         env:
-          EXPECTED_MARKER: noven-audit-admin-observability-production-check-ceb468f9
+          EXPECTED_MARKER: noven-audit-analysis-observability-production-check-6e5ce351
           SITE_URL: https://noven-ia.netlify.app
         shell: bash
         run: |
