@@ -1,11 +1,14 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import { getCorsHeaders } from './_auth'
+import { logServerError } from './_observability'
 
 interface Body {
   pendienteId?: string
   familiaId?: string
 }
+
+const ENDPOINT = 'resolver-pendiente-catalogo'
 
 const handler: Handler = async (event: HandlerEvent) => {
   const cors = getCorsHeaders(event)
@@ -22,6 +25,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'server_config', statusCode: 500, error: 'Configuración de servidor incompleta' })
     return json(500, { success: false, error: 'Configuración de servidor incompleta' })
   }
 
@@ -39,8 +43,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (!user.id) return json(401, { success: false, error: 'No autorizado' })
     uid = user.id
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return json(502, { success: false, error: `No se pudo verificar la sesión: ${msg}` })
+    logServerError(event, { endpoint: ENDPOINT, operation: 'session_verify', statusCode: 502, error: err })
+    return json(502, { success: false, error: 'No se pudo verificar la sesión.' })
   }
 
   let body: Body
@@ -62,6 +66,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     p_pendiente_id: pendienteId,
   })
   if (gateError) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'validar_resolucion_pendiente_server_v1', statusCode: 502, error: gateError })
     return json(502, { success: false, error: 'No se pudo validar el alcance de clasificación.' })
   }
   if (puedeResolver !== true) {
@@ -75,7 +80,6 @@ const handler: Handler = async (event: HandlerEvent) => {
   })
 
   if (error) {
-    console.error('[resolver-pendiente-catalogo] RPC error:', error)
     const status = /alcance|permiso|organización|familia/i.test(error.message) ? 403 : 409
     return json(status, { success: false, error: error.message })
   }
