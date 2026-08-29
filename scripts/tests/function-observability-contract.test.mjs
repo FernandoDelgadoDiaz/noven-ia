@@ -17,6 +17,7 @@ const adminInvitaciones = read('netlify/functions/admin-invitaciones.ts')
 const analisis = read('netlify/functions/analisis.ts')
 const aprenderFamilia = read('netlify/functions/aprender-pendientes-familia.ts')
 const importarFamilia = read('netlify/functions/importar-familia.ts')
+const radarPush = read('netlify/functions/enviar-push-radar-zonal.ts')
 
 // El log es JSON estructurado y usa el request id de Netlify cuando está disponible.
 assert.match(helper, /x-nf-request-id/)
@@ -45,6 +46,7 @@ for (const [name, source] of [
   ['analisis', analisis],
   ['aprender-pendientes-familia', aprenderFamilia],
   ['importar-familia', importarFamilia],
+  ['enviar-push-radar-zonal', radarPush],
 ]) {
   assert.match(source, /import \{ logServerError \} from '\.\/_observability'/, `${name}: usa logger común`)
   assert.doesNotMatch(source, /console\.error\(/, `${name}: no imprime errores crudos`)
@@ -67,6 +69,19 @@ for (const operation of [
   'load_local_store_state',
 ]) {
   assert.match(importarFamilia, new RegExp(`operation: '${operation}'`), `importar-familia: registra ${operation}`)
+}
+for (const operation of [
+  'server_config',
+  'load_alert',
+  'load_product',
+  'load_origin_store',
+  'load_destinations',
+  'load_push_subscriptions',
+  'send_notification',
+  'delete_expired_subscriptions',
+  'mark_dispatch_processed',
+]) {
+  assert.match(radarPush, new RegExp(`operation: '${operation}'`), `radar push: registra ${operation}`)
 }
 
 // Admin distingue errores de negocio conocidos de fallos inesperados de DB/Auth.
@@ -115,6 +130,16 @@ assert.match(importarFamilia, /'No se pudo cargar el catálogo de la familia\.'/
 assert.match(importarFamilia, /'No se pudo cargar el estado local de la sucursal\.'/)
 assert.match(importarFamilia, /'No se pudo aplicar la importación de la familia\.'/)
 
+// Radar: una falla técnica al leer suscripciones debe abortar ANTES de marcar
+// notificada_at. De otro modo se pierde la posibilidad de reintento.
+const subsFailureStart = radarPush.indexOf('if (subsError)')
+const markDispatchStart = radarPush.indexOf(".update({ notificada_at: new Date().toISOString() })")
+assert.ok(subsFailureStart >= 0, 'radar push: controla subsError')
+assert.ok(markDispatchStart > subsFailureStart, 'radar push: marca despacho después de resolver suscripciones')
+const subsFailureBlock = radarPush.slice(subsFailureStart, markDispatchStart)
+assert.match(subsFailureBlock, /return \{ statusCode: 500/, 'radar push: aborta si falla la consulta de suscripciones')
+assert.match(radarPush, /'No se pudieron leer suscripciones push'/)
+
 // Los 5xx devuelven mensajes estables; el detalle queda sólo en Netlify.
 assert.match(listar, /'No se pudo consultar el catálogo pendiente\.'/)
 assert.match(importar, /'No se pudo aplicar la importación\.'/)
@@ -122,4 +147,4 @@ assert.match(adminAccesos, /'No se pudo consultar el contexto de accesos\.'/)
 assert.match(adminSucursal, /'No se pudo completar el listado de usuarios\.'/)
 assert.match(adminInvitaciones, /'No se pudo limpiar la cuenta pendiente en Auth\.'/)
 
-console.log('✓ Functions críticas, administrativas, Análisis IA e importaciones de catálogo emiten errores estructurados y redactados sin filtrar payloads sensibles')
+console.log('✓ Functions críticas, administrativas, Análisis IA, importaciones y Radar push emiten errores estructurados; Radar conserva retry ante fallo de suscripciones')
