@@ -36,23 +36,55 @@ export function getTrimestreActual(): TrimestreInfo {
 interface AccionOperativaRow {
   tipo: string
   cantidad: number
+  valor_economico_sin_iva: number | null
+  valorizacion_metodo: string | null
+}
+
+export interface ResultadoEconomico {
+  unidades: number
+  pesos: number
+  accionesConCosto: number
+  accionesSinCosto: number
 }
 
 interface UseAccionesOperativasReturn {
-  /** Cantidad de vencimientos cerrados por venta; no unidades inferidas. */
   vendidos: number
   donaciones: number
   decomisos: number
+  recuperado: ResultadoEconomico
+  perdido: ResultadoEconomico
+  hayValorizacionRetrospectiva: boolean
   loading: boolean
   error: string | null
   trimestreInfo: TrimestreInfo
   refetch: () => Promise<void>
 }
 
+const VACIO: ResultadoEconomico = { unidades: 0, pesos: 0, accionesConCosto: 0, accionesSinCosto: 0 }
+
+function resumir(rows: AccionOperativaRow[], tipos: string[]): ResultadoEconomico {
+  const seleccion = rows.filter((row) => tipos.includes(row.tipo))
+  return seleccion.reduce<ResultadoEconomico>((acc, row) => {
+    const cantidad = Number(row.cantidad) || 0
+    const valor = row.valor_economico_sin_iva == null ? null : Number(row.valor_economico_sin_iva)
+    acc.unidades += cantidad
+    if (valor == null || !Number.isFinite(valor)) {
+      acc.accionesSinCosto += 1
+    } else {
+      acc.pesos += valor
+      acc.accionesConCosto += 1
+    }
+    return acc
+  }, { ...VACIO })
+}
+
 export function useAccionesOperativas(): UseAccionesOperativasReturn {
   const [vendidos, setVendidos] = useState(0)
   const [donaciones, setDonaciones] = useState(0)
   const [decomisos, setDecomisos] = useState(0)
+  const [recuperado, setRecuperado] = useState<ResultadoEconomico>({ ...VACIO })
+  const [perdido, setPerdido] = useState<ResultadoEconomico>({ ...VACIO })
+  const [hayValorizacionRetrospectiva, setHayValorizacionRetrospectiva] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { sucursalId, loading: sucursalLoading } = useSucursalActual()
@@ -66,6 +98,9 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
       setVendidos(0)
       setDonaciones(0)
       setDecomisos(0)
+      setRecuperado({ ...VACIO })
+      setPerdido({ ...VACIO })
+      setHayValorizacionRetrospectiva(false)
       setError(null)
       setLoading(false)
       return
@@ -77,7 +112,7 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
     const { trimestre, anio } = trimestreInfo
     const { data, error: fetchError } = await supabase
       .from('v_acciones_operativas_historial')
-      .select('tipo, cantidad')
+      .select('tipo, cantidad, valor_economico_sin_iva, valorizacion_metodo')
       .eq('trimestre', trimestre)
       .eq('anio', anio)
       .eq('sucursal_id', sucursalId)
@@ -89,9 +124,16 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
     }
 
     const rows = (data ?? []) as AccionOperativaRow[]
-    setVendidos(rows.filter((a) => a.tipo === 'vendido').length)
-    setDonaciones(rows.filter((a) => a.tipo === 'donacion').reduce((sum, a) => sum + a.cantidad, 0))
-    setDecomisos(rows.filter((a) => a.tipo === 'decomiso').reduce((sum, a) => sum + a.cantidad, 0))
+    const vendidosRows = rows.filter((a) => a.tipo === 'vendido')
+    const donacionRows = rows.filter((a) => a.tipo === 'donacion')
+    const decomisoRows = rows.filter((a) => a.tipo === 'decomiso')
+
+    setVendidos(vendidosRows.reduce((sum, a) => sum + (Number(a.cantidad) || 0), 0))
+    setDonaciones(donacionRows.reduce((sum, a) => sum + (Number(a.cantidad) || 0), 0))
+    setDecomisos(decomisoRows.reduce((sum, a) => sum + (Number(a.cantidad) || 0), 0))
+    setRecuperado(resumir(rows, ['vendido']))
+    setPerdido(resumir(rows, ['donacion', 'decomiso']))
+    setHayValorizacionRetrospectiva(rows.some((row) => row.valorizacion_metodo === 'retrospectiva_0258'))
     setLoading(false)
   }, [trimestreInfo, sucursalId, sucursalLoading])
 
@@ -101,5 +143,16 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
     void fetchData()
   }, [fetchData])
 
-  return { vendidos, donaciones, decomisos, loading, error, trimestreInfo, refetch }
+  return {
+    vendidos,
+    donaciones,
+    decomisos,
+    recuperado,
+    perdido,
+    hayValorizacionRetrospectiva,
+    loading,
+    error,
+    trimestreInfo,
+    refetch,
+  }
 }
