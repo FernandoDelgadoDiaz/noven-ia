@@ -1,6 +1,6 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
-import { getCorsHeaders } from './_auth'
+import { getCorsHeaders, logServerError, publicRpcErrorPayload, serverErrorPayload } from './_auth'
 
 type RolInvitable = 'gerente_zonal' | 'gerente_sucursal'
 type CanalInvitacion = 'link' | 'email'
@@ -40,28 +40,29 @@ function statusRpc(message: string): number {
   if (/inexistente|inactivo|no encontr/i.test(message)) return 404
   if (/obligatorio|inválid|requiere/i.test(message)) return 400
   if (/ya está registrada|duplicate|unique/i.test(message)) return 409
-  return 409
+  return 502
 }
 
 async function validarSesion(
   event: HandlerEvent,
   supabaseUrl: string,
   anonKey: string,
-): Promise<{ uid: string } | { error: string }> {
+): Promise<{ uid: string } | { error: string; statusCode: 401 | 502 }> {
   const authHeader = event.headers.authorization ?? event.headers.Authorization ?? ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
-  if (!token) return { error: 'No autorizado: token ausente' }
+  if (!token) return { error: 'No autorizado: token ausente', statusCode: 401 }
 
   try {
     const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: { Authorization: `Bearer ${token}`, apikey: anonKey },
     })
-    if (!res.ok) return { error: 'No autorizado: sesión inválida o expirada' }
+    if (!res.ok) return { error: 'No autorizado: sesión inválida o expirada', statusCode: 401 }
     const user = await res.json() as { id?: string }
-    if (!user.id) return { error: 'No autorizado: usuario no resoluble' }
+    if (!user.id) return { error: 'No autorizado: usuario no resoluble', statusCode: 401 }
     return { uid: user.id }
   } catch (err) {
-    return { error: `No se pudo verificar la sesión: ${err instanceof Error ? err.message : String(err)}` }
+    logServerError(event, 'admin-accesos', 'auth_verify_failed', err)
+    return { error: 'No se pudo verificar la sesión.', statusCode: 502 }
   }
 }
 
@@ -94,11 +95,14 @@ const handler: Handler = async (event) => {
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    return jsonResponse(event, 500, { success: false, error: 'Configuración de servidor incompleta' })
+    return jsonResponse(event, 500, serverErrorPayload(event, 'Configuración de servidor incompleta'))
   }
 
   const sesion = await validarSesion(event, supabaseUrl, anonKey)
-  if ('error' in sesion) return jsonResponse(event, 401, { success: false, error: sesion.error })
+  if ('error' in sesion) {
+    const payload = sesion.statusCode >= 500 ? serverErrorPayload(event, sesion.error) : { success: false, error: sesion.error }
+    return jsonResponse(event, sesion.statusCode, payload)
+  }
 
   let body: Body
   try {
@@ -115,7 +119,10 @@ const handler: Handler = async (event) => {
     const { data, error } = await supabase.rpc('listar_contexto_altas_v1', {
       p_actor_id: sesion.uid,
     })
-    if (error) return jsonResponse(event, statusRpc(error.message), { success: false, error: error.message })
+    if (error) {
+      const status = statusRpc(error.message)
+      return jsonResponse(event, status, publicRpcErrorPayload(event, 'admin-accesos', 'listar_contexto_altas_failed', error, status, 'No se pudo cargar el contexto de altas.'))
+    }
     return jsonResponse(event, 200, { success: true, ...(data as Record<string, unknown>) })
   }
 
@@ -153,7 +160,8 @@ const handler: Handler = async (event) => {
     p_actor_id: sesion.uid,
   })
   if (permisoError) {
-    return jsonResponse(event, statusRpc(permisoError.message), { success: false, error: permisoError.message })
+    const status = statusRpc(permisoError.message)
+    return jsonResponse(event, status, publicRpcErrorPayload(event, 'admin-accesos', 'validar_contexto_altas_failed', permisoError, status, 'No se pudo validar el alcance de altas.'))
   }
 
   const contexto = (contextoData ?? {}) as ContextoAltas
@@ -183,10 +191,8 @@ const handler: Handler = async (event) => {
       return jsonResponse(event, 409, { success: false, error: 'Ese email ya tiene una cuenta en Noven.' })
     }
   } catch (err) {
-    return jsonResponse(event, 502, {
-      success: false,
-      error: `No se pudo verificar el email: ${err instanceof Error ? err.message : String(err)}`,
-    })
+    logServerError(event, 'admin-accesos', 'email_lookup_failed', err)
+    return jsonResponse(event, 502, serverErrorPayload(event, 'No se pudo verificar el email.'))
   }
 
   const redirectTo = `${(process.env.URL ?? 'https://noven-ia.netlify.app').replace(/\/$/, '')}/activar`
@@ -238,11 +244,14 @@ const handler: Handler = async (event) => {
   if (registroError) {
     // La cuenta Auth fue creada por ESTA llamada; si falla la asignación segura de
     // alcance, compensamos para no dejar una cuenta huérfana ni con permisos parciales.
-    await supabase.auth.admin.deleteUser(usuarioId).catch(() => undefined)
-    return jsonResponse(event, statusRpc(registroError.message), {
-      success: false,
-      error: registroError.message,
-    })
+    try {
+      const { error: cleanupError } = await supabase.auth.admin.deleteUser(usuarioId)
+      if (cleanupError) logServerError(event, 'admin-accesos', 'auth_cleanup_failed', cleanupError)
+    } catch (cleanupError) {
+      logServerError(event, 'admin-accesos', 'auth_cleanup_failed', cleanupError)
+    }
+    const status = statusRpc(registroError.message)
+    return jsonResponse(event, status, publicRpcErrorPayload(event, 'admin-accesos', 'registrar_invitacion_failed', registroError, status, 'No se pudo registrar la invitación.'))
   }
 
   return jsonResponse(event, 201, {

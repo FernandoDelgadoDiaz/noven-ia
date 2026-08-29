@@ -1,6 +1,6 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
-import { getCorsHeaders } from './_auth'
+import { getCorsHeaders, logServerError, publicRpcErrorPayload, serverErrorPayload } from './_auth'
 
 interface Body {
   pendienteId?: string
@@ -22,7 +22,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    return json(500, { success: false, error: 'Configuración de servidor incompleta' })
+    return json(500, serverErrorPayload(event, 'Configuración de servidor incompleta'))
   }
 
   const authHeader = event.headers['authorization'] ?? event.headers['Authorization'] ?? ''
@@ -39,8 +39,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (!user.id) return json(401, { success: false, error: 'No autorizado' })
     uid = user.id
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return json(502, { success: false, error: `No se pudo verificar la sesión: ${msg}` })
+    logServerError(event, 'resolver-pendiente-catalogo', 'auth_verify_failed', err)
+    return json(502, serverErrorPayload(event, 'No se pudo verificar la sesión.'))
   }
 
   let body: Body
@@ -62,7 +62,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     p_pendiente_id: pendienteId,
   })
   if (gateError) {
-    return json(502, { success: false, error: 'No se pudo validar el alcance de clasificación.' })
+    logServerError(event, 'resolver-pendiente-catalogo', 'scope_gate_failed', gateError)
+    return json(502, serverErrorPayload(event, 'No se pudo validar el alcance de clasificación.'))
   }
   if (puedeResolver !== true) {
     return json(403, { success: false, error: 'No tenés permiso para clasificar este producto.' })
@@ -75,9 +76,9 @@ const handler: Handler = async (event: HandlerEvent) => {
   })
 
   if (error) {
-    console.error('[resolver-pendiente-catalogo] RPC error:', error)
     const status = /alcance|permiso|organización|familia/i.test(error.message) ? 403 : 409
-    return json(status, { success: false, error: error.message })
+    logServerError(event, 'resolver-pendiente-catalogo', 'resolve_pending_failed', error, { status_code: status })
+    return json(status, publicRpcErrorPayload(event, 'resolver-pendiente-catalogo', 'resolve_pending_failed', error, status, 'No se pudo clasificar el producto.'))
   }
 
   return json(200, { success: true, resultado: data })

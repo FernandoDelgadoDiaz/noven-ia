@@ -1,6 +1,6 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
-import { getCorsHeaders } from './_auth'
+import { getCorsHeaders, logServerError, publicRpcErrorPayload, serverErrorPayload } from './_auth'
 
 type Canal = 'link' | 'email'
 type TipoListado = 'jerarquia' | 'local'
@@ -50,27 +50,28 @@ function statusRpc(message: string): number {
   if (/inexistente|no encontr/i.test(message)) return 404
   if (/inválid|obligatori|aceptada/i.test(message)) return 400
   if (/duplicate|unique|responsable|registrada/i.test(message)) return 409
-  return 409
+  return 502
 }
 
 async function validarSesion(
   event: HandlerEvent,
   supabaseUrl: string,
   anonKey: string,
-): Promise<{ uid: string } | { error: string }> {
+): Promise<{ uid: string } | { error: string; statusCode: 401 | 502 }> {
   const authHeader = event.headers.authorization ?? event.headers.Authorization ?? ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
-  if (!token) return { error: 'No autorizado: token ausente' }
+  if (!token) return { error: 'No autorizado: token ausente', statusCode: 401 }
   try {
     const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: { Authorization: `Bearer ${token}`, apikey: anonKey },
     })
-    if (!res.ok) return { error: 'No autorizado: sesión inválida o expirada' }
+    if (!res.ok) return { error: 'No autorizado: sesión inválida o expirada', statusCode: 401 }
     const user = await res.json() as { id?: string }
-    if (!user.id) return { error: 'No autorizado: usuario no resoluble' }
+    if (!user.id) return { error: 'No autorizado: usuario no resoluble', statusCode: 401 }
     return { uid: user.id }
   } catch (err) {
-    return { error: `No se pudo verificar la sesión: ${err instanceof Error ? err.message : String(err)}` }
+    logServerError(event, 'admin-invitaciones', 'auth_verify_failed', err)
+    return { error: 'No se pudo verificar la sesión.', statusCode: 502 }
   }
 }
 
@@ -114,11 +115,14 @@ const handler: Handler = async (event) => {
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    return jsonResponse(event, 500, { success: false, error: 'Configuración de servidor incompleta' })
+    return jsonResponse(event, 500, serverErrorPayload(event, 'Configuración de servidor incompleta'))
   }
 
   const sesion = await validarSesion(event, supabaseUrl, anonKey)
-  if ('error' in sesion) return jsonResponse(event, 401, { success: false, error: sesion.error })
+  if ('error' in sesion) {
+    const payload = sesion.statusCode >= 500 ? serverErrorPayload(event, sesion.error) : { success: false, error: sesion.error }
+    return jsonResponse(event, sesion.statusCode, payload)
+  }
 
   let body: Body
   try {
@@ -146,7 +150,10 @@ const handler: Handler = async (event) => {
       p_tipo: tipo,
       p_sucursal_id: tipo === 'local' ? sucursalId : null,
     })
-    if (error) return jsonResponse(event, statusRpc(error.message), { success: false, error: error.message })
+    if (error) {
+      const status = statusRpc(error.message)
+      return jsonResponse(event, status, publicRpcErrorPayload(event, 'admin-invitaciones', 'listar_invitaciones_failed', error, status, 'No se pudieron listar las invitaciones.'))
+    }
     return jsonResponse(event, 200, { success: true, invitaciones: data ?? [] })
   }
 
@@ -160,7 +167,8 @@ const handler: Handler = async (event) => {
     p_invitacion_id: invitacionId,
   })
   if (detalleError) {
-    return jsonResponse(event, statusRpc(detalleError.message), { success: false, error: detalleError.message })
+    const status = statusRpc(detalleError.message)
+    return jsonResponse(event, status, publicRpcErrorPayload(event, 'admin-invitaciones', 'obtener_invitacion_failed', detalleError, status, 'No se pudo obtener la invitación.'))
   }
   const detalle = detalleData as InvitacionDetalle
   if (detalle.estado !== 'pendiente') {
@@ -172,7 +180,8 @@ const handler: Handler = async (event) => {
     p_invitacion_id: invitacionId,
   })
   if (anulacionError) {
-    return jsonResponse(event, statusRpc(anulacionError.message), { success: false, error: anulacionError.message })
+    const status = statusRpc(anulacionError.message)
+    return jsonResponse(event, status, publicRpcErrorPayload(event, 'admin-invitaciones', 'anular_invitacion_failed', anulacionError, status, 'No se pudo anular la invitación.'))
   }
   const anulacion = (anulacionData ?? {}) as { usuario_id?: string | null; puede_eliminar_auth?: boolean }
 
@@ -185,10 +194,8 @@ const handler: Handler = async (event) => {
         .from('invitaciones_acceso')
         .update({ estado: 'pendiente', anulada_at: null })
         .eq('id', invitacionId)
-      return jsonResponse(event, 502, {
-        success: false,
-        error: `No se pudo limpiar la cuenta pendiente en Auth: ${deleteError.message}`,
-      })
+      logServerError(event, 'admin-invitaciones', 'auth_delete_failed', deleteError)
+      return jsonResponse(event, 502, serverErrorPayload(event, 'No se pudo limpiar la cuenta pendiente en Auth.'))
     }
     await supabase
       .from('invitaciones_acceso')
@@ -258,11 +265,14 @@ const handler: Handler = async (event) => {
   }
 
   if (registroError) {
-    await supabase.auth.admin.deleteUser(nuevaAuth.usuarioId).catch(() => undefined)
-    return jsonResponse(event, statusRpc(registroError.message), {
-      success: false,
-      error: `La invitación anterior fue anulada, pero no se pudo registrar la nueva: ${registroError.message}`,
-    })
+    try {
+      const { error: cleanupError } = await supabase.auth.admin.deleteUser(nuevaAuth.usuarioId)
+      if (cleanupError) logServerError(event, 'admin-invitaciones', 'auth_cleanup_failed', cleanupError)
+    } catch (cleanupError) {
+      logServerError(event, 'admin-invitaciones', 'auth_cleanup_failed', cleanupError)
+    }
+    const status = statusRpc(registroError.message)
+    return jsonResponse(event, status, publicRpcErrorPayload(event, 'admin-invitaciones', 'registrar_invitacion_regenerada_failed', registroError, status, 'La invitación anterior fue anulada, pero no se pudo registrar la nueva.'))
   }
 
   return jsonResponse(event, 201, {

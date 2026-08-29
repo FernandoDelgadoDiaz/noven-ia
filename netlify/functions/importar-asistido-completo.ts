@@ -1,7 +1,7 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import { createHash } from 'node:crypto'
-import { getCorsHeaders } from './_auth'
+import { getCorsHeaders, logServerError, publicRpcErrorPayload, serverErrorPayload } from './_auth'
 import { decodificarCsv } from '../../src/lib/importar-csv'
 import { analizarReporteGlaciar } from '../../src/lib/importar-glaciar'
 
@@ -33,7 +33,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    return json(500, { success: false, error: 'Configuración de servidor incompleta' })
+    return json(500, serverErrorPayload(event, 'Configuración de servidor incompleta'))
   }
 
   const authHeader = event.headers['authorization'] ?? event.headers['Authorization'] ?? ''
@@ -50,8 +50,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (!user.id) return json(401, { success: false, error: 'No autorizado' })
     uid = user.id
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return json(502, { success: false, error: `No se pudo verificar la sesión: ${msg}` })
+    logServerError(event, 'importar-asistido-completo', 'auth_verify_failed', err)
+    return json(502, serverErrorPayload(event, 'No se pudo verificar la sesión.'))
   }
 
   let body: Body
@@ -76,7 +76,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     p_sucursal_id: sucursalId,
   })
   if (gateError) {
-    return json(502, { success: false, error: 'No se pudo validar el alcance de la importación.' })
+    logServerError(event, 'importar-asistido-completo', 'scope_gate_failed', gateError)
+    return json(502, serverErrorPayload(event, 'No se pudo validar el alcance de la importación.'))
   }
   if (puedeOperar !== true) {
     return json(403, { success: false, error: 'No tenés permiso para importar en la sucursal seleccionada.' })
@@ -144,9 +145,8 @@ const handler: Handler = async (event: HandlerEvent) => {
   })
 
   if (error) {
-    console.error('[importar-asistido-completo] RPC error:', error)
     const status = error.message.includes('permiso') ? 403 : 502
-    return json(status, { success: false, error: error.message })
+    return json(status, publicRpcErrorPayload(event, 'importar-asistido-completo', 'apply_import_failed', error, status, 'No se pudo aplicar la importación masiva.'))
   }
 
   return json(200, {

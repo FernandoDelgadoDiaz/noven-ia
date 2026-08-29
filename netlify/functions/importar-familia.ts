@@ -1,7 +1,7 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import { createHash } from 'node:crypto'
-import { getCorsHeaders } from './_auth'
+import { getCorsHeaders, logServerError, publicRpcErrorPayload, serverErrorPayload } from './_auth'
 import { decodificarCsv } from '../../src/lib/importar-csv'
 import { analizarReporteGlaciar } from '../../src/lib/importar-glaciar'
 import { reconciliar, type FilaConciliada, type ProductoDb } from '../../src/lib/importar-reconciliacion'
@@ -121,7 +121,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    return json(500, { success: false, error: 'Configuración de servidor incompleta' })
+    return json(500, serverErrorPayload(event, 'Configuración de servidor incompleta'))
   }
 
   const authHeader = event.headers['authorization'] ?? event.headers['Authorization'] ?? ''
@@ -138,8 +138,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (!user.id) return json(401, { success: false, error: 'No autorizado' })
     uid = user.id
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return json(502, { success: false, error: `No se pudo verificar la sesión: ${msg}` })
+    logServerError(event, 'importar-familia', 'auth_verify_failed', err)
+    return json(502, serverErrorPayload(event, 'No se pudo verificar la sesión.'))
   }
 
   let body: Body
@@ -182,7 +182,8 @@ const handler: Handler = async (event: HandlerEvent) => {
   ])
 
   if (perfilActorError || sucursalActorError) {
-    return json(502, { success: false, error: 'No se pudo validar el alcance de la importación.' })
+    logServerError(event, 'importar-familia', 'scope_lookup_failed', perfilActorError ?? sucursalActorError)
+    return json(502, serverErrorPayload(event, 'No se pudo validar el alcance de la importación.'))
   }
   if (!perfilActor?.activo) {
     return json(403, { success: false, error: 'La cuenta no está activa en Noven.' })
@@ -199,7 +200,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     .eq('activo', true)
 
   if (accesosActorError) {
-    return json(502, { success: false, error: 'No se pudo validar el permiso de importación.' })
+    logServerError(event, 'importar-familia', 'access_lookup_failed', accesosActorError)
+    return json(502, serverErrorPayload(event, 'No se pudo validar el permiso de importación.'))
   }
 
   const accesosActor = (accesosActorRaw ?? []) as AccesoImportacionRow[]
@@ -283,7 +285,8 @@ const handler: Handler = async (event: HandlerEvent) => {
         .in('codigo_barras', lote),
     ])
     if (errCod || errEan) {
-      return json(502, { success: false, error: `No se pudo reconstruir la reconciliación: ${(errCod ?? errEan)?.message}` })
+      logServerError(event, 'importar-familia', 'catalog_reconciliation_read_failed', errCod ?? errEan)
+      return json(502, serverErrorPayload(event, 'No se pudo reconstruir la reconciliación.'))
     }
     sumar((porCod ?? []) as ProductoCatalogoRow[])
     sumar((porEan ?? []) as ProductoCatalogoRow[])
@@ -297,7 +300,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     .eq('activo', true)
 
   if (errPorFamilia) {
-    return json(502, { success: false, error: `No se pudo cargar el catálogo de la familia: ${errPorFamilia.message}` })
+    logServerError(event, 'importar-familia', 'family_catalog_read_failed', errPorFamilia)
+    return json(502, serverErrorPayload(event, 'No se pudo cargar el catálogo de la familia.'))
   }
   sumar((porFamilia ?? []) as ProductoCatalogoRow[])
 
@@ -310,7 +314,8 @@ const handler: Handler = async (event: HandlerEvent) => {
       .eq('sucursal_id', sucursalId)
       .in('producto_id', lote)
     if (errEstados) {
-      return json(502, { success: false, error: `No se pudo cargar el estado local: ${errEstados.message}` })
+      logServerError(event, 'importar-familia', 'local_state_read_failed', errEstados)
+      return json(502, serverErrorPayload(event, 'No se pudo cargar el estado local.'))
     }
     for (const estado of (estados ?? []) as EstadoLocalRow[]) estadoPorProducto.set(estado.producto_id, estado)
   }
@@ -389,9 +394,9 @@ const handler: Handler = async (event: HandlerEvent) => {
   })
 
   if (errAplicado) {
-    console.error('[importar-familia] RPC error:', errAplicado)
     const status = /permiso|sucursal|familia/i.test(errAplicado.message) ? 403 : 409
-    return json(status, { success: false, error: errAplicado.message })
+    logServerError(event, 'importar-familia', 'apply_import_failed', errAplicado, { status_code: status })
+    return json(status, publicRpcErrorPayload(event, 'importar-familia', 'apply_import_failed', errAplicado, status, 'No se pudo aplicar la importación.'))
   }
 
   return json(200, {

@@ -1,6 +1,6 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
-import { getCorsHeaders } from './_auth'
+import { getCorsHeaders, logServerError, publicRpcErrorPayload, serverErrorPayload } from './_auth'
 import { SYSTEM_ADMIN, SYSTEM_OPERADOR } from './_analisis_policy'
 
 const UMBRAL_RADAR = 45
@@ -159,7 +159,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const deepseekKey = process.env.DEEPSEEK_API_KEY
   if (!supabaseUrl || !anonKey || !serviceRoleKey || !deepseekKey) {
-    return json(500, { success: false, error: 'Configuración de servidor incompleta' })
+    return json(500, serverErrorPayload(event, 'Configuración de servidor incompleta'))
   }
 
   const authHeader = event.headers.authorization ?? event.headers.Authorization ?? ''
@@ -176,7 +176,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     uid = user.id ?? ''
     if (!uid) return json(401, { success: false, error: 'No autorizado' })
   } catch (err) {
-    return json(502, { success: false, error: `No se pudo validar la sesión: ${err instanceof Error ? err.message : String(err)}` })
+    logServerError(event, 'analisis', 'auth_verify_failed', err)
+    return json(502, serverErrorPayload(event, 'No se pudo validar la sesión.'))
   }
 
   let body: Body
@@ -198,9 +199,15 @@ const handler: Handler = async (event: HandlerEvent) => {
     supabase.from('usuarios').select('activo').eq('id', uid).maybeSingle(),
     supabase.from('sucursales').select('id, codigo, nombre, organizacion_id, zona_id, activa').eq('id', sucursalId).maybeSingle(),
   ])
-  if (perfilError) return json(502, { success: false, error: `No se pudo validar el perfil: ${perfilError.message}` })
+  if (perfilError) {
+    logServerError(event, 'analisis', 'perfil_read_failed', perfilError)
+    return json(502, serverErrorPayload(event, 'No se pudo validar el perfil.'))
+  }
   if (!perfil?.activo) return json(403, { success: false, error: 'La cuenta no está activa en Noven.' })
-  if (sucursalError) return json(502, { success: false, error: `No se pudo validar la sucursal: ${sucursalError.message}` })
+  if (sucursalError) {
+    logServerError(event, 'analisis', 'sucursal_read_failed', sucursalError)
+    return json(502, serverErrorPayload(event, 'No se pudo validar la sucursal.'))
+  }
   if (!sucursal?.activa) return json(404, { success: false, error: 'La sucursal no existe o está inactiva.' })
 
   const { data: accesosRaw, error: accesosError } = await supabase
@@ -209,7 +216,10 @@ const handler: Handler = async (event: HandlerEvent) => {
     .eq('usuario_id', uid)
     .eq('organizacion_id', sucursal.organizacion_id)
     .eq('activo', true)
-  if (accesosError) return json(502, { success: false, error: `No se pudo validar el alcance: ${accesosError.message}` })
+  if (accesosError) {
+    logServerError(event, 'analisis', 'accesos_read_failed', accesosError)
+    return json(502, serverErrorPayload(event, 'No se pudo validar el alcance.'))
+  }
 
   const accesos = (accesosRaw ?? []) as AccesoRow[]
   const scopeCompleto = accesos.some((a) =>
@@ -229,7 +239,10 @@ const handler: Handler = async (event: HandlerEvent) => {
       .eq('usuario_id', uid)
       .eq('sucursal_id', sucursalId)
       .eq('activo', true)
-    if (familiasError) return json(502, { success: false, error: `No se pudieron validar las familias: ${familiasError.message}` })
+    if (familiasError) {
+    logServerError(event, 'analisis', 'familias_read_failed', familiasError)
+    return json(502, serverErrorPayload(event, 'No se pudieron validar las familias.'))
+  }
     familiaIds = (familiasAsignadas ?? []).map((r) => r.familia_id as string)
     if (familiaIds.length === 0) {
       return json(200, {
@@ -246,7 +259,10 @@ const handler: Handler = async (event: HandlerEvent) => {
     .select('id, cantidad, fecha_vencimiento, descripcion, marca, gramaje, cod_art, codigo_barras, venta_media_diaria, familia_id, categoria, sector_nombre, dias_donacion')
     .eq('activo', true)
     .eq('sucursal_id', sucursalId)
-  if (vErr) return json(502, { success: false, error: `Error al leer vencimientos: ${vErr.message}` })
+  if (vErr) {
+    logServerError(event, 'analisis', 'vencimientos_read_failed', vErr)
+    return json(502, serverErrorPayload(event, 'No se pudieron leer los vencimientos.'))
+  }
 
   let vencs = (rows ?? []) as unknown as VencRow[]
   if (!scopeCompleto) vencs = vencs.filter((r) => r.familia_id != null && familiaIds.includes(r.familia_id))
@@ -266,7 +282,10 @@ const handler: Handler = async (event: HandlerEvent) => {
     .from('v_seguimiento_rag_actual')
     .select('vencimiento_id, familia_id, rag_porcentaje, estado_seguimiento_rag, velocidad_observada, velocidad_necesaria, cantidad_observada, unidades_vendidas_observadas')
     .eq('sucursal_id', sucursalId)
-  if (ragError) return json(502, { success: false, error: `Error al leer seguimiento RAG: ${ragError.message}` })
+  if (ragError) {
+    logServerError(event, 'analisis', 'rag_read_failed', ragError)
+    return json(502, serverErrorPayload(event, 'No se pudo leer el seguimiento RAG.'))
+  }
   let rags = (ragRaw ?? []) as unknown as RagRow[]
   if (!scopeCompleto) rags = rags.filter((r) => r.familia_id != null && familiaIds.includes(r.familia_id))
   const ragPorVencimiento = new Map(rags.map((r) => [r.vencimiento_id, r]))
@@ -282,7 +301,9 @@ const handler: Handler = async (event: HandlerEvent) => {
     supabase.from('acciones_operativas').select(accionSelect).eq('sucursal_id', sucursalId).eq('trimestre', trimestreAnterior).eq('anio', anioAnterior),
   ])
   if (accActualError || accAnteriorError) {
-    return json(502, { success: false, error: `Error al leer historial: ${(accActualError ?? accAnteriorError)?.message}` })
+    const historyError = accActualError ?? accAnteriorError
+    logServerError(event, 'analisis', 'historial_read_failed', historyError)
+    return json(502, serverErrorPayload(event, 'No se pudo leer el historial operativo.'))
   }
 
   const filtrarAccion = (a: AccionRow) => scopeCompleto || (a.productos?.familia_id != null && familiaIds.includes(a.productos.familia_id))
@@ -411,12 +432,15 @@ const handler: Handler = async (event: HandlerEvent) => {
       }),
     })
     if (!dsRes.ok) {
-      console.error('[analisis] DeepSeek error', dsRes.status, await dsRes.text().catch(() => ''))
-      return json(502, { success: false, error: `Error del modelo de análisis (${dsRes.status})` })
+      logServerError(event, 'analisis', 'model_http_failed', new Error(`HTTP ${dsRes.status}`), { provider_status: dsRes.status })
+      return json(502, serverErrorPayload(event, `Error del modelo de análisis (${dsRes.status})`))
     }
     const dsData = await dsRes.json() as { choices?: Array<{ message?: { content?: string } }> }
     const contenido = dsData.choices?.[0]?.message?.content?.trim() ?? ''
-    if (!contenido) return json(502, { success: false, error: 'El modelo no devolvió contenido' })
+    if (!contenido) {
+      logServerError(event, 'analisis', 'model_empty_response', new Error('empty model response'))
+      return json(502, serverErrorPayload(event, 'El modelo no devolvió contenido'))
+    }
     return json(200, {
       success: true,
       analisis: contenido,
@@ -425,7 +449,8 @@ const handler: Handler = async (event: HandlerEvent) => {
       sucursal_codigo: sucursal.codigo,
     })
   } catch (err) {
-    return json(502, { success: false, error: `Error al contactar el modelo: ${err instanceof Error ? err.message : String(err)}` })
+    logServerError(event, 'analisis', 'model_request_failed', err)
+    return json(502, serverErrorPayload(event, 'Error al contactar el modelo.'))
   }
 }
 

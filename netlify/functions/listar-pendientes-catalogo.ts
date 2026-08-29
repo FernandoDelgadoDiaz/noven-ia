@@ -1,6 +1,6 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
-import { getCorsHeaders } from './_auth'
+import { getCorsHeaders, logServerError, publicRpcErrorPayload, serverErrorPayload } from './_auth'
 
 const handler: Handler = async (event: HandlerEvent) => {
   const cors = getCorsHeaders(event)
@@ -17,7 +17,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    return json(500, { success: false, error: 'Configuración de servidor incompleta' })
+    return json(500, serverErrorPayload(event, 'Configuración de servidor incompleta'))
   }
 
   const authHeader = event.headers['authorization'] ?? event.headers['Authorization'] ?? ''
@@ -34,8 +34,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (!user.id) return json(401, { success: false, error: 'No autorizado' })
     uid = user.id
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return json(502, { success: false, error: `No se pudo verificar la sesión: ${msg}` })
+    logServerError(event, 'listar-pendientes-catalogo', 'auth_verify_failed', err)
+    return json(502, serverErrorPayload(event, 'No se pudo verificar la sesión.'))
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
@@ -44,9 +44,8 @@ const handler: Handler = async (event: HandlerEvent) => {
   })
 
   if (error) {
-    console.error('[listar-pendientes-catalogo] RPC error:', error)
     const status = /alcance|permiso/i.test(error.message) ? 403 : 502
-    return json(status, { success: false, error: error.message })
+    return json(status, publicRpcErrorPayload(event, 'listar-pendientes-catalogo', 'list_pending_failed', error, status, 'No se pudieron cargar los pendientes de catálogo.'))
   }
 
   return json(200, { success: true, pendientes: data ?? [] })
