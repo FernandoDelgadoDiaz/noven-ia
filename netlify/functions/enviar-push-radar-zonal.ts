@@ -1,6 +1,7 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import webpush from 'web-push'
+import { logServerError } from './_observability'
 
 interface RadarZonalWebhookBody {
   alerta_zonal_id?: string
@@ -12,6 +13,8 @@ interface DestinoRow {
   stock_snapshot: number
   stock_actualizado_at: string | null
 }
+
+const ENDPOINT = 'enviar-push-radar-zonal'
 
 function formatFecha(fecha: string): string {
   const [year, month, day] = fecha.split('-')
@@ -37,7 +40,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const vapidSubject = process.env.VAPID_SUBJECT ?? 'mailto:gerente091@gmail.com'
 
   if (!supabaseUrl || !serviceRoleKey || !vapidPublic || !vapidPrivate) {
-    console.error('[radar-zonal-push] Config de servidor incompleta')
+    logServerError(event, { endpoint: ENDPOINT, operation: 'server_config', statusCode: 500, error: 'Configuración de servidor incompleta' })
     return { statusCode: 500, body: JSON.stringify({ success: false, error: 'Config de servidor incompleta' }) }
   }
 
@@ -63,7 +66,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     .maybeSingle()
 
   if (alertaError) {
-    console.error('[radar-zonal-push] Error leyendo alerta', alertaError.message)
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_alert', statusCode: 500, error: alertaError })
     return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudo leer la alerta' }) }
   }
   if (!alerta) {
@@ -91,7 +94,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   ])
 
   if (destinosError) {
-    console.error('[radar-zonal-push] Error leyendo destinos', destinosError.message)
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_destinations', statusCode: 500, error: destinosError })
     return { statusCode: 500, body: JSON.stringify({ success: false, error: 'No se pudieron resolver destinatarios' }) }
   }
 
@@ -107,7 +110,9 @@ const handler: Handler = async (event: HandlerEvent) => {
     .in('usuario_id', userIds)
 
   if (subsError) {
-    console.error('[radar-zonal-push] Error leyendo suscripciones', subsError.message)
+    // Preservamos el comportamiento histórico: la campana interna sigue siendo
+    // la fuente durable aunque Web Push no pueda resolverse en esta ejecución.
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_push_subscriptions', statusCode: 500, error: subsError })
   }
 
   const subsPorUsuario = new Map<string, Array<{ id: string; subscription: webpush.PushSubscription }>>()
@@ -146,7 +151,12 @@ const handler: Handler = async (event: HandlerEvent) => {
           if (statusCode === 410 || statusCode === 404) {
             expiradas.add(sub.id)
           } else {
-            console.error('[radar-zonal-push] Error enviando push', statusCode, (err as Error).message)
+            logServerError(event, {
+              endpoint: ENDPOINT,
+              operation: 'send_push',
+              statusCode: 502,
+              error: new Error(`Web push failed (${statusCode ?? 'unknown'})`),
+            })
           }
         }
       }
@@ -154,7 +164,13 @@ const handler: Handler = async (event: HandlerEvent) => {
   )
 
   if (expiradas.size > 0) {
-    await supabase.from('push_subscriptions').delete().in('id', Array.from(expiradas))
+    const { error: cleanupError } = await supabase
+      .from('push_subscriptions')
+      .delete()
+      .in('id', Array.from(expiradas))
+    if (cleanupError) {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'cleanup_expired_subscriptions', statusCode: 500, error: cleanupError })
+    }
   }
 
   // `notificada_at` significa que el despacho push fue procesado. Aunque el
@@ -168,7 +184,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     .eq('estado', 'pendiente')
 
   if (markError) {
-    console.error('[radar-zonal-push] No se pudo marcar el despacho', markError.message)
+    logServerError(event, { endpoint: ENDPOINT, operation: 'mark_dispatch', statusCode: 500, error: markError })
   }
 
   return {
