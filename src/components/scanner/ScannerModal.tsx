@@ -55,16 +55,14 @@ export default function ScannerModal({ onScan, onClose }: ScannerModalProps) {
   }
 
   useEffect(() => {
-    // Verificar soporte básico de getUserMedia
     if (!navigator.mediaDevices?.getUserMedia) {
       setStatus('no_soportado')
-      setErrorMsg('Tu navegador no soporta acceso a la cámara. Usá el ingreso manual.')
+      setErrorMsg('Tu navegador no soporta acceso a la cámara. El EAN sólo puede registrarse mediante escaneo.')
       return
     }
 
     const tieneBarcodeDetector = 'BarcodeDetector' in window
 
-    // Si no hay BarcodeDetector, usar fallback html5-qrcode
     if (!tieneBarcodeDetector) {
       setUseFallback(true)
       setStatus('activa')
@@ -123,10 +121,10 @@ export default function ScannerModal({ onScan, onClose }: ScannerModalProps) {
           msg.toLowerCase().includes('notallowed')
         ) {
           setStatus('denegada')
-          setErrorMsg('Permiso de cámara denegado. Habilitalo desde la configuración del navegador.')
+          setErrorMsg('Permiso de cámara denegado. Habilitalo desde la configuración del navegador para escanear el EAN.')
         } else {
           setStatus('error')
-          setErrorMsg('No se pudo iniciar la cámara. Intentá ingresar el código manualmente.')
+          setErrorMsg('No se pudo iniciar la cámara. El EAN no admite carga manual; volvé a intentar el escaneo.')
         }
       }
     }
@@ -138,7 +136,6 @@ export default function ScannerModal({ onScan, onClose }: ScannerModalProps) {
     }
   }, [onScan])
 
-  // Estados de error: no_soportado, denegada, error
   const hayError = status === 'no_soportado' || status === 'denegada' || status === 'error'
 
   if (hayError) {
@@ -166,14 +163,13 @@ export default function ScannerModal({ onScan, onClose }: ScannerModalProps) {
             onClick={onClose}
             className="mt-2 px-6 py-3 bg-gray-800 text-white rounded-xl font-medium hover:bg-gray-700 transition-colors"
           >
-            Ingresar código manualmente
+            Cerrar cámara
           </button>
         </div>
       </div>
     )
   }
 
-  // Fallback html5-qrcode (cuando BarcodeDetector no está disponible)
   if (useFallback) {
     return (
       <div className="fixed inset-0 z-50 bg-gray-900 flex flex-col">
@@ -205,10 +201,8 @@ export default function ScannerModal({ onScan, onClose }: ScannerModalProps) {
     )
   }
 
-  // Vista nativa con BarcodeDetector
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col">
-      {/* Video fullscreen como fondo */}
       <video
         ref={videoRef}
         muted
@@ -216,9 +210,7 @@ export default function ScannerModal({ onScan, onClose }: ScannerModalProps) {
         className="absolute inset-0 w-full h-full object-cover"
       />
 
-      {/* Overlay encima del video */}
       <div className="absolute inset-0 flex flex-col">
-        {/* Botón cerrar top-right */}
         <div className="flex justify-end p-4">
           <button
             type="button"
@@ -230,7 +222,6 @@ export default function ScannerModal({ onScan, onClose }: ScannerModalProps) {
           </button>
         </div>
 
-        {/* Centro: recuadro de escaneo */}
         <div className="flex-1 flex flex-col items-center justify-center gap-4 px-8">
           {status === 'iniciando' && (
             <div className="flex flex-col items-center gap-3">
@@ -241,15 +232,12 @@ export default function ScannerModal({ onScan, onClose }: ScannerModalProps) {
 
           {status === 'activa' && (
             <>
-              {/* Recuadro con esquinas y línea de escaneo */}
               <div className="relative w-64 h-64">
-                {/* Esquinas decorativas */}
                 <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-green-400 rounded-tl-lg" />
                 <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-green-400 rounded-tr-lg" />
                 <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-green-400 rounded-bl-lg" />
                 <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-green-400 rounded-br-lg" />
 
-                {/* Línea de escaneo animada */}
                 <div className="absolute inset-x-2 overflow-hidden" style={{ top: '4px', bottom: '4px' }}>
                   <div className="scan-line absolute left-0 right-0 h-0.5 bg-green-400/80 shadow-[0_0_8px_2px_rgba(74,222,128,0.6)]" />
                 </div>
@@ -262,19 +250,17 @@ export default function ScannerModal({ onScan, onClose }: ScannerModalProps) {
           )}
         </div>
 
-        {/* Botón inferior */}
         <div className="flex justify-center pb-10">
           <button
             type="button"
             onClick={() => { stopCamera(); onClose() }}
             className="px-6 py-3 bg-black/50 text-white text-sm font-medium rounded-full hover:bg-black/70 transition-colors border border-white/20"
           >
-            Ingresar manualmente
+            Cerrar cámara
           </button>
         </div>
       </div>
 
-      {/* Animación de la línea de escaneo */}
       <style>{`
         @keyframes scan {
           0% { top: 4px; }
