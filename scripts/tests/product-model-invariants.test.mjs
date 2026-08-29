@@ -12,6 +12,7 @@ const operational = read('supabase/migrations/20260826000460_vencimientos_operat
 const scanner = read('supabase/migrations/20260827000140_scanner_catalog_rpc_v1.sql')
 const radar = read('supabase/migrations/20260827000340_radar_zonal_v1.sql')
 const image = read('src/lib/product-image.ts')
+const imagePipeline = read('src/lib/image-pipeline.ts')
 const push = read('netlify/functions/enviar-push-radar-zonal.ts')
 
 // 1) Identidad de producto compartida por organización.
@@ -31,11 +32,13 @@ assert.match(scanner, /'venta_media_diaria', COALESCE\(ps\.venta_media_diaria, 0
 assert.match(scanner, /'stock_actual', COALESCE\(ps\.stock_actual, 0\)/)
 assert.match(scanner, /ps\.sucursal_id = p_sucursal_id/)
 
-// 3) Foto compartida: path y persistencia por organización + producto, no por sucursal.
+// 3) Foto compartida: identidad global por organización + producto; la versión
+// sólo hace inmutable cada publicación, nunca crea una foto local por sucursal.
 assert.match(image, /guardarImagenProductoGlobal/)
-assert.match(image, /pathImagenProducto\(organizacionId, productoId\)/)
+assert.match(image, /pathImagenProducto\(organizacionId, productoId, versionId\)/)
+assert.match(imagePipeline, /\$\{organizacionId\}\/productos\/\$\{productoId\}\/\$\{versionId\}\//)
 assert.match(image, /actualizar_imagen_producto_operador_v2/)
-assert.match(image, /catálogo global por organización/)
+assert.match(image, /catálogo global/)
 
 // 4) Radar colaborativo: sólo misma zona, nunca el origen y sólo locales con stock positivo.
 assert.match(radar, /sd\.zona_id = v_zona/)
