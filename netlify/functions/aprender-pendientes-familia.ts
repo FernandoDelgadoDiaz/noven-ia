@@ -1,6 +1,7 @@
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import { getCorsHeaders } from './_auth'
+import { logServerError } from './_observability'
 import { decodificarCsv } from '../../src/lib/importar-csv'
 import { analizarReporteGlaciar } from '../../src/lib/importar-glaciar'
 
@@ -8,6 +9,8 @@ interface Body {
   sucursalId?: string
   archivoBase64?: string
 }
+
+const ENDPOINT = 'aprender-pendientes-familia'
 
 const handler: Handler = async (event: HandlerEvent) => {
   const cors = getCorsHeaders(event)
@@ -24,6 +27,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'server_config', statusCode: 500, error: 'Configuración de servidor incompleta' })
     return json(500, { success: false, error: 'Configuración de servidor incompleta' })
   }
 
@@ -41,8 +45,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     if (!user.id) return json(401, { success: false, error: 'No autorizado' })
     uid = user.id
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return json(502, { success: false, error: `No se pudo verificar la sesión: ${msg}` })
+    logServerError(event, { endpoint: ENDPOINT, operation: 'session_verify', statusCode: 502, error: err })
+    return json(502, { success: false, error: 'No se pudo verificar la sesión.' })
   }
 
   let body: Body
@@ -64,6 +68,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     p_sucursal_id: sucursalId,
   })
   if (gateError) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'validar_operacion_local_server_v1', statusCode: 502, error: gateError })
     return json(502, { success: false, error: 'No se pudo validar el alcance para aprender catálogo.' })
   }
   if (puedeOperar !== true) {
@@ -108,9 +113,14 @@ const handler: Handler = async (event: HandlerEvent) => {
   })
 
   if (error) {
-    console.error('[aprender-pendientes-familia] RPC error:', error)
     const status = /alcance|permiso|familia|sucursal/i.test(error.message) ? 403 : 409
-    return json(status, { success: false, error: error.message })
+    logServerError(event, { endpoint: ENDPOINT, operation: 'resolver_pendientes_catalogo_por_familia_csv', statusCode: status, error })
+    return json(status, {
+      success: false,
+      error: status === 403
+        ? 'No tenés permiso para aprender catálogo desde esta sucursal.'
+        : 'No se pudo completar el aprendizaje de catálogo.',
+    })
   }
 
   return json(200, {
