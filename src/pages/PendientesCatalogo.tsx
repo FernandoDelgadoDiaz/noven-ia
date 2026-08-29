@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, CheckCircle, Loader2, RefreshCw, Tags, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Eye, Loader2, RefreshCw, Tags, TriangleAlert } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import ProductIdentity from '@/components/product/ProductIdentity'
-import { usePuedeGestionarCatalogo } from '@/hooks/usePuedeGestionarCatalogo'
+import { usePuedeGestionarCatalogoSucursal } from '@/hooks/usePuedeGestionarCatalogoSucursal'
 
 interface SucursalPendiente {
   id: string
@@ -58,7 +58,7 @@ async function tokenActual(): Promise<string> {
 
 export default function PendientesCatalogo() {
   const navigate = useNavigate()
-  const { puedeGestionar } = usePuedeGestionarCatalogo()
+  const { puedeGestionar, sucursalesGestionables } = usePuedeGestionarCatalogoSucursal()
   const [pendientes, setPendientes] = useState<ProductoPendiente[]>([])
   const [familias, setFamilias] = useState<FamiliaInfo[]>([])
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
@@ -68,6 +68,11 @@ export default function PendientesCatalogo() {
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mensaje, setMensaje] = useState<string | null>(null)
+
+  const puedeGestionarPendiente = useCallback(
+    (pendiente: ProductoPendiente): boolean => pendiente.sucursales.some((s) => sucursalesGestionables.has(s.id)),
+    [sucursalesGestionables],
+  )
 
   const cargar = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -87,12 +92,10 @@ export default function PendientesCatalogo() {
       setFamiliaPorPendiente({})
       setFamiliaMasiva('')
 
-      if (!puedeGestionar) {
-        setFamilias([])
-        return
-      }
-
-      const orgs = Array.from(new Set(lista.map((p) => p.organizacion_id)))
+      // Un usuario de sólo lectura no necesita abrir superficie adicional de catálogo.
+      const orgs = Array.from(new Set(
+        lista.filter(puedeGestionarPendiente).map((p) => p.organizacion_id),
+      ))
       if (orgs.length === 0) {
         setFamilias([])
         return
@@ -110,15 +113,20 @@ export default function PendientesCatalogo() {
     } finally {
       setLoading(false)
     }
-  }, [puedeGestionar])
+  }, [puedeGestionarPendiente])
 
   useEffect(() => {
     void cargar()
   }, [cargar])
 
   const seleccion = useMemo(
-    () => pendientes.filter((p) => seleccionados.has(p.id)),
-    [pendientes, seleccionados],
+    () => pendientes.filter((p) => seleccionados.has(p.id) && puedeGestionarPendiente(p)),
+    [pendientes, puedeGestionarPendiente, seleccionados],
+  )
+
+  const haySoloLectura = useMemo(
+    () => pendientes.some((p) => !puedeGestionarPendiente(p)),
+    [pendientes, puedeGestionarPendiente],
   )
 
   const orgSeleccionada = useMemo(() => {
@@ -132,7 +140,6 @@ export default function PendientesCatalogo() {
   )
 
   async function resolverUno(pendienteId: string, familiaId: string): Promise<ResolveResponse> {
-    if (!puedeGestionar) throw new Error('No tenés permiso para clasificar productos.')
     const token = await tokenActual()
     const response = await fetch('/.netlify/functions/resolver-pendiente-catalogo', {
       method: 'POST',
@@ -148,7 +155,10 @@ export default function PendientesCatalogo() {
   }
 
   async function clasificarIndividual(pendiente: ProductoPendiente): Promise<void> {
-    if (!puedeGestionar) return
+    if (!puedeGestionarPendiente(pendiente)) {
+      setError('Este producto está disponible sólo para seguimiento en tu alcance actual.')
+      return
+    }
     const familiaId = familiaPorPendiente[pendiente.id]
     if (!familiaId) {
       setError('Elegí una familia antes de clasificar el producto.')
@@ -170,7 +180,11 @@ export default function PendientesCatalogo() {
   }
 
   async function clasificarSeleccionados(): Promise<void> {
-    if (!puedeGestionar || seleccion.length === 0) return
+    if (seleccion.length === 0) return
+    if (seleccion.some((p) => !puedeGestionarPendiente(p))) {
+      setError('La selección contiene productos de sucursales donde no tenés permiso de clasificación.')
+      return
+    }
     if (!orgSeleccionada) {
       setError('La clasificación masiva sólo puede hacerse con productos de la misma organización.')
       return
@@ -199,7 +213,8 @@ export default function PendientesCatalogo() {
   }
 
   function toggle(id: string): void {
-    if (!puedeGestionar) return
+    const pendiente = pendientes.find((p) => p.id === id)
+    if (!pendiente || !puedeGestionarPendiente(pendiente)) return
     setSeleccionados((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -242,14 +257,20 @@ export default function PendientesCatalogo() {
           <div>
             <p className="text-sm font-semibold text-foreground">Una clasificación se aprende una sola vez</p>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-              Si un artículo fue detectado por varias sucursales, clasificarlo acá resuelve todas esas detecciones. Cada sucursal conserva su propio stock y venta media.
+              Si un artículo fue detectado por varias sucursales, una clasificación autorizada resuelve todas esas detecciones. Cada sucursal conserva su propio stock y venta media.
             </p>
           </div>
         </div>
 
-        {!puedeGestionar && (
-          <div className="bg-sky-50 border border-sky-200 rounded-card p-4 text-sm text-sky-800">
-            Modo lectura. Podés revisar los pendientes dentro de tu alcance; la clasificación corresponde a responsables operativos de cada sucursal.
+        {!loading && haySoloLectura && (
+          <div className="bg-slate-50 border border-slate-200 rounded-card p-4 flex items-start gap-3" role="status">
+            <Eye className="h-5 w-5 text-slate-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">Parte de esta bandeja es sólo lectura</p>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                Podés seguir los pendientes de tu alcance zonal, pero sólo clasificar los detectados en sucursales donde seas gerente o supervisor local.
+              </p>
+            </div>
           </div>
         )}
 
@@ -282,7 +303,7 @@ export default function PendientesCatalogo() {
           </div>
         )}
 
-        {puedeGestionar && seleccion.length > 0 && (
+        {seleccion.length > 0 && (
           <div className="bg-white rounded-card shadow-card border border-brand/20 p-4 flex flex-col md:flex-row gap-3 md:items-end sticky top-[78px] z-[5]">
             <div className="flex-1">
               <p className="text-xs font-semibold text-foreground">{seleccion.length} producto(s) seleccionado(s)</p>
@@ -314,11 +335,12 @@ export default function PendientesCatalogo() {
         {!loading && pendientes.length > 0 && (
           <div className="space-y-3">
             {pendientes.map((p) => {
-              const familiasProducto = familias.filter((f) => f.organizacion_id === p.organizacion_id)
+              const editable = puedeGestionarPendiente(p)
+              const familiasProducto = editable ? familias.filter((f) => f.organizacion_id === p.organizacion_id) : []
               return (
                 <article key={p.id} className="bg-white rounded-card shadow-card border border-border/50 p-4">
                   <div className="flex items-start gap-3">
-                    {puedeGestionar && (
+                    {editable ? (
                       <input
                         type="checkbox"
                         checked={seleccionados.has(p.id)}
@@ -326,6 +348,8 @@ export default function PendientesCatalogo() {
                         className="mt-1 h-4 w-4 accent-[color:var(--brand)]"
                         aria-label={`Seleccionar ${p.cod_art}`}
                       />
+                    ) : (
+                      <Eye className="mt-0.5 h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
@@ -355,13 +379,14 @@ export default function PendientesCatalogo() {
                         ))}
                       </div>
 
-                      {puedeGestionar && (
+                      {editable ? (
                         <div className="mt-4 flex flex-col sm:flex-row gap-2">
                           <select
                             value={familiaPorPendiente[p.id] ?? ''}
                             onChange={(e) => setFamiliaPorPendiente((prev) => ({ ...prev, [p.id]: e.target.value }))}
                             disabled={guardando}
                             className="flex-1 min-h-10 rounded-lg border border-border bg-white px-3 text-sm text-foreground disabled:opacity-50"
+                            aria-label={`Familia para ${p.cod_art}`}
                           >
                             <option value="">Elegir familia...</option>
                             {familiasProducto.map((f) => (
@@ -376,6 +401,10 @@ export default function PendientesCatalogo() {
                           >
                             Clasificar para toda la organización
                           </button>
+                        </div>
+                      ) : (
+                        <div className="mt-4 rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground" aria-label={`Solo lectura ${p.cod_art}`}>
+                          Solo lectura en tu alcance actual.
                         </div>
                       )}
                     </div>
