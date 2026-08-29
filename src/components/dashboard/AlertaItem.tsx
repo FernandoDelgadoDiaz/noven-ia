@@ -5,8 +5,12 @@ import { calcularDiasStock } from '@/lib/riesgo'
 import { ProductIdentityMeta } from '@/components/product/ProductIdentity'
 import type { VencimientoConRiesgo } from '@/types/index'
 
+type AlertaVencimiento = VencimientoConRiesgo & {
+  rag_porcentaje?: number | null
+}
+
 interface AlertaItemProps {
-  vencimiento: VencimientoConRiesgo
+  vencimiento: AlertaVencimiento
   familiaNombre?: string | null
   onClick?: () => void
   onRegistrarAccion?: (vencimiento: VencimientoConRiesgo, tipo: 'donacion' | 'decomiso') => void
@@ -64,8 +68,13 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
   const isDonacion = vencimiento.nivel_riesgo === 'donacion'
   const showPulse = cfg.dotPulse
   const showAccionBtn = (isDecomiso || isDonacion) && Boolean(onRegistrarAccion)
-  const accionesVisibles = (isDecomiso || isDonacion) ? [] : vencimiento.acciones_sugeridas.slice(0, 2)
-  const accionesRestantes = Math.max(vencimiento.acciones_sugeridas.length - accionesVisibles.length, 0)
+  const tieneRagActivo = vencimiento.rag_porcentaje != null && vencimiento.rag_porcentaje > 0
+  const accionesBase = (isDecomiso || isDonacion) ? [] : vencimiento.acciones_sugeridas
+  const accionesSinRag = tieneRagActivo
+    ? accionesBase.filter((accion) => !/\bRAG\b/i.test(accion))
+    : accionesBase
+  const accionesVisibles = accionesSinRag.slice(0, tieneRagActivo ? 1 : 2)
+  const accionesRestantes = Math.max(accionesSinRag.length - accionesVisibles.length, 0)
 
   function handleAccionClick(e: React.MouseEvent): void {
     e.stopPropagation()
@@ -181,8 +190,13 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
         </div>
       </div>
 
-      {accionesVisibles.length > 0 && (
+      {(tieneRagActivo || accionesVisibles.length > 0) && (
         <div className="flex items-center gap-1.5 px-3.5 md:px-4 pb-2 overflow-hidden">
+          {tieneRagActivo && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap shrink-0">
+              ✓ RAG activo · {vencimiento.rag_porcentaje}%
+            </span>
+          )}
           {accionesVisibles.map((accion) => (
             <span key={accion} className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-orange-50 text-orange-700 border border-orange-100 truncate max-w-[190px]">
               {accion}
