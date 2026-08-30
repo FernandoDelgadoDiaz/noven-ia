@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useVencimientos } from '@/hooks/useVencimientos'
 import { useAuth } from '@/hooks/useAuth'
 import { useAccionesOperativas } from '@/hooks/useAccionesOperativas'
+import { useProblemasActivos } from '@/hooks/useProblemasActivos'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
 import { usePuedeOperarSucursal } from '@/hooks/usePuedeOperarSucursal'
 import { calcularCostoEnRiesgo, calcularUnidadesExpuestas, formatearPesos, formatearUnidades } from '@/lib/economia-riesgo'
@@ -12,6 +13,7 @@ import AlertaItem from '@/components/dashboard/AlertaItem'
 import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
 import AccionOperativaModal from '@/components/dashboard/AccionOperativaModal'
 import RadarZonalBell from '@/components/dashboard/RadarZonalBell'
+import ProblemasActivosPanel from '@/components/dashboard/ProblemasActivosPanel'
 import type { VencimientoConRiesgo } from '@/types/index'
 
 const ORDEN_RIESGO: Record<string, number> = {
@@ -61,6 +63,13 @@ export default function Dashboard() {
     trimestreInfo,
     refetch: refetchAcciones,
   } = useAccionesOperativas()
+  const {
+    resumen: resumenProblemas,
+    problemas: problemasActivos,
+    loading: loadingProblemas,
+    error: errorProblemas,
+    refetch: refetchProblemas,
+  } = useProblemasActivos(sucursalId)
 
   const [vencimientoEditando, setVencimientoEditando] = useState<VencimientoConRiesgo | null>(null)
   const [accionPendiente, setAccionPendiente] = useState<AccionPendiente | null>(null)
@@ -171,6 +180,13 @@ export default function Dashboard() {
   function handleAccionSuccess(): void {
     void refetch()
     void refetchAcciones()
+    void refetchProblemas()
+  }
+
+  function handleActualizarTodo(): void {
+    void refetch()
+    void refetchAcciones()
+    void refetchProblemas()
   }
 
   return (
@@ -197,7 +213,12 @@ export default function Dashboard() {
             },
           }}
           onClose={() => setVencimientoEditando(null)}
-          onGuardado={() => { setVencimientoEditando(null); void refetch(); void refetchAcciones() }}
+          onGuardado={() => {
+            setVencimientoEditando(null)
+            void refetch()
+            void refetchAcciones()
+            void refetchProblemas()
+          }}
           onImagenActualizada={() => void refetch()}
         />
       )}
@@ -223,12 +244,12 @@ export default function Dashboard() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => { void refetch(); void refetchAcciones() }}
-              disabled={loading}
+              onClick={handleActualizarTodo}
+              disabled={loading || loadingProblemas}
               className="h-9 w-9 flex items-center justify-center rounded-xl hover:bg-muted text-muted-foreground transition-colors duration-150 disabled:opacity-40 active:scale-[0.94]"
               aria-label="Actualizar"
             >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${loading || loadingProblemas ? 'animate-spin' : ''}`} />
             </button>
 
             <RadarZonalBell sucursalId={sucursalId} hayCriticos={hayCriticos} />
@@ -292,6 +313,14 @@ export default function Dashboard() {
                 </button>
               </div>
             )}
+
+            <ProblemasActivosPanel
+              resumen={resumenProblemas}
+              problemas={problemasActivos}
+              loading={loadingProblemas}
+              error={errorProblemas}
+              onVerTodos={() => navigate('/vencimientos?filtro=riesgo')}
+            />
 
             <section aria-label="Resumen de riesgos" className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
