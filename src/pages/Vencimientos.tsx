@@ -92,10 +92,12 @@ function ChipFiltro({ activo, onClick, children, claseInactivo, claseActivo }: C
 }
 
 const NIVELES_FILTRO: NivelRiesgo[] = ['decomiso', 'donacion', 'urgente', 'radar', 'seguro']
-const NIVELES_RIESGO_CRITICO: NivelRiesgo[] = ['urgente', 'donacion', 'decomiso']
-type FiltroUrl = 'riesgo' | 'radar'
+const NIVELES_ACCION_INMEDIATA: NivelRiesgo[] = ['urgente', 'donacion', 'decomiso']
+const NIVELES_EN_RIESGO: NivelRiesgo[] = ['urgente', 'donacion', 'decomiso', 'radar']
+type FiltroUrl = 'accion' | 'riesgo' | 'radar'
 const FILTRO_URL_LABEL: Record<FiltroUrl, string> = {
-  riesgo: 'productos en riesgo crítico',
+  accion: 'productos con acción inmediata',
+  riesgo: 'productos en riesgo',
   radar: 'productos en radar',
 }
 
@@ -121,7 +123,7 @@ export default function Vencimientos() {
   const [searchParams, setSearchParams] = useSearchParams()
   const filtroUrlRaw = searchParams.get('filtro')
   const filtroUrl: FiltroUrl | null =
-    filtroUrlRaw === 'riesgo' || filtroUrlRaw === 'radar' ? filtroUrlRaw : null
+    filtroUrlRaw === 'accion' || filtroUrlRaw === 'riesgo' || filtroUrlRaw === 'radar' ? filtroUrlRaw : null
 
   const [vencimientoEditando, setVencimientoEditando] = useState<VencimientoConProducto | null>(null)
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
@@ -129,10 +131,27 @@ export default function Vencimientos() {
   const hayFiltrosActivos = filtroNivel !== 'todos' || filtroCategoria !== '' || busqueda.trim() !== ''
 
   const vencimientosMostrados = useMemo(() => {
-    if (filtroUrl === 'riesgo') return vencimientos.filter((v) => NIVELES_RIESGO_CRITICO.includes(v.nivel_riesgo))
+    if (filtroUrl === 'accion') return vencimientos.filter((v) => NIVELES_ACCION_INMEDIATA.includes(v.nivel_riesgo))
+    if (filtroUrl === 'riesgo') return vencimientos.filter((v) => NIVELES_EN_RIESGO.includes(v.nivel_riesgo))
     if (filtroUrl === 'radar') return vencimientos.filter((v) => v.nivel_riesgo === 'radar')
     return vencimientos
   }, [vencimientos, filtroUrl])
+
+  const resumenHeader = useMemo(() => {
+    if (filtroUrl === 'accion') {
+      const n = vencimientosMostrados.length
+      return `${n} producto${n === 1 ? '' : 's'} con acción inmediata`
+    }
+    if (filtroUrl === 'riesgo') {
+      const n = vencimientosMostrados.length
+      return `${n} producto${n === 1 ? '' : 's'} en riesgo`
+    }
+    if (filtroUrl === 'radar') {
+      const n = vencimientosMostrados.length
+      return `${n} producto${n === 1 ? '' : 's'} en radar`
+    }
+    return `${vencimientosTodos.length} registros activos`
+  }, [filtroUrl, vencimientosMostrados.length, vencimientosTodos.length])
 
   function limpiarFiltros() {
     setFiltroNivel('todos')
@@ -177,7 +196,7 @@ export default function Vencimientos() {
           <div>
             <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight leading-none">Vencimientos</h1>
             <p className="text-sm text-muted-foreground mt-1 leading-none">
-              {loading ? 'Cargando...' : `${vencimientosTodos.length} registros activos`}
+              {loading ? 'Cargando...' : resumenHeader}
             </p>
           </div>
           <div className="flex items-center gap-2">

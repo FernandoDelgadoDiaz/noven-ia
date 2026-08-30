@@ -123,7 +123,8 @@ for (const operation of [
   'load_expiries',
   'load_family_names',
   'load_rag',
-  'load_action_history',
+  'load_current_costs',
+  'load_economic_history',
   'deepseek_http',
   'deepseek_empty',
   'deepseek_request',
@@ -132,7 +133,7 @@ for (const operation of [
 }
 assert.doesNotMatch(analisis, /dsRes\.text\(/, 'analisis: no registra body de error de DeepSeek')
 assert.doesNotMatch(analisis, /logServerError[^\n]*datosFormateados/, 'analisis: no envía prompt al logger')
-assert.doesNotMatch(analisis, /\$\{(?:perfilError|sucursalError|accesosError|familiasError|vErr|ragError).*?\.message\}/, 'analisis: no devuelve mensajes internos de Supabase')
+assert.doesNotMatch(analisis, /\$\{(?:perfilError|sucursalError|accesosError|familiasError|vErr|ragError|costosError|histActualError|histAnteriorError).*?\.message\}/, 'analisis: no devuelve mensajes internos de Supabase')
 assert.match(analisis, /'No se pudo completar el análisis con el modelo\.'/)
 assert.match(analisis, /'No se pudo contactar el modelo de análisis\.'/)
 

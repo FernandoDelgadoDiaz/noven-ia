@@ -285,7 +285,7 @@ export default function Dashboard() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => navigate('/vencimientos')}
+                  onClick={() => navigate('/vencimientos?filtro=accion')}
                   className="shrink-0 px-3 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold rounded-xl transition-colors duration-150 active:scale-[0.97] whitespace-nowrap"
                 >
                   Ver →
