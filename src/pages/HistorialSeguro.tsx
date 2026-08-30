@@ -11,14 +11,31 @@ import {
 import { supabase } from '@/lib/supabase'
 import { getTrimestreActual } from '@/hooks/useAccionesOperativas'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
+import { formatearPesos, formatearUnidades } from '@/lib/economia-riesgo'
 import ProductIdentity from '@/components/product/ProductIdentity'
 
 type TipoAccion = 'vendido' | 'donacion' | 'decomiso'
+
+interface TramoResultado {
+  orden: number
+  rag_porcentaje: number | null
+  cantidad_inicio: number
+  cantidad_fin: number
+  unidades_vendidas: number
+  iniciado_at: string
+  finalizado_at: string
+}
 
 interface AccionHistorial {
   id: string
   tipo: TipoAccion
   cantidad: number
+  unidades_recuperadas: number
+  unidades_perdidas: number
+  valor_recuperado_sin_iva: number | null
+  valor_perdido_sin_iva: number | null
+  resultado_ciclo_completo: boolean
+  tramos_resultado: TramoResultado[]
   created_at: string
   observaciones: string | null
   usuario_id: string | null
@@ -43,7 +60,7 @@ const TIPO_CONFIG: Record<TipoAccion, {
   vendido: {
     titulo: 'Casos resueltos por venta',
     tituloVacio: 'No hay casos resueltos por venta este trimestre',
-    descripcionTotal: (total) => `${total} vencimiento${total !== 1 ? 's' : ''} cerrados antes de donación/merma`,
+    descripcionTotal: (total) => `${formatearUnidades(total)} unidades recuperadas por venta`,
     Icono: CircleCheckBig,
     iconBg: 'bg-emerald-100',
     iconColor: 'text-emerald-600',
@@ -52,7 +69,7 @@ const TIPO_CONFIG: Record<TipoAccion, {
   donacion: {
     titulo: 'Donaciones',
     tituloVacio: 'No hay donaciones registradas este trimestre',
-    descripcionTotal: (total) => `${total} unidades donadas este trimestre`,
+    descripcionTotal: (total) => `${formatearUnidades(total)} unidades donadas este trimestre`,
     Icono: HandHeart,
     iconBg: 'bg-orange-100',
     iconColor: 'text-orange-600',
@@ -61,7 +78,7 @@ const TIPO_CONFIG: Record<TipoAccion, {
   decomiso: {
     titulo: 'Decomisos',
     tituloVacio: 'No hay decomisos registrados este trimestre',
-    descripcionTotal: (total) => `${total} unidades decomisadas este trimestre`,
+    descripcionTotal: (total) => `${formatearUnidades(total)} unidades decomisadas este trimestre`,
     Icono: Trash2,
     iconBg: 'bg-red-100',
     iconColor: 'text-red-600',
@@ -102,8 +119,8 @@ export default function HistorialSeguro() {
 
   const total = useMemo(
     () => tipo === 'vendido'
-      ? acciones.length
-      : acciones.reduce((sum, a) => sum + a.cantidad, 0),
+      ? acciones.reduce((sum, a) => sum + (Number(a.unidades_recuperadas) || 0), 0)
+      : acciones.reduce((sum, a) => sum + (Number(a.unidades_perdidas) || 0), 0),
     [acciones, tipo],
   )
 
@@ -113,7 +130,7 @@ export default function HistorialSeguro() {
 
     const { data, error: fetchError } = await supabase
       .from('v_acciones_operativas_historial')
-      .select('id, tipo, cantidad, created_at, observaciones, usuario_id, usuario_nombre, producto_descripcion, producto_marca, producto_gramaje, producto_cod_art, producto_codigo_barras, producto_imagen_url')
+      .select('id, tipo, cantidad, unidades_recuperadas, unidades_perdidas, valor_recuperado_sin_iva, valor_perdido_sin_iva, resultado_ciclo_completo, tramos_resultado, created_at, observaciones, usuario_id, usuario_nombre, producto_descripcion, producto_marca, producto_gramaje, producto_cod_art, producto_codigo_barras, producto_imagen_url')
       .eq('tipo', tipo)
       .eq('trimestre', trimestreInfo.trimestre)
       .eq('anio', trimestreInfo.anio)
@@ -164,7 +181,7 @@ export default function HistorialSeguro() {
             <Icono className={`h-6 w-6 ${config.iconColor}`} aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <p className={`text-4xl font-black tracking-tight leading-none tabular-nums ${config.totalColor}`}>{loading ? '–' : total}</p>
+            <p className={`text-4xl font-black tracking-tight leading-none tabular-nums ${config.totalColor}`}>{loading ? '–' : formatearUnidades(total)}</p>
             <p className="text-sm text-muted-foreground mt-1.5">{config.descripcionTotal(total)}</p>
           </div>
         </div>
@@ -173,7 +190,7 @@ export default function HistorialSeguro() {
           <div className="bg-emerald-50 border border-emerald-200 rounded-card p-4 text-sm text-emerald-900">
             <p className="font-semibold">Qué mide este historial</p>
             <p className="text-xs mt-1 text-emerald-800 leading-relaxed">
-              Cada fila es un vencimiento que se resolvió por venta. La cantidad mostrada es el último saldo comprometido positivo antes del cierre; no se interpreta como ventas totales acumuladas.
+              Cada fila sigue el ciclo completo del vencimiento. Las unidades recuperadas surgen de las disminuciones observadas entre controles y cambios de RAG; el último saldo positivo queda sólo como dato técnico de cierre.
             </p>
           </div>
         )}
@@ -193,31 +210,54 @@ export default function HistorialSeguro() {
 
         {!loading && !error && acciones.length > 0 && (
           <div className="space-y-2.5">
-            {acciones.map((a) => (
-              <div key={a.id} className="bg-white rounded-card shadow-card p-3.5">
-                <ProductIdentity
-                  producto={{
-                    descripcion: a.producto_descripcion,
-                    marca: a.producto_marca,
-                    gramaje: a.producto_gramaje,
-                    cod_art: a.producto_cod_art,
-                    codigo_barras: a.producto_codigo_barras,
-                    imagen_url: a.producto_imagen_url,
-                  }}
-                  compact
-                  imageSize="sm"
-                >
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-muted-foreground">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${config.iconBg} ${config.iconColor}`}>
-                      {tipo === 'vendido' ? `saldo ${a.cantidad} u.` : `${a.cantidad} u.`}
-                    </span>
-                    <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{formatFechaHora(a.created_at)}</span>
-                    {a.usuario_nombre && <span className="flex items-center gap-1"><User className="h-3 w-3" />{a.usuario_nombre}</span>}
-                  </div>
-                  {a.observaciones && <p className="text-muted-foreground text-xs mt-1.5 italic border-l-2 border-border pl-2">{a.observaciones}</p>}
-                </ProductIdentity>
-              </div>
-            ))}
+            {acciones.map((a) => {
+              const unidadesPrincipales = tipo === 'vendido' ? Number(a.unidades_recuperadas) || 0 : Number(a.unidades_perdidas) || 0
+              const valorPrincipal = tipo === 'vendido' ? a.valor_recuperado_sin_iva : a.valor_perdido_sin_iva
+              const tramosConVenta = (a.tramos_resultado ?? []).filter((tramo) => Number(tramo.unidades_vendidas) > 0)
+              return (
+                <div key={a.id} className="bg-white rounded-card shadow-card p-3.5">
+                  <ProductIdentity
+                    producto={{
+                      descripcion: a.producto_descripcion,
+                      marca: a.producto_marca,
+                      gramaje: a.producto_gramaje,
+                      cod_art: a.producto_cod_art,
+                      codigo_barras: a.producto_codigo_barras,
+                      imagen_url: a.producto_imagen_url,
+                    }}
+                    compact
+                    imageSize="sm"
+                  >
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-muted-foreground">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${config.iconBg} ${config.iconColor}`}>
+                        {formatearUnidades(unidadesPrincipales)} u. {tipo === 'vendido' ? 'recuperadas' : 'perdidas'}
+                      </span>
+                      {valorPrincipal != null && <span className="font-bold text-foreground">{formatearPesos(Number(valorPrincipal))} s/IVA</span>}
+                      <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{formatFechaHora(a.created_at)}</span>
+                      {a.usuario_nombre && <span className="flex items-center gap-1"><User className="h-3 w-3" />{a.usuario_nombre}</span>}
+                    </div>
+
+                    {tramosConVenta.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {tramosConVenta.map((tramo) => (
+                          <span key={`${a.id}-${tramo.orden}`} className="text-[10px] font-semibold px-2 py-1 rounded-lg bg-muted text-muted-foreground">
+                            {tramo.rag_porcentaje == null ? 'Sin RAG' : `RAG ${Number(tramo.rag_porcentaje)}%`} → {formatearUnidades(Number(tramo.unidades_vendidas))} u.
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {!a.resultado_ciclo_completo && (
+                      <p className="text-[10px] text-amber-700 mt-2">Ciclo histórico incompleto: Noven conserva el cierre disponible, pero no inventa ventas anteriores sin observaciones.</p>
+                    )}
+                    {tipo !== 'vendido' && Number(a.unidades_recuperadas) > 0 && (
+                      <p className="text-[10px] text-emerald-700 mt-2">Antes del cierre se recuperaron {formatearUnidades(Number(a.unidades_recuperadas))} u. por venta.</p>
+                    )}
+                    {a.observaciones && <p className="text-muted-foreground text-xs mt-1.5 italic border-l-2 border-border pl-2">{a.observaciones}</p>}
+                  </ProductIdentity>
+                </div>
+              )
+            })}
           </div>
         )}
 

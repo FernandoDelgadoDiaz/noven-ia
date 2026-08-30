@@ -35,9 +35,12 @@ export function getTrimestreActual(): TrimestreInfo {
 
 interface AccionOperativaRow {
   tipo: string
-  cantidad: number
-  valor_economico_sin_iva: number | null
+  unidades_recuperadas: number
+  unidades_perdidas: number
+  valor_recuperado_sin_iva: number | null
+  valor_perdido_sin_iva: number | null
   valorizacion_metodo: string | null
+  resultado_ciclo_completo: boolean
 }
 
 export interface ResultadoEconomico {
@@ -54,6 +57,7 @@ interface UseAccionesOperativasReturn {
   recuperado: ResultadoEconomico
   perdido: ResultadoEconomico
   hayValorizacionRetrospectiva: boolean
+  hayCiclosIncompletos: boolean
   loading: boolean
   error: string | null
   trimestreInfo: TrimestreInfo
@@ -62,12 +66,16 @@ interface UseAccionesOperativasReturn {
 
 const VACIO: ResultadoEconomico = { unidades: 0, pesos: 0, accionesConCosto: 0, accionesSinCosto: 0 }
 
-function resumir(rows: AccionOperativaRow[], tipos: string[]): ResultadoEconomico {
-  const seleccion = rows.filter((row) => tipos.includes(row.tipo))
-  return seleccion.reduce<ResultadoEconomico>((acc, row) => {
-    const cantidad = Number(row.cantidad) || 0
-    const valor = row.valor_economico_sin_iva == null ? null : Number(row.valor_economico_sin_iva)
+function resumir(
+  rows: AccionOperativaRow[],
+  campoUnidades: 'unidades_recuperadas' | 'unidades_perdidas',
+  campoValor: 'valor_recuperado_sin_iva' | 'valor_perdido_sin_iva',
+): ResultadoEconomico {
+  return rows.reduce<ResultadoEconomico>((acc, row) => {
+    const cantidad = Number(row[campoUnidades]) || 0
+    const valor = row[campoValor] == null ? null : Number(row[campoValor])
     acc.unidades += cantidad
+    if (cantidad <= 0) return acc
     if (valor == null || !Number.isFinite(valor)) {
       acc.accionesSinCosto += 1
     } else {
@@ -85,6 +93,7 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
   const [recuperado, setRecuperado] = useState<ResultadoEconomico>({ ...VACIO })
   const [perdido, setPerdido] = useState<ResultadoEconomico>({ ...VACIO })
   const [hayValorizacionRetrospectiva, setHayValorizacionRetrospectiva] = useState(false)
+  const [hayCiclosIncompletos, setHayCiclosIncompletos] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { sucursalId, loading: sucursalLoading } = useSucursalActual()
@@ -101,6 +110,7 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
       setRecuperado({ ...VACIO })
       setPerdido({ ...VACIO })
       setHayValorizacionRetrospectiva(false)
+      setHayCiclosIncompletos(false)
       setError(null)
       setLoading(false)
       return
@@ -112,7 +122,7 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
     const { trimestre, anio } = trimestreInfo
     const { data, error: fetchError } = await supabase
       .from('v_acciones_operativas_historial')
-      .select('tipo, cantidad, valor_economico_sin_iva, valorizacion_metodo')
+      .select('tipo, unidades_recuperadas, unidades_perdidas, valor_recuperado_sin_iva, valor_perdido_sin_iva, valorizacion_metodo, resultado_ciclo_completo')
       .eq('trimestre', trimestre)
       .eq('anio', anio)
       .eq('sucursal_id', sucursalId)
@@ -128,12 +138,13 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
     const donacionRows = rows.filter((a) => a.tipo === 'donacion')
     const decomisoRows = rows.filter((a) => a.tipo === 'decomiso')
 
-    setVendidos(vendidosRows.reduce((sum, a) => sum + (Number(a.cantidad) || 0), 0))
-    setDonaciones(donacionRows.reduce((sum, a) => sum + (Number(a.cantidad) || 0), 0))
-    setDecomisos(decomisoRows.reduce((sum, a) => sum + (Number(a.cantidad) || 0), 0))
-    setRecuperado(resumir(rows, ['vendido']))
-    setPerdido(resumir(rows, ['donacion', 'decomiso']))
+    setVendidos(vendidosRows.reduce((sum, a) => sum + (Number(a.unidades_recuperadas) || 0), 0))
+    setDonaciones(donacionRows.reduce((sum, a) => sum + (Number(a.unidades_perdidas) || 0), 0))
+    setDecomisos(decomisoRows.reduce((sum, a) => sum + (Number(a.unidades_perdidas) || 0), 0))
+    setRecuperado(resumir(rows, 'unidades_recuperadas', 'valor_recuperado_sin_iva'))
+    setPerdido(resumir(rows, 'unidades_perdidas', 'valor_perdido_sin_iva'))
     setHayValorizacionRetrospectiva(rows.some((row) => row.valorizacion_metodo === 'retrospectiva_0258'))
+    setHayCiclosIncompletos(rows.some((row) => !row.resultado_ciclo_completo))
     setLoading(false)
   }, [trimestreInfo, sucursalId, sucursalLoading])
 
@@ -150,6 +161,7 @@ export function useAccionesOperativas(): UseAccionesOperativasReturn {
     recuperado,
     perdido,
     hayValorizacionRetrospectiva,
+    hayCiclosIncompletos,
     loading,
     error,
     trimestreInfo,
