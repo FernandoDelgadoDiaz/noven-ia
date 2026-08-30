@@ -8,6 +8,7 @@ const UMBRAL_RADAR = 45
 const UMBRAL_URGENTE = 20
 const TZ_OPERATIVA = 'America/Argentina/Buenos_Aires'
 const ENDPOINT = 'analisis'
+const MS_DIA = 86_400_000
 
 type RolAcceso = 'admin_organizacion' | 'gerente_zonal' | 'gerente_sucursal' | 'supervisor' | 'operador'
 
@@ -31,6 +32,7 @@ interface IdentidadArticulo {
 
 interface VencRow extends IdentidadArticulo {
   id: string
+  producto_id: string
   cantidad: number
   fecha_vencimiento: string
   venta_media_diaria: number
@@ -51,12 +53,40 @@ interface RagRow {
   unidades_vendidas_observadas: number | null
 }
 
-interface AccionRow {
+interface CostoRow {
+  producto_id: string
+  costo_unitario: number | null
+}
+
+interface HistorialRow {
   tipo: string
-  cantidad: number
-  trimestre: number
-  anio: number
-  productos: (IdentidadArticulo & { familia_id: string | null }) | null
+  created_at: string
+  producto_id: string
+  producto_descripcion: string | null
+  producto_marca: string | null
+  producto_gramaje: string | null
+  producto_cod_art: string | null
+  producto_codigo_barras: string | null
+  producto_familia_id: string | null
+  unidades_recuperadas: number
+  unidades_perdidas: number
+  valor_recuperado_sin_iva: number | null
+  valor_perdido_sin_iva: number | null
+  resultado_ciclo_completo: boolean
+  valorizacion_metodo: string | null
+}
+
+interface ResultadoPeriodo {
+  recuperadas: number
+  perdidas: number
+  protegidos: number
+  perdidosPesos: number
+  donacion: number
+  decomiso: number
+  cierresRecuperadosSinCosto: number
+  cierresPerdidosSinCosto: number
+  ciclosIncompletos: number
+  valorizacionesRetrospectivas: number
 }
 
 function fechaOperacionalYmd(): string {
@@ -73,13 +103,39 @@ function fechaAEntero(ymd: string): number {
   return Date.UTC(y, m - 1, d)
 }
 
+function ymdDesdeEntero(ms: number): string {
+  const d = new Date(ms)
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function sumarDiasYmd(ymd: string, dias: number): string {
+  return ymdDesdeEntero(fechaAEntero(ymd) + dias * MS_DIA)
+}
+
 function diasRestantes(fechaVencimiento: string, hoyYmd: string): number {
-  return Math.floor((fechaAEntero(fechaVencimiento) - fechaAEntero(hoyYmd)) / 86_400_000)
+  return Math.floor((fechaAEntero(fechaVencimiento) - fechaAEntero(hoyYmd)) / MS_DIA)
 }
 
 function trimestreOperacional(hoyYmd: string): { trimestre: number; anio: number } {
   const [anio, mes] = hoyYmd.split('-').map(Number)
   return { trimestre: Math.ceil(mes / 3), anio }
+}
+
+function inicioTrimestreYmd(anio: number, trimestre: number): string {
+  const mes = (trimestre - 1) * 3 + 1
+  return `${anio}-${String(mes).padStart(2, '0')}-01`
+}
+
+function isoInicioDiaArgentina(ymd: string): string {
+  return `${ymd}T00:00:00-03:00`
+}
+
+function fechaCorta(ymd: string): string {
+  const [y, m, d] = ymd.split('-')
+  return `${d}/${m}/${y}`
 }
 
 function diasComerciales(dias: number, diasDonacion: number): number {
@@ -102,12 +158,29 @@ function identidadArticulo(p: IdentidadArticulo | null | undefined): string {
   return `${p.descripcion} — ${p.marca?.trim() || 'Sin dato'} | Gramaje: ${p.gramaje?.trim() || 'Sin dato'} | Interno: ${p.cod_art?.trim() || 'Sin dato'} | EAN: ${p.codigo_barras?.trim() || 'Sin dato'}`
 }
 
-function accionDeterministica(nivel: string): string {
+function identidadHistorial(row: HistorialRow): string {
+  return identidadArticulo({
+    descripcion: row.producto_descripcion?.trim() || 'Sin dato',
+    marca: row.producto_marca,
+    gramaje: row.producto_gramaje,
+    cod_art: row.producto_cod_art,
+    codigo_barras: row.producto_codigo_barras,
+  })
+}
+
+function esRagInsuficiente(estado: string | null | undefined): boolean {
+  return estado === 'insuficiente' || estado === 'sin_movimiento'
+}
+
+function accionDeterministica(nivel: string, estadoRag?: string | null): string {
+  if ((nivel === 'urgente' || nivel === 'radar') && esRagInsuficiente(estadoRag)) {
+    return 'Control físico hoy y revisar/escalar la intervención RAG; no limitarse a verificar el dato'
+  }
   switch (nivel) {
     case 'decomiso': return 'Retirar inmediatamente y registrar decomiso'
     case 'donacion': return 'Retirar de venta y gestionar donación hoy según política'
-    case 'urgente': return 'Revisar/aplicar RAG en Glaciar y controlar estrechamente; no donar antes del umbral obligatorio'
-    case 'radar': return 'Revisar/aplicar RAG en Glaciar cuando corresponda y monitorear cantidad comprometida'
+    case 'urgente': return 'Revisar/aplicar RAG en Glaciar y controlar hoy; no donar antes del umbral obligatorio'
+    case 'radar': return 'Verificar hoy en Glaciar si corresponde RAG y luego monitorear la cantidad comprometida'
     default: return 'Seguimiento normal; no indicar RAG obligatorio ni intervención extraordinaria'
   }
 }
@@ -117,30 +190,93 @@ function fmtVelocidad(v: number | null): string {
   return `${v.toFixed(2)} u/día`
 }
 
-function resumirAcciones(acciones: AccionRow[], tipo: string) {
-  const items = acciones.filter((a) => a.tipo === tipo)
-  const total = items.reduce((s, a) => s + Number(a.cantidad ?? 0), 0)
-  const porProducto = new Map<string, { cantidad: number; veces: number }>()
-  for (const a of items) {
-    const nombre = identidadArticulo(a.productos)
-    const prev = porProducto.get(nombre) ?? { cantidad: 0, veces: 0 }
-    porProducto.set(nombre, { cantidad: prev.cantidad + Number(a.cantidad ?? 0), veces: prev.veces + 1 })
+function fmtUnidades(v: number): string {
+  return new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 }).format(v)
+}
+
+function fmtPesos(v: number | null): string {
+  if (v == null || !Number.isFinite(v)) return 'sin costo disponible'
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    maximumFractionDigits: 0,
+  }).format(v)
+}
+
+function resumirPeriodo(rows: HistorialRow[]): ResultadoPeriodo {
+  const out: ResultadoPeriodo = {
+    recuperadas: 0,
+    perdidas: 0,
+    protegidos: 0,
+    perdidosPesos: 0,
+    donacion: 0,
+    decomiso: 0,
+    cierresRecuperadosSinCosto: 0,
+    cierresPerdidosSinCosto: 0,
+    ciclosIncompletos: 0,
+    valorizacionesRetrospectivas: 0,
   }
-  return { total, registros: items.length, porProducto }
+
+  for (const row of rows) {
+    const recuperadas = Number(row.unidades_recuperadas) || 0
+    const perdidas = Number(row.unidades_perdidas) || 0
+    const valorRec = row.valor_recuperado_sin_iva == null ? null : Number(row.valor_recuperado_sin_iva)
+    const valorPer = row.valor_perdido_sin_iva == null ? null : Number(row.valor_perdido_sin_iva)
+
+    out.recuperadas += recuperadas
+    out.perdidas += perdidas
+    if (row.tipo === 'donacion') out.donacion += perdidas
+    if (row.tipo === 'decomiso') out.decomiso += perdidas
+
+    if (recuperadas > 0) {
+      if (valorRec != null && Number.isFinite(valorRec)) out.protegidos += valorRec
+      else out.cierresRecuperadosSinCosto += 1
+    }
+    if (perdidas > 0) {
+      if (valorPer != null && Number.isFinite(valorPer)) out.perdidosPesos += valorPer
+      else out.cierresPerdidosSinCosto += 1
+    }
+    if (!row.resultado_ciclo_completo) out.ciclosIncompletos += 1
+    if (row.valorizacion_metodo === 'retrospectiva_0258') out.valorizacionesRetrospectivas += 1
+  }
+
+  return out
 }
 
-function topProductos(porProducto: Map<string, { cantidad: number; veces: number }>, n = 5) {
-  return Array.from(porProducto.entries())
-    .sort((a, b) => b[1].cantidad - a[1].cantidad)
-    .slice(0, n)
-}
-
-function comparativa(actual: number, anterior: number): string {
-  if (anterior === 0) return actual === 0 ? 'sin variación (0 en ambos)' : `+${actual} u (sin base previa)`
+function comparativa(actual: number, anterior: number, unidad: 'u' | '$'): string {
+  const prefijo = unidad === '$' ? '$' : ''
+  const sufijo = unidad === 'u' ? ' u' : ''
+  if (anterior === 0) {
+    return actual === 0
+      ? 'sin variación (0 en ambos)'
+      : `${prefijo}${Math.round(actual)}${sufijo} actuales; base previa = 0`
+  }
   const delta = actual - anterior
-  const pct = ((delta / anterior) * 100).toFixed(0)
+  const pct = (delta / anterior) * 100
   const signo = delta > 0 ? '+' : ''
-  return `${signo}${delta} u (${signo}${pct}% vs. período anterior)`
+  return `${signo}${prefijo}${Math.round(delta)}${sufijo} (${signo}${pct.toFixed(0)}%)`
+}
+
+function patronesEntrePeriodos(actual: HistorialRow[], anterior: HistorialRow[]): string[] {
+  const mapaActual = new Map<string, { identidad: string; veces: number }>()
+  const mapaAnterior = new Map<string, { identidad: string; veces: number }>()
+
+  const agregar = (mapa: Map<string, { identidad: string; veces: number }>, row: HistorialRow) => {
+    const clave = row.producto_id || row.producto_cod_art || identidadHistorial(row)
+    const prev = mapa.get(clave)
+    mapa.set(clave, { identidad: identidadHistorial(row), veces: (prev?.veces ?? 0) + 1 })
+  }
+
+  actual.forEach((row) => agregar(mapaActual, row))
+  anterior.forEach((row) => agregar(mapaAnterior, row))
+
+  return Array.from(mapaActual.entries())
+    .filter(([clave]) => mapaAnterior.has(clave))
+    .map(([clave, a]) => {
+      const b = mapaAnterior.get(clave)!
+      return `${a.identidad} — ${b.veces} cierre(s) en ventana previa y ${a.veces} en ventana actual`
+    })
+    .slice(0, 8)
 }
 
 const ORDEN: Record<string, number> = { decomiso: 0, donacion: 1, urgente: 2, radar: 3, seguro: 4 }
@@ -190,8 +326,6 @@ const handler: Handler = async (event: HandlerEvent) => {
     return json(400, { success: false, error: 'JSON inválido' })
   }
   const sucursalId = body.sucursal_id?.trim() ?? ''
-  // PostgreSQL admite UUID canónicos aunque no declaren bits RFC 4122 de versión/variante.
-  // La autorización real se valida después contra la sucursal y los accesos activos.
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sucursalId)) {
     return json(400, { success: false, error: 'Seleccioná una sucursal válida para generar el análisis.' })
   }
@@ -261,7 +395,7 @@ const handler: Handler = async (event: HandlerEvent) => {
 
   const { data: rows, error: vErr } = await supabase
     .from('v_vencimientos_operativos')
-    .select('id, cantidad, fecha_vencimiento, descripcion, marca, gramaje, cod_art, codigo_barras, venta_media_diaria, familia_id, categoria, sector_nombre, dias_donacion')
+    .select('id, producto_id, cantidad, fecha_vencimiento, descripcion, marca, gramaje, cod_art, codigo_barras, venta_media_diaria, familia_id, categoria, sector_nombre, dias_donacion')
     .eq('activo', true)
     .eq('sucursal_id', sucursalId)
   if (vErr) {
@@ -299,43 +433,78 @@ const handler: Handler = async (event: HandlerEvent) => {
   if (!scopeCompleto) rags = rags.filter((r) => r.familia_id != null && familiaIds.includes(r.familia_id))
   const ragPorVencimiento = new Map(rags.map((r) => [r.vencimiento_id, r]))
 
+  const productoIds = Array.from(new Set(vencs.map((r) => r.producto_id)))
+  const costoPorProducto = new Map<string, number>()
+  if (productoIds.length > 0) {
+    const { data: costosRaw, error: costosError } = await supabase
+      .from('producto_costo_ultima_observacion')
+      .select('producto_id, costo_unitario')
+      .in('producto_id', productoIds)
+    if (costosError) {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'load_current_costs', statusCode: 502, error: costosError })
+      return json(502, { success: false, error: 'No se pudo leer la valorización económica actual.' })
+    }
+    for (const row of (costosRaw ?? []) as unknown as CostoRow[]) {
+      const costo = row.costo_unitario == null ? null : Number(row.costo_unitario)
+      if (costo != null && Number.isFinite(costo)) costoPorProducto.set(row.producto_id, costo)
+    }
+  }
+
   const hoyYmd = fechaOperacionalYmd()
   const { trimestre: trimestreActual, anio: anioActual } = trimestreOperacional(hoyYmd)
   const trimestreAnterior = trimestreActual === 1 ? 4 : trimestreActual - 1
   const anioAnterior = trimestreActual === 1 ? anioActual - 1 : anioActual
+  const inicioActualYmd = inicioTrimestreYmd(anioActual, trimestreActual)
+  const inicioAnteriorYmd = inicioTrimestreYmd(anioAnterior, trimestreAnterior)
+  const diasTranscurridos = Math.floor((fechaAEntero(hoyYmd) - fechaAEntero(inicioActualYmd)) / MS_DIA) + 1
+  const finActualExclusivoYmd = sumarDiasYmd(hoyYmd, 1)
+  const finAnteriorExclusivoYmd = sumarDiasYmd(inicioAnteriorYmd, diasTranscurridos)
+  const finAnteriorInclusivoYmd = sumarDiasYmd(finAnteriorExclusivoYmd, -1)
 
-  const accionSelect = 'tipo, cantidad, trimestre, anio, productos(descripcion, marca, gramaje, cod_art, codigo_barras, familia_id)'
-  const [{ data: accActualRaw, error: accActualError }, { data: accAnteriorRaw, error: accAnteriorError }] = await Promise.all([
-    supabase.from('acciones_operativas').select(accionSelect).eq('sucursal_id', sucursalId).eq('trimestre', trimestreActual).eq('anio', anioActual),
-    supabase.from('acciones_operativas').select(accionSelect).eq('sucursal_id', sucursalId).eq('trimestre', trimestreAnterior).eq('anio', anioAnterior),
+  const historialSelect = [
+    'tipo',
+    'created_at',
+    'producto_id',
+    'producto_descripcion',
+    'producto_marca',
+    'producto_gramaje',
+    'producto_cod_art',
+    'producto_codigo_barras',
+    'producto_familia_id',
+    'unidades_recuperadas',
+    'unidades_perdidas',
+    'valor_recuperado_sin_iva',
+    'valor_perdido_sin_iva',
+    'resultado_ciclo_completo',
+    'valorizacion_metodo',
+  ].join(', ')
+
+  const [{ data: histActualRaw, error: histActualError }, { data: histAnteriorRaw, error: histAnteriorError }] = await Promise.all([
+    supabase
+      .from('v_acciones_operativas_historial')
+      .select(historialSelect)
+      .eq('sucursal_id', sucursalId)
+      .gte('created_at', isoInicioDiaArgentina(inicioActualYmd))
+      .lt('created_at', isoInicioDiaArgentina(finActualExclusivoYmd)),
+    supabase
+      .from('v_acciones_operativas_historial')
+      .select(historialSelect)
+      .eq('sucursal_id', sucursalId)
+      .gte('created_at', isoInicioDiaArgentina(inicioAnteriorYmd))
+      .lt('created_at', isoInicioDiaArgentina(finAnteriorExclusivoYmd)),
   ])
-  if (accActualError || accAnteriorError) {
-    logServerError(event, { endpoint: ENDPOINT, operation: 'load_action_history', statusCode: 502, error: accActualError ?? accAnteriorError })
-    return json(502, { success: false, error: 'No se pudo leer el historial operativo.' })
+  if (histActualError || histAnteriorError) {
+    logServerError(event, { endpoint: ENDPOINT, operation: 'load_economic_history', statusCode: 502, error: histActualError ?? histAnteriorError })
+    return json(502, { success: false, error: 'No se pudo leer el historial económico.' })
   }
 
-  const filtrarAccion = (a: AccionRow) => scopeCompleto || (a.productos?.familia_id != null && familiaIds.includes(a.productos.familia_id))
-  const accActual = ((accActualRaw ?? []) as unknown as AccionRow[]).filter(filtrarAccion)
-  const accAnterior = ((accAnteriorRaw ?? []) as unknown as AccionRow[]).filter(filtrarAccion)
-
-  const donActual = resumirAcciones(accActual, 'donacion')
-  const decActual = resumirAcciones(accActual, 'decomiso')
-  const donAnterior = resumirAcciones(accAnterior, 'donacion')
-  const decAnterior = resumirAcciones(accAnterior, 'decomiso')
-  const terminalActual = donActual.total + decActual.total
-  const terminalAnterior = donAnterior.total + decAnterior.total
-
-  const patronMap = new Map<string, { tipo: string; producto: string; veces: number; cantidad: number }>()
-  for (const a of [...accActual, ...accAnterior]) {
-    const producto = identidadArticulo(a.productos)
-    const key = `${a.tipo}::${producto}`
-    const prev = patronMap.get(key) ?? { tipo: a.tipo, producto, veces: 0, cantidad: 0 }
-    patronMap.set(key, { ...prev, veces: prev.veces + 1, cantidad: prev.cantidad + Number(a.cantidad ?? 0) })
-  }
-  const patronesRepetidos = Array.from(patronMap.values())
-    .filter((p) => p.veces >= 2)
-    .sort((a, b) => b.veces - a.veces || b.cantidad - a.cantidad)
-    .slice(0, 8)
+  const filtrarHistorial = (r: HistorialRow) => scopeCompleto || (r.producto_familia_id != null && familiaIds.includes(r.producto_familia_id))
+  const histActual = ((histActualRaw ?? []) as unknown as HistorialRow[]).filter(filtrarHistorial)
+  const histAnterior = ((histAnteriorRaw ?? []) as unknown as HistorialRow[]).filter(filtrarHistorial)
+  const resultadoActual = resumirPeriodo(histActual)
+  const resultadoAnterior = resumirPeriodo(histAnterior)
+  const baseComparable = histAnterior.length > 0
+  const recurrentes = baseComparable ? patronesEntrePeriodos(histActual, histAnterior) : []
 
   const procesados = vencs
     .filter((r): r is VencRow & { dias_donacion: number } => r.dias_donacion != null)
@@ -346,6 +515,9 @@ const handler: Handler = async (event: HandlerEvent) => {
       const vendibles = r.venta_media_diaria * comerciales
       const riesgoUnidades = Math.max(0, r.cantidad - vendibles)
       const velocidadNecesaria = comerciales > 0 && r.cantidad > 0 ? r.cantidad / comerciales : Infinity
+      const costoUnitario = costoPorProducto.get(r.producto_id) ?? null
+      const problemaActivo = nivel !== 'seguro'
+      const dineroRiesgo = problemaActivo && costoUnitario != null ? riesgoUnidades * costoUnitario : null
       return {
         ...r,
         dias,
@@ -355,42 +527,79 @@ const handler: Handler = async (event: HandlerEvent) => {
         riesgoUnidades,
         riesgoPorcentaje: r.cantidad > 0 ? (riesgoUnidades / r.cantidad) * 100 : 0,
         velocidadNecesaria,
+        costoUnitario,
+        dineroRiesgo,
+        problemaActivo,
         rag: ragPorVencimiento.get(r.id) ?? null,
       }
     })
     .sort((a, b) => (ORDEN[a.nivel] - ORDEN[b.nivel]) || (a.dias - b.dias))
     .slice(0, 60)
 
+  const problemas = procesados.filter((r) => r.problemaActivo)
+  const accionInmediata = problemas.filter((r) => r.nivel === 'decomiso' || r.nivel === 'donacion' || r.nivel === 'urgente')
+  const fallosRag = problemas.filter((r) => esRagInsuficiente(r.rag?.estado_seguimiento_rag))
+  const unidadesEnRiesgo = problemas.reduce((sum, r) => sum + r.riesgoUnidades, 0)
+  const valorizados = problemas.filter((r) => r.dineroRiesgo != null)
+  const dineroEnRiesgo = valorizados.reduce((sum, r) => sum + (r.dineroRiesgo ?? 0), 0)
+  const topEconomico = [...valorizados].sort((a, b) => (b.dineroRiesgo ?? 0) - (a.dineroRiesgo ?? 0)).slice(0, 5)
+  const prioridadTiempo = accionInmediata[0] ?? null
+  const prioridadRag = [...fallosRag].sort((a, b) => (b.dineroRiesgo ?? 0) - (a.dineroRiesgo ?? 0))[0] ?? null
+  const prioridadDinero = topEconomico[0] ?? null
+
+  const lineaPrioridad = (etiqueta: string, r: typeof procesados[number] | null) => {
+    if (!r) return `${etiqueta}: sin caso aplicable.`
+    return `${etiqueta}: ${identidadArticulo(r)} | Nivel ${r.nivel.toUpperCase()} | ${fmtUnidades(r.riesgoUnidades)} un. expuestas | ${fmtPesos(r.dineroRiesgo)} en riesgo | ${r.comerciales} días comerciales.`
+  }
+
   const lineas = procesados.map((r) => {
     const fam = r.familia_id ? (famNombre.get(r.familia_id) ?? '—') : '—'
     const vence = r.dias < 0 ? `vencido hace ${Math.abs(r.dias)} días` : r.dias === 0 ? 'vence hoy' : `vence en ${r.dias} días`
     const rag = r.rag
-    const ragInfo = rag?.rag_porcentaje != null
-      ? `RAG registrado en Noven: ${rag.rag_porcentaje}%. Estado: ${rag.estado_seguimiento_rag}. Velocidad observada: ${fmtVelocidad(rag.velocidad_observada)}. Velocidad necesaria: ${fmtVelocidad(rag.velocidad_necesaria)}.`
-      : 'Noven no tiene RAG registrado. Esto no informa el estado de Glaciar; verificar allí si la acción lo requiere.'
+    let ragInfo = 'Noven no tiene RAG registrado. Esto no informa el estado de Glaciar; verificar allí si la acción lo requiere.'
+    if (rag?.rag_porcentaje != null) {
+      const respuesta = esRagInsuficiente(rag.estado_seguimiento_rag)
+        ? 'Respuesta insuficiente confirmada: control físico y revisar/escalar la intervención hoy.'
+        : rag.estado_seguimiento_rag === 'pendiente_control_operador'
+          ? 'Pendiente de control posterior por operador; no evaluar efectividad hasta contar con observación.'
+          : 'Usar el estado observado para decidir seguimiento.'
+      ragInfo = `RAG registrado en Noven: ${rag.rag_porcentaje}%. Estado: ${rag.estado_seguimiento_rag}. Velocidad observada: ${fmtVelocidad(rag.velocidad_observada)}. Velocidad necesaria: ${fmtVelocidad(rag.velocidad_necesaria)}. ${respuesta}`
+    }
+
+    const riesgoInfo = r.problemaActivo
+      ? `En riesgo activo: ${fmtUnidades(r.riesgoUnidades)} un. (${r.riesgoPorcentaje.toFixed(1)}%) | Costo unitario s/IVA: ${fmtPesos(r.costoUnitario)} | Dinero en riesgo s/IVA: ${fmtPesos(r.dineroRiesgo)}`
+      : 'Estado SEGURO: no integrar este artículo al total de riesgo activo ni indicar intervención extraordinaria.'
+
     return [
       `Producto: ${identidadArticulo(r)}`,
       `Familia: ${fam} | Sector: ${r.sector_nombre ?? '—'} | Nivel: ${r.nivel}`,
       `${vence} | Retiro para donación: ${r.dias_donacion} días antes | Días comerciales: ${r.comerciales}`,
-      `Cantidad comprometida: ${r.cantidad} | VMD Glaciar: ${r.venta_media_diaria > 0 ? `${r.venta_media_diaria} u/día` : 'sin rotación'}`,
-      `Velocidad necesaria: ${fmtVelocidad(r.velocidadNecesaria)} | Vendibles antes del retiro: ${Math.round(r.vendibles)} | En riesgo: ${Math.round(r.riesgoUnidades)} (${r.riesgoPorcentaje.toFixed(1)}%)`,
-      `Acción determinística: ${accionDeterministica(r.nivel)}`,
+      `Cantidad comprometida: ${r.cantidad} | VMD Glaciar: ${r.venta_media_diaria > 0 ? `${r.venta_media_diaria} u/día` : 'sin rotación'} | Velocidad necesaria: ${fmtVelocidad(r.velocidadNecesaria)}`,
+      riesgoInfo,
+      `Acción determinística: ${accionDeterministica(r.nivel, rag?.estado_seguimiento_rag)}`,
       ragInfo,
     ].join('\n  ')
   })
 
-  const fmtTop = (top: Array<[string, { cantidad: number; veces: number }]>) => top.length
-    ? top.map(([n, v]) => `· ${n}: ${v.cantidad} u (${v.veces} ${v.veces === 1 ? 'registro' : 'registros'})`).join('\n')
-    : '· Sin registros'
-
-  const bloqueTrimestre = (etiqueta: string, don: ReturnType<typeof resumirAcciones>, dec: ReturnType<typeof resumirAcciones>) => [
-    etiqueta,
-    `Donaciones: ${don.total} unidades en ${don.registros} registros`,
-    fmtTop(topProductos(don.porProducto)),
-    `Decomisos: ${dec.total} unidades en ${dec.registros} registros`,
-    fmtTop(topProductos(dec.porProducto)),
-    `Resultado terminal total (donación + decomiso): ${don.total + dec.total} unidades`,
+  const resumenPeriodo = (nombre: string, r: ResultadoPeriodo) => [
+    nombre,
+    `Unidades recuperadas por venta: ${fmtUnidades(r.recuperadas)}`,
+    `$ protegidos/recuperados a costo s/IVA: ${fmtPesos(r.protegidos)}`,
+    `Unidades perdidas: ${fmtUnidades(r.perdidas)} (donación ${fmtUnidades(r.donacion)} + decomiso ${fmtUnidades(r.decomiso)})`,
+    `$ perdidos a costo s/IVA: ${fmtPesos(r.perdidosPesos)}`,
+    `Cierres recuperados sin costo: ${r.cierresRecuperadosSinCosto} | cierres perdidos sin costo: ${r.cierresPerdidosSinCosto}`,
+    `Ciclos con evidencia histórica incompleta: ${r.ciclosIncompletos} | valorizaciones retrospectivas: ${r.valorizacionesRetrospectivas}`,
   ].join('\n')
+
+  const comparacionHistorica = baseComparable
+    ? [
+        'Base comparable previa: SÍ. Las dos ventanas tienen igual cantidad de días operativos de calendario.',
+        `Comparación recuperadas: ${comparativa(resultadoActual.recuperadas, resultadoAnterior.recuperadas, 'u')}`,
+        `Comparación protegidos: ${comparativa(resultadoActual.protegidos, resultadoAnterior.protegidos, '$')}`,
+        `Comparación perdidas: ${comparativa(resultadoActual.perdidas, resultadoAnterior.perdidas, 'u')}`,
+        `Comparación $ perdidos: ${comparativa(resultadoActual.perdidosPesos, resultadoAnterior.perdidosPesos, '$')}`,
+      ].join('\n')
+    : 'Base comparable previa: NO. No hay cierres registrados en la ventana equivalente anterior. Prohibido afirmar porcentajes de mejora/deterioro contra el trimestre anterior.'
 
   const hoyTexto = new Intl.DateTimeFormat('es-AR', {
     timeZone: TZ_OPERATIVA,
@@ -399,30 +608,48 @@ const handler: Handler = async (event: HandlerEvent) => {
     year: 'numeric',
   }).format(new Date())
 
+  const topEconomicoTexto = topEconomico.length
+    ? topEconomico.map((r, i) => `${i + 1}. ${identidadArticulo(r)} | ${fmtUnidades(r.riesgoUnidades)} un. | ${fmtPesos(r.dineroRiesgo)} | nivel ${r.nivel}`).join('\n')
+    : 'Sin productos valorizados en riesgo.'
+
   const datosFormateados = [
     `Fecha operacional: ${hoyTexto}`,
     `Sucursal analizada: ${sucursal.codigo} · ${sucursal.nombre}`,
     `Ámbito autorizado: ${scopeCompleto ? 'toda la sucursal' : 'familias asignadas al operador en esta sucursal'}`,
     '',
-    `Vencimientos activos dentro del circuito (${procesados.length}):`,
+    '=== RESUMEN GERENCIAL DETERMINÍSTICO ===',
+    `Vencimientos activos dentro del circuito: ${procesados.length}`,
+    `Productos con problema activo (DECOMISO + DONACIÓN + URGENTE + RADAR): ${problemas.length}`,
+    `Productos con acción inmediata (DECOMISO + DONACIÓN + URGENTE): ${accionInmediata.length}`,
+    `Productos RADAR: ${problemas.filter((r) => r.nivel === 'radar').length}`,
+    `Unidades expuestas en problemas activos: ${fmtUnidades(unidadesEnRiesgo)}`,
+    `$ en riesgo a costo s/IVA: ${fmtPesos(dineroEnRiesgo)} | cobertura de costo ${valorizados.length}/${problemas.length} productos`,
+    '',
+    'PRIORIDADES NO EXCLUYENTES:',
+    lineaPrioridad('Urgencia temporal', prioridadTiempo),
+    lineaPrioridad('Intervención RAG que no responde', prioridadRag),
+    lineaPrioridad('Mayor exposición económica', prioridadDinero),
+    'No convertir estas tres dimensiones en un único ranking opaco. Explicar por qué cada caso importa.',
+    '',
+    'TOP DE RIESGO ECONÓMICO ACTUAL:',
+    topEconomicoTexto,
+    '',
+    `=== DETALLE DE VENCIMIENTOS ACTIVOS (${procesados.length}) ===`,
     lineas.length ? lineas.join('\n\n') : '(sin vencimientos activos dentro del circuito)',
     '',
-    '=== HISTÓRICO DE ACCIONES OPERATIVAS ===',
-    bloqueTrimestre(`Trimestre ACTUAL (Q${trimestreActual} ${anioActual})`, donActual, decActual),
+    '=== RESULTADO ECONÓMICO · VENTANAS EQUIVALENTES ===',
+    `Ventana actual: ${fechaCorta(inicioActualYmd)} a ${fechaCorta(hoyYmd)} (${diasTranscurridos} días calendario del trimestre).`,
+    resumenPeriodo(`Actual Q${trimestreActual} ${anioActual} hasta hoy`, resultadoActual),
     '',
-    bloqueTrimestre(`Trimestre ANTERIOR (Q${trimestreAnterior} ${anioAnterior})`, donAnterior, decAnterior),
+    `Ventana previa equivalente: ${fechaCorta(inicioAnteriorYmd)} a ${fechaCorta(finAnteriorInclusivoYmd)} (${diasTranscurridos} días).`,
+    resumenPeriodo(`Previo Q${trimestreAnterior} ${anioAnterior}, misma extensión temporal`, resultadoAnterior),
     '',
-    `Comparativa donaciones: ${comparativa(donActual.total, donAnterior.total)}`,
-    `Comparativa decomisos: ${comparativa(decActual.total, decAnterior.total)}`,
-    `Comparativa terminal combinada: ${comparativa(terminalActual, terminalAnterior)}`,
-    'Una baja de donaciones no es por sí sola una mejora: evaluar junto con decomisos y total terminal.',
+    comparacionHistorica,
     '',
-    'Patrones repetidos:',
-    patronesRepetidos.length
-      ? patronesRepetidos.map((p) => `- ${p.producto} — ${p.tipo} ${p.veces} veces (${p.cantidad} u)`).join('\n')
-      : '- No se detectaron productos repetidos en los dos trimestres disponibles.',
+    'Productos recurrentes ENTRE ambas ventanas equivalentes:',
+    recurrentes.length ? recurrentes.map((p) => `- ${p}`).join('\n') : '- No hay recurrencia demostrable entre ambas ventanas con los datos comparables disponibles.',
     '',
-    'Límite de inferencia: sólo hay dos trimestres comparables. No afirmar estacionalidad; hablar únicamente de recurrencia o concentración observada.',
+    'Límite de inferencia: no confundir trimestre abierto con trimestre completo. No afirmar estacionalidad. Si no existe base comparable previa, describir únicamente el resultado actual y su composición.',
   ].join('\n')
 
   try {
@@ -435,7 +662,7 @@ const handler: Handler = async (event: HandlerEvent) => {
           { role: 'system', content: scopeCompleto ? SYSTEM_ADMIN : SYSTEM_OPERADOR },
           { role: 'user', content: datosFormateados },
         ],
-        max_tokens: 1300,
+        max_tokens: 1500,
         temperature: 0.2,
       }),
     })
