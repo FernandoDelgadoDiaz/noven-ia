@@ -31,7 +31,7 @@ const ESTADO_VISUAL: Record<EstadoProblemaActivo, {
     icono: AlertTriangle,
   },
   requiere_intervencion: {
-    label: 'Intervenir',
+    label: 'Verificar RAG',
     badge: 'bg-amber-50 text-amber-700 border-amber-200',
     icono: AlertTriangle,
   },
