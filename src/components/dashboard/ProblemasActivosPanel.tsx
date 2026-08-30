@@ -8,6 +8,8 @@ interface Props {
   loading: boolean
   error: string | null
   onVerTodos: () => void
+  mostrarTodos?: boolean
+  onVerRiesgo?: () => void
 }
 
 const ESTADO_VISUAL: Record<EstadoProblemaActivo, {
@@ -65,8 +67,16 @@ function detalleEscalamiento(problema: ProblemaActivo): string | null {
   return 'Escalamiento registrado · notificación pendiente o sin suscripción activa'
 }
 
-export default function ProblemasActivosPanel({ resumen, problemas, loading, error, onVerTodos }: Props) {
-  const principales = problemas.slice(0, 4)
+export default function ProblemasActivosPanel({
+  resumen,
+  problemas,
+  loading,
+  error,
+  onVerTodos,
+  mostrarTodos = false,
+  onVerRiesgo,
+}: Props) {
+  const visibles = mostrarTodos ? problemas : problemas.slice(0, 4)
   const riesgoEconomico = resumen.valorizados > 0
     ? formatearPesos(resumen.dinero_en_riesgo_sin_iva)
     : 'Costo pendiente'
@@ -81,13 +91,15 @@ export default function ProblemasActivosPanel({ resumen, problemas, loading, err
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">Qué sigue abierto, qué necesita acción y qué ya está bajo control.</p>
         </div>
-        <button
-          type="button"
-          onClick={onVerTodos}
-          className="shrink-0 text-[10px] font-semibold text-brand flex items-center gap-0.5"
-        >
-          Ver riesgo <ChevronRight className="h-3 w-3" aria-hidden="true" />
-        </button>
+        {onVerRiesgo && (
+          <button
+            type="button"
+            onClick={onVerRiesgo}
+            className="shrink-0 text-[10px] font-semibold text-brand flex items-center gap-0.5"
+          >
+            Ver riesgo <ChevronRight className="h-3 w-3" aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -148,7 +160,7 @@ export default function ProblemasActivosPanel({ resumen, problemas, loading, err
           </div>
 
           <div className="divide-y divide-border/60">
-            {principales.map((problema, index) => {
+            {visibles.map((problema, index) => {
               const visual = ESTADO_VISUAL[problema.estado_problema]
               const Icono = visual.icono
               const escalamiento = detalleEscalamiento(problema)
@@ -195,13 +207,14 @@ export default function ProblemasActivosPanel({ resumen, problemas, loading, err
             })}
           </div>
 
-          {resumen.abiertos > principales.length && (
+          {!mostrarTodos && resumen.abiertos > visibles.length && (
             <button
               type="button"
               onClick={onVerTodos}
+              aria-expanded={false}
               className="w-full px-4 py-2.5 text-[10px] font-semibold text-brand border-t border-border/60 hover:bg-muted/40 transition-colors"
             >
-              Ver los {resumen.abiertos} problemas abiertos →
+              Ver los {resumen.abiertos} problemas abiertos ↓
             </button>
           )}
         </>
