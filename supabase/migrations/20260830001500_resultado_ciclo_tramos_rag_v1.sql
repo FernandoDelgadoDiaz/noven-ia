@@ -16,7 +16,6 @@ with terminales as (
     case when a.tipo = 'vendido' then 0::numeric else a.cantidad::numeric end as cantidad_terminal,
     obs_inicial.cantidad_comprometida as cantidad_inicial,
     obs_inicial.observada_at as inicial_at,
-    primer_rag.id as primer_rag_id,
     primer_rag.cantidad_comprometida_al_aplicar as cantidad_primer_rag,
     primer_rag.aplicado_at as primer_rag_at
   from public.acciones_operativas a
@@ -28,7 +27,7 @@ with terminales as (
     limit 1
   ) obs_inicial on true
   left join lateral (
-    select r.id, r.cantidad_comprometida_al_aplicar, r.aplicado_at
+    select r.cantidad_comprometida_al_aplicar, r.aplicado_at
     from public.intervenciones_rag r
     where r.vencimiento_id = a.vencimiento_id
       and r.aplicado_at <= a.created_at
@@ -101,6 +100,9 @@ select * from tramo_pre_rag
 union all
 select * from tramos_rag;
 
+revoke all on public.v_resultado_vencimiento_tramos from public, anon;
+grant select on public.v_resultado_vencimiento_tramos to authenticated;
+
 create or replace view public.v_acciones_operativas_historial
 with (security_invoker = true)
 as
@@ -128,11 +130,17 @@ select
   case when a.costo_unitario_sin_iva is null then null else a.cantidad * a.costo_unitario_sin_iva end as valor_economico_sin_iva,
   a.costo_observado_at,
   a.valorizacion_metodo,
-  coalesce(ciclo.unidades_recuperadas, case when a.tipo = 'vendido' then a.cantidad::numeric else 0::numeric end) as unidades_recuperadas,
+  case
+    when ciclo.tiene_observacion_inicial is true then ciclo.unidades_recuperadas
+    when a.tipo = 'vendido' then a.cantidad::numeric
+    else 0::numeric
+  end as unidades_recuperadas,
   case when a.tipo in ('donacion', 'decomiso') then a.cantidad::numeric else 0::numeric end as unidades_perdidas,
   case
     when a.costo_unitario_sin_iva is null then null
-    else coalesce(ciclo.unidades_recuperadas, case when a.tipo = 'vendido' then a.cantidad::numeric else 0::numeric end) * a.costo_unitario_sin_iva
+    when ciclo.tiene_observacion_inicial is true then ciclo.unidades_recuperadas * a.costo_unitario_sin_iva
+    when a.tipo = 'vendido' then a.cantidad::numeric * a.costo_unitario_sin_iva
+    else 0::numeric
   end as valor_recuperado_sin_iva,
   case
     when a.costo_unitario_sin_iva is null then null
@@ -161,6 +169,9 @@ left join lateral (
   from public.v_resultado_vencimiento_tramos t
   where t.accion_id = a.id
 ) ciclo on true;
+
+revoke all on public.v_acciones_operativas_historial from public, anon;
+grant select on public.v_acciones_operativas_historial to authenticated;
 
 comment on view public.v_resultado_vencimiento_tramos is
   'Ledger derivado del ciclo de un vencimiento. Cada tramo atribuye la disminución observada al RAG vigente; el tramo 0 representa venta previa al primer RAG.';
