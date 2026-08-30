@@ -3,6 +3,7 @@ import { Package, ChevronRight, HandHeart, Trash2, X } from 'lucide-react'
 import { RISK_VISUAL } from '@/lib/risk-config'
 import { calcularDiasStock } from '@/lib/riesgo'
 import { ProductIdentityMeta } from '@/components/product/ProductIdentity'
+import RagSeguimientoBadge from '@/components/dashboard/RagSeguimientoBadge'
 import type { VencimientoConRiesgo } from '@/types/index'
 
 type AlertaVencimiento = VencimientoConRiesgo & {
@@ -217,6 +218,8 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
           {accionesRestantes > 0 && <span className="text-[10px] text-muted-foreground shrink-0">+{accionesRestantes}</span>}
         </div>
       )}
+
+      <RagSeguimientoBadge vencimientoId={vencimiento.id} activo={tieneRagActivo} />
 
       {showAccionBtn && (
         <div className="px-3.5 md:px-4 pb-3 pt-0">
