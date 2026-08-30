@@ -75,6 +75,13 @@ BEGIN
     AND codigo = v_ean
     AND producto_id = v_wrong;
 
+  -- La observación referencia al vencimiento mediante FK compuesta
+  -- (vencimiento_id, producto_id, sucursal_id). Como esa FK no es diferible,
+  -- se retira sólo dentro de esta transacción, se mueven ambos lados y se
+  -- recrea idéntica antes de confirmar la migración.
+  ALTER TABLE public.vencimiento_observaciones
+    DROP CONSTRAINT venc_obs_vencimiento_scope_fk;
+
   -- Mover únicamente la trazabilidad operativa del registro duplicado al SKU canónico.
   UPDATE public.vencimientos
   SET producto_id = v_right,
@@ -84,6 +91,12 @@ BEGIN
   UPDATE public.vencimiento_observaciones
   SET producto_id = v_right
   WHERE producto_id = v_wrong;
+
+  ALTER TABLE public.vencimiento_observaciones
+    ADD CONSTRAINT venc_obs_vencimiento_scope_fk
+    FOREIGN KEY (vencimiento_id, producto_id, sucursal_id)
+    REFERENCES public.vencimientos(id, producto_id, sucursal_id)
+    ON DELETE RESTRICT;
 
   UPDATE public.intervenciones_rag
   SET producto_id = v_right
