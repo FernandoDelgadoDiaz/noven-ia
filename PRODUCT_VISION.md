@@ -109,6 +109,26 @@ La arquitectura conceptual es:
 
 Sistemas existentes / reportes → Noven → agentes especializados → acciones → seguimiento → resultado económico
 
+### Independencia del sistema fuente y portabilidad
+
+Noven debe distinguir permanentemente entre el dominio universal del retail y las particularidades de cada organización.
+
+Como ampliación de la arquitectura conceptual anterior, el flujo objetivo es:
+
+SISTEMA DEL CLIENTE → ADAPTADOR / CONECTOR → MODELO UNIVERSAL NOVEN → AGENTES / MOTORES NOVEN → ACCIONES → SEGUIMIENTO → RESULTADO ECONÓMICO
+
+Los adaptadores o conectores pueden obtener información mediante CSV, Excel, archivos exportados, APIs, bases de datos autorizadas de solo lectura, webhooks, SFTP, ERP/POS, MCP u otras fuentes futuras. MCP es una opción de integración, no una dependencia arquitectónica de Noven.
+
+Los agentes y motores deben razonar sobre conceptos internos comunes del retail —por ejemplo SKU, producto, stock, velocidad de venta, costo, precio, margen, vencimiento, merma, sucursal, transferencia, ruptura, compra, acción, responsable y resultado económico— y no sobre nombres específicos de columnas, reportes o sistemas externos. Una vez normalizado el dato, el agente no debería necesitar conocer su fuente original.
+
+Las reglas propias de un retailer —por ejemplo políticas de donación, RAG/markdown, sectores o familias, responsables, escalamiento, autorizaciones, transferencias, tolerancias, horarios o workflows— deben tratarse como configuración, política o adaptación en el nivel organización → zona/región → sucursal → familia/sector cuando corresponda y siempre que sea razonable.
+
+La Anónima y Glaciar son el entorno operativo real de descubrimiento y validación actual, no la frontera del producto. Sus particularidades pueden originar capacidades generales, pero no deben convertirse silenciosamente en comportamiento universal de Noven.
+
+Ante toda regla nueva debe preguntarse: ¿pertenece al supermercado como industria o a este cliente particular? Si pertenece al cliente, debe modelarse como configuración, política o adaptador siempre que sea razonable.
+
+Principio de portabilidad: cambiar el sistema fuente sin cambiar el cerebro de Noven y cambiar las políticas del retailer sin crear otro producto.
+
 ## Motores o agentes futuros
 
 Noven puede incorporar progresivamente agentes especializados como:
