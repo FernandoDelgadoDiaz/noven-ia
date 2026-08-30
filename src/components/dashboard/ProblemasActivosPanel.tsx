@@ -67,6 +67,9 @@ function detalleEscalamiento(problema: ProblemaActivo): string | null {
 
 export default function ProblemasActivosPanel({ resumen, problemas, loading, error, onVerTodos }: Props) {
   const principales = problemas.slice(0, 4)
+  const riesgoEconomico = resumen.valorizados > 0
+    ? formatearPesos(resumen.dinero_en_riesgo_sin_iva)
+    : 'Costo pendiente'
 
   return (
     <section aria-label="Problemas activos" className="bg-white rounded-[22px] shadow-card overflow-hidden">
@@ -115,7 +118,7 @@ export default function ProblemasActivosPanel({ resumen, problemas, loading, err
                 <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mt-1">problemas abiertos</p>
               </div>
               <div className="text-right">
-                <p className="text-base font-black tabular-nums text-orange-700 leading-none">{formatearPesos(resumen.dinero_en_riesgo_sin_iva)}</p>
+                <p className="text-base font-black tabular-nums text-orange-700 leading-none">{riesgoEconomico}</p>
                 <p className="text-[9px] font-semibold text-muted-foreground mt-1">{formatearUnidades(resumen.unidades_expuestas)} un. expuestas · costo s/IVA</p>
               </div>
             </div>
