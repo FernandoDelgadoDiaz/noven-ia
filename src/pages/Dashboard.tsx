@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Package, ScanLine, RefreshCw, AlertTriangle, FolderX, Trash2, CircleCheckBig } from 'lucide-react'
+import { Package, ScanLine, RefreshCw, AlertTriangle, FolderX, Trash2, CircleCheckBig, LogOut } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useVencimientos } from '@/hooks/useVencimientos'
 import { useAuth } from '@/hooks/useAuth'
@@ -13,7 +13,6 @@ import AlertaItem from '@/components/dashboard/AlertaItem'
 import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
 import AccionOperativaModal from '@/components/dashboard/AccionOperativaModal'
 import RadarZonalBell from '@/components/dashboard/RadarZonalBell'
-import ProblemasActivosPanel from '@/components/dashboard/ProblemasActivosPanel'
 import type { VencimientoConRiesgo } from '@/types/index'
 
 const ORDEN_RIESGO: Record<string, number> = {
@@ -64,10 +63,7 @@ export default function Dashboard() {
     refetch: refetchAcciones,
   } = useAccionesOperativas()
   const {
-    resumen: resumenProblemas,
-    problemas: problemasActivos,
     loading: loadingProblemas,
-    error: errorProblemas,
     refetch: refetchProblemas,
   } = useProblemasActivos(sucursalId)
 
@@ -189,6 +185,13 @@ export default function Dashboard() {
     void refetchProblemas()
   }
 
+  async function handleSignOut(): Promise<void> {
+    if (!window.confirm('¿Cerrar sesión?')) return
+    localStorage.removeItem('noven_sucursal_actual')
+    await supabase.auth.signOut()
+    navigate('/login')
+  }
+
   return (
     <div className="min-h-screen bg-surface-base">
       {puedeOperar && vencimientoEditando !== null && (
@@ -254,12 +257,16 @@ export default function Dashboard() {
 
             <RadarZonalBell sucursalId={sucursalId} hayCriticos={hayCriticos} />
 
-            <div
-              className="h-9 w-9 rounded-full bg-brand flex items-center justify-center text-white font-bold text-sm shadow-brand shrink-0 select-none"
-              aria-label="Perfil"
+            <button
+              type="button"
+              onClick={() => void handleSignOut()}
+              className="h-9 w-9 rounded-full bg-brand flex items-center justify-center text-white font-bold text-sm shadow-brand shrink-0 select-none active:scale-[0.96] transition-transform"
+              aria-label="Cerrar sesión"
+              title="Cerrar sesión"
             >
-              {avatarLetter}
-            </div>
+              <span aria-hidden="true">{avatarLetter}</span>
+              <LogOut className="sr-only" aria-hidden="true" />
+            </button>
           </div>
         </div>
       </header>
@@ -313,14 +320,6 @@ export default function Dashboard() {
                 </button>
               </div>
             )}
-
-            <ProblemasActivosPanel
-              resumen={resumenProblemas}
-              problemas={problemasActivos}
-              loading={loadingProblemas}
-              error={errorProblemas}
-              onVerTodos={() => navigate('/vencimientos?filtro=riesgo')}
-            />
 
             <section aria-label="Resumen de riesgos" className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
