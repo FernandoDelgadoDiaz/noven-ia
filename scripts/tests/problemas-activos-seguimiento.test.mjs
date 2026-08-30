@@ -36,9 +36,15 @@ assert.match(endpoint, /bajo_control/)
 assert.match(endpoint, /requiere_cierre/)
 assert.match(endpoint, /prioridad_orden/)
 assert.match(endpoint, /problema_economico_activo_v1/)
+assert.match(endpoint, /if \(estado === 'requiere_intervencion'\) return nivel === 'urgente' \? 4 : 5/,
+  'una urgencia bajo control no debe desplazar problemas sin intervención')
+assert.match(endpoint, /if \(estado === 'bajo_control'\) return nivel === 'urgente' \? 8 : 9/,
+  'bajo control debe quedar detrás de los problemas que todavía requieren acción')
+assert.match(endpoint, /Urgencia temporal bajo control: mantener seguimiento/)
+assert.match(endpoint, /Riesgo activo sin RAG registrado en Noven: verificar en Glaciar/)
 assert.doesNotMatch(endpoint, /00000000-0000-0000-0000-000000000001/,
   'el endpoint no debe hardcodear Sucursal 091')
 assert.doesNotMatch(endpoint, /RAG \d+% recomendado|recomendado.*RAG/i,
   'el seguimiento no inventa porcentajes RAG')
 
-console.log('✓ Problemas activos: respuesta, reescalamiento por nuevo control y prioridad explicable protegidos')
+console.log('✓ Problemas activos: respuesta, reescalamiento y prioridad por acción económica protegidos')
