@@ -4,11 +4,13 @@ import { Package, ScanLine, RefreshCw, AlertTriangle, FolderX, Trash2, CircleChe
 import { supabase } from '@/lib/supabase'
 import { useVencimientos } from '@/hooks/useVencimientos'
 import { useAuth } from '@/hooks/useAuth'
+import { useUsuarioRol } from '@/hooks/useUsuarioRol'
 import { useAccionesOperativas } from '@/hooks/useAccionesOperativas'
 import { useProblemasActivos } from '@/hooks/useProblemasActivos'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
 import { usePuedeOperarSucursal } from '@/hooks/usePuedeOperarSucursal'
 import { calcularCostoEnRiesgo, calcularUnidadesExpuestas, formatearPesos, formatearUnidades } from '@/lib/economia-riesgo'
+import { saludoDashboard } from '@/lib/saludo-dashboard'
 import AlertaItem from '@/components/dashboard/AlertaItem'
 import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
 import AccionOperativaModal from '@/components/dashboard/AccionOperativaModal'
@@ -38,19 +40,13 @@ function formatFechaHeader(): string {
   return raw.charAt(0).toUpperCase() + raw.slice(1)
 }
 
-function getGreeting(): string {
-  const h = new Date().getHours()
-  if (h < 12) return 'Buenos días 👋'
-  if (h < 18) return 'Buenas tardes 👋'
-  return 'Buenas noches 👋'
-}
-
 export default function Dashboard() {
   const navigate = useNavigate()
   const { sucursalId } = useSucursalActual()
   const { puedeOperar } = usePuedeOperarSucursal()
   const { data, loading, error, refetch, sinFamilias } = useVencimientos(sucursalId)
   const { user } = useAuth()
+  const { perfil } = useUsuarioRol()
   const {
     vendidos,
     donaciones,
@@ -239,7 +235,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight leading-none">
-              {getGreeting()}
+              {saludoDashboard(perfil?.nombre)}
             </h1>
             <p className="text-sm text-muted-foreground mt-1">{formatFechaHeader()}</p>
           </div>
