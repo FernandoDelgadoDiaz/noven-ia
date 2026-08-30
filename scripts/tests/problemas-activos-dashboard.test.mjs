@@ -4,6 +4,7 @@ import path from 'node:path'
 
 const root = process.cwd()
 const dashboard = fs.readFileSync(path.join(root, 'src/pages/Dashboard.tsx'), 'utf8')
+const problemas = fs.readFileSync(path.join(root, 'src/pages/Problemas.tsx'), 'utf8')
 const hook = fs.readFileSync(path.join(root, 'src/hooks/useProblemasActivos.ts'), 'utf8')
 const panel = fs.readFileSync(path.join(root, 'src/components/dashboard/ProblemasActivosPanel.tsx'), 'utf8')
 
@@ -11,10 +12,17 @@ assert.match(hook, /\.netlify\/functions\/problemas-activos/)
 assert.match(hook, /Authorization: `Bearer \$\{token\}`/)
 assert.match(hook, /requestSeq/, 'debe descartar respuestas obsoletas al cambiar de sucursal')
 
-assert.match(dashboard, /useProblemasActivos\(sucursalId\)/)
-assert.match(dashboard, /<ProblemasActivosPanel/)
+assert.doesNotMatch(dashboard, /<ProblemasActivosPanel/,
+  'Problemas Activos no debe ocupar espacio dentro del Dashboard')
+assert.match(dashboard, /useProblemasActivos\(sucursalId\)/,
+  'el Dashboard conserva el refresco coordinado de problemas')
 assert.match(dashboard, /refetchProblemas\(\)/)
-assert.match(dashboard, /navigate\('\/vencimientos\?filtro=riesgo'\)/)
+
+assert.match(problemas, /useProblemasActivos\(sucursalId\)/,
+  'la solapa Problemas debe conservar la fuente de datos existente')
+assert.match(problemas, /<ProblemasActivosPanel/,
+  'la solapa Problemas debe reutilizar el panel real')
+assert.match(problemas, /navigate\('\/vencimientos\?filtro=riesgo'\)/)
 
 for (const estado of [
   'requiere_cierre',
@@ -38,4 +46,4 @@ assert.match(panel, /motivo_prioridad/, 'cada caso debe explicar por qué ocupa 
 assert.doesNotMatch(panel, /score|puntaje|ranking IA/i, 'no debe presentar un score opaco como prioridad')
 assert.doesNotMatch(panel, /RAG \d+% recomendado|recomendado.*RAG/i, 'no debe inventar porcentajes RAG')
 
-console.log('✓ Dashboard muestra problemas activos con estado, dinero, unidades y prioridad explicable')
+console.log('✓ Problemas Activos mantiene estado, dinero, unidades y prioridad explicable en su solapa propia')
