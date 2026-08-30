@@ -119,10 +119,22 @@ function motivoPrioridad(nivel: Nivel, estado: EstadoProblema): string {
   if (estado === 'escalado_sin_respuesta') return 'RAG insuficiente: escalado y todavía sin respuesta posterior'
   if (estado === 'requiere_revision') return 'RAG insuficiente: revisar y escalar en el día'
   if (estado === 'dato_a_revisar') return 'Control inconsistente: cantidad aumentó'
-  if (nivel === 'urgente') return 'Urgencia temporal'
-  if (estado === 'requiere_intervencion') return 'Riesgo activo sin intervención RAG registrada en Noven'
-  if (estado === 'intervencion_aplicada') return 'Intervención aplicada: falta control posterior'
-  return 'Intervención bajo control; el riesgo permanece abierto hasta resolverse'
+  if (estado === 'requiere_intervencion') {
+    return nivel === 'urgente'
+      ? 'Urgente sin RAG registrado en Noven: verificar en Glaciar hoy'
+      : 'Riesgo activo sin RAG registrado en Noven: verificar en Glaciar'
+  }
+  if (estado === 'intervencion_aplicada') {
+    return nivel === 'urgente'
+      ? 'Urgente con intervención aplicada: falta control posterior'
+      : 'Intervención aplicada: falta control posterior'
+  }
+  if (estado === 'bajo_control') {
+    return nivel === 'urgente'
+      ? 'Urgencia temporal bajo control: mantener seguimiento'
+      : 'Intervención bajo control; el riesgo permanece abierto hasta resolverse'
+  }
+  return 'Problema activo pendiente de seguimiento'
 }
 
 function ordenPrioridad(nivel: Nivel, estado: EstadoProblema): number {
@@ -130,10 +142,10 @@ function ordenPrioridad(nivel: Nivel, estado: EstadoProblema): number {
   if (estado === 'escalado_sin_respuesta') return 1
   if (estado === 'requiere_revision') return 2
   if (estado === 'dato_a_revisar') return 3
-  if (nivel === 'urgente') return 4
-  if (estado === 'requiere_intervencion') return 5
-  if (estado === 'intervencion_aplicada') return 6
-  return 7
+  if (estado === 'requiere_intervencion') return nivel === 'urgente' ? 4 : 5
+  if (estado === 'intervencion_aplicada') return nivel === 'urgente' ? 6 : 7
+  if (estado === 'bajo_control') return nivel === 'urgente' ? 8 : 9
+  return 10
 }
 
 const handler: Handler = async (event: HandlerEvent) => {
@@ -338,7 +350,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     resumen,
     problemas: problemas.slice(0, 20),
     criterio: 'problema_economico_activo_v1',
-    prioridad: 'terminal > RAG sin respuesta > RAG insuficiente > dato a revisar > urgente > intervención pendiente > bajo control; desempate por $ en riesgo',
+    prioridad: 'terminal > RAG sin respuesta > RAG insuficiente > dato a revisar > intervención requerida (urgente antes que radar) > control pendiente > bajo control; dentro del mismo estado, $ en riesgo y tiempo comercial',
   })
 }
 
