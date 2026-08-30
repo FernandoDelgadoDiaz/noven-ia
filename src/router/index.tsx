@@ -19,6 +19,7 @@ const Scanner = lazy(() => import('../pages/Scanner'))
 const Vencimientos = lazy(() => import('../pages/Vencimientos'))
 const Historial = lazy(() => import('../pages/Historial'))
 const Analisis = lazy(() => import('../pages/Analisis'))
+const Problemas = lazy(() => import('../pages/Problemas'))
 const ImportarInicio = lazy(() => import('../pages/ImportarInicio'))
 const ImportarFamilia = lazy(() => import('../pages/ImportarFamiliaSeguro'))
 const ImportarMasivo = lazy(() => import('../pages/ImportarMasivoSeguro'))
@@ -65,6 +66,10 @@ export const router = createBrowserRouter([
           {
             path: 'analisis',
             element: <ErrorBoundary><Suspense {...suspenseProps}><Analisis /></Suspense></ErrorBoundary>,
+          },
+          {
+            path: 'problemas',
+            element: <ErrorBoundary><Suspense {...suspenseProps}><Problemas /></Suspense></ErrorBoundary>,
           },
           {
             // La bandeja mantiene lectura zonal; la propia página oculta acciones
