@@ -1,12 +1,12 @@
+import { useState } from 'react'
 import { RefreshCw, ShieldAlert } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
 import ProblemasActivosPanel from '@/components/dashboard/ProblemasActivosPanel'
 import { useProblemasActivos } from '@/hooks/useProblemasActivos'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
 
 export default function Problemas() {
-  const navigate = useNavigate()
   const { sucursalId } = useSucursalActual()
+  const [mostrarTodos, setMostrarTodos] = useState(false)
   const {
     resumen,
     problemas,
@@ -47,7 +47,8 @@ export default function Problemas() {
           problemas={problemas}
           loading={loading}
           error={error}
-          onVerTodos={() => navigate('/vencimientos?filtro=riesgo')}
+          mostrarTodos={mostrarTodos}
+          onVerTodos={() => setMostrarTodos(true)}
         />
       </main>
     </div>
