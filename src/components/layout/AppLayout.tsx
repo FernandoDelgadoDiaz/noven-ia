@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, ScanLine, Calendar, BrainCircuit, FileUp, Users, LogOut, Bell, X, Network } from 'lucide-react'
+import { LayoutDashboard, ScanLine, Calendar, BrainCircuit, FileUp, Users, LogOut, Bell, X, Network, ShieldAlert } from 'lucide-react'
 import { useUsuarioRol } from '@/hooks/useUsuarioRol'
 import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
 import { useNovenAccessContext } from '@/hooks/useNovenAccessContext'
@@ -18,11 +18,14 @@ interface NavItem {
   isMain?: boolean
 }
 
+const PROBLEMS_NAV_ITEM: NavItem = { to: '/problemas', label: 'Problemas', Icon: ShieldAlert }
+
 const BASE_NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { to: '/scanner', label: 'Scanner', Icon: ScanLine, isMain: true },
   { to: '/vencimientos', label: 'Vencimientos', Icon: Calendar },
   { to: '/analisis', label: 'Análisis', Icon: BrainCircuit },
+  PROBLEMS_NAV_ITEM,
 ]
 
 const IMPORT_NAV_ITEM: NavItem = { to: '/importar', label: 'Importar', Icon: FileUp }
@@ -41,6 +44,7 @@ const MOBILE_NAV_LEFT: NavItem[] = [
 
 const MOBILE_NAV_RIGHT_BASE: NavItem[] = [
   { to: '/analisis', label: 'Análisis', Icon: BrainCircuit },
+  PROBLEMS_NAV_ITEM,
 ]
 
 export default function AppLayout() {
@@ -279,16 +283,6 @@ export default function AppLayout() {
                 )}
               </NavLink>
             ))}
-
-            <button
-              type="button"
-              onClick={() => void handleSignOut()}
-              className="flex flex-col items-center gap-1 px-2 py-2 rounded-xl text-muted-foreground hover:text-red-500 hover:bg-red-50/60 transition-colors active:scale-[0.94]"
-              aria-label="Cerrar sesión"
-            >
-              <LogOut className="h-5 w-5" />
-              <span className="text-[10px] font-medium leading-none">Salir</span>
-            </button>
           </div>
         </div>
       </nav>
