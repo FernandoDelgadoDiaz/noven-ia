@@ -22,7 +22,18 @@ assert.match(problemas, /useProblemasActivos\(sucursalId\)/,
   'la solapa Problemas debe conservar la fuente de datos existente')
 assert.match(problemas, /<ProblemasActivosPanel/,
   'la solapa Problemas debe reutilizar el panel real')
-assert.match(problemas, /navigate\('\/vencimientos\?filtro=riesgo'\)/)
+assert.match(problemas, /useState\(false\)/,
+  'la solapa debe iniciar mostrando sólo los problemas prioritarios')
+assert.match(problemas, /mostrarTodos=\{mostrarTodos\}/)
+assert.match(problemas, /onVerTodos=\{\(\) => setMostrarTodos\(true\)\}/,
+  'Ver todos debe expandir la lista dentro de Problemas')
+assert.doesNotMatch(problemas, /navigate\('\/vencimientos\?filtro=riesgo'\)/,
+  'la expansión de Problemas no debe sacar al usuario hacia Vencimientos')
+
+assert.match(panel, /mostrarTodos \? problemas : problemas\.slice\(0, 4\)/,
+  'el panel debe poder pasar de prioritarios a la lista completa sin cambiar de ruta')
+assert.match(panel, /!mostrarTodos && resumen\.abiertos > visibles\.length/,
+  'el control de expansión debe desaparecer cuando ya se muestran todos')
 
 for (const estado of [
   'requiere_cierre',
@@ -46,4 +57,4 @@ assert.match(panel, /motivo_prioridad/, 'cada caso debe explicar por qué ocupa 
 assert.doesNotMatch(panel, /score|puntaje|ranking IA/i, 'no debe presentar un score opaco como prioridad')
 assert.doesNotMatch(panel, /RAG \d+% recomendado|recomendado.*RAG/i, 'no debe inventar porcentajes RAG')
 
-console.log('✓ Problemas Activos mantiene estado, dinero, unidades y prioridad explicable en su solapa propia')
+console.log('✓ Problemas Activos se expande en su propia solapa y mantiene estado, dinero, unidades y prioridad explicable')
