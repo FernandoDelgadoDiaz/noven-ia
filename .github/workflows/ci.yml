@@ -51,10 +51,20 @@ jobs:
       - name: Start ephemeral Supabase and replay migrations
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           supabase init --force
           supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector
-          bash scripts/migration-replay/reset-with-legacy-bootstrap.sh
+
+          set +e
+          bash scripts/migration-replay/reset-with-legacy-bootstrap.sh 2>&1 | tee "${RUNNER_TEMP}/migration-replay.log"
+          replay_status=${PIPESTATUS[0]}
+          set -e
+
+          if [[ "${replay_status}" -ne 0 ]]; then
+            echo "Migration replay failed with status ${replay_status}."
+            exit "${replay_status}"
+          fi
+
           supabase status -o env > "${RUNNER_TEMP}/supabase-local.env"
           source "${RUNNER_TEMP}/supabase-local.env"
           echo "VITE_SUPABASE_URL=${API_URL}" >> "${GITHUB_ENV}"
@@ -62,6 +72,15 @@ jobs:
           echo "VITE_SUPABASE_ANON_KEY=${ANON_KEY}" >> "${GITHUB_ENV}"
           echo "SUPABASE_ANON_KEY=${ANON_KEY}" >> "${GITHUB_ENV}"
           echo "SUPABASE_SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}" >> "${GITHUB_ENV}"
+
+      - name: Upload migration replay diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: migration-replay-log
+          path: ${{ runner.temp }}/migration-replay.log
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Live isolation replay probe
         run: node scripts/live-isolation/probe.mjs
