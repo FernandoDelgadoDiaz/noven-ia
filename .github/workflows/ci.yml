@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/multitenant-architecture-v1
+      - master
   pull_request:
     branches:
       - master
