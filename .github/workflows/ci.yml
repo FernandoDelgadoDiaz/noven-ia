@@ -54,7 +54,7 @@ jobs:
           set -euo pipefail
           supabase init --force
           supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector
-          supabase db reset
+          bash scripts/migration-replay/reset-with-legacy-bootstrap.sh
           supabase status -o env > "${RUNNER_TEMP}/supabase-local.env"
           source "${RUNNER_TEMP}/supabase-local.env"
           echo "VITE_SUPABASE_URL=${API_URL}" >> "${GITHUB_ENV}"
