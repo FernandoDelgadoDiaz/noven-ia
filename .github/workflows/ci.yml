@@ -19,7 +19,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
 
     steps:
       - name: Checkout
@@ -42,6 +42,29 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start ephemeral Supabase and replay migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase init --force
+          supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector
+          supabase db reset
+          supabase status -o env > "${RUNNER_TEMP}/supabase-local.env"
+          source "${RUNNER_TEMP}/supabase-local.env"
+          echo "VITE_SUPABASE_URL=${API_URL}" >> "${GITHUB_ENV}"
+          echo "SUPABASE_URL=${API_URL}" >> "${GITHUB_ENV}"
+          echo "VITE_SUPABASE_ANON_KEY=${ANON_KEY}" >> "${GITHUB_ENV}"
+          echo "SUPABASE_ANON_KEY=${ANON_KEY}" >> "${GITHUB_ENV}"
+          echo "SUPABASE_SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}" >> "${GITHUB_ENV}"
+
+      - name: Live isolation replay probe
+        run: node scripts/live-isolation/probe.mjs
 
       - name: Install isolated Playwright test runner
         shell: bash
@@ -69,3 +92,7 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Stop ephemeral Supabase
+        if: always()
+        run: supabase stop --no-backup || true
