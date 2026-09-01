@@ -52,16 +52,18 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          supabase init --force
-          supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector
-
           set +e
-          bash scripts/migration-replay/reset-with-legacy-bootstrap.sh 2>&1 | tee "${RUNNER_TEMP}/migration-replay.log"
+          bash -c '
+            set -euo pipefail
+            supabase init --force
+            supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector
+            bash scripts/migration-replay/reset-with-legacy-bootstrap.sh
+          ' 2>&1 | tee migration-replay.log
           replay_status=${PIPESTATUS[0]}
           set -e
 
           if [[ "${replay_status}" -ne 0 ]]; then
-            echo "Migration replay failed with status ${replay_status}."
+            echo "Migration replay setup failed with status ${replay_status}."
             exit "${replay_status}"
           fi
 
@@ -78,7 +80,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: migration-replay-log
-          path: ${{ runner.temp }}/migration-replay.log
+          path: migration-replay.log
           if-no-files-found: error
           retention-days: 7
 
