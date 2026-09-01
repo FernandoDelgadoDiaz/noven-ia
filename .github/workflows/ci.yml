@@ -55,7 +55,14 @@ jobs:
           set +e
           bash -c '
             set -euo pipefail
+            export NOVEN_EPHEMERAL_REPLAY=1
+            cleanup_legacy_bootstrap() {
+              node scripts/migration-replay/legacy-bootstrap.mjs cleanup || true
+            }
+            trap cleanup_legacy_bootstrap EXIT
+
             supabase init --force
+            node scripts/migration-replay/legacy-bootstrap.mjs prepare
             supabase start -x studio,imgproxy,inbucket,edge-runtime,logflare,vector
             bash scripts/migration-replay/reset-with-legacy-bootstrap.sh
           ' 2>&1 | tee migration-replay.log
