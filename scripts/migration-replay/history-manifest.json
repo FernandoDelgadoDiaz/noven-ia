@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "policy": {
+    "historical_chain_is_universal_installer": false,
+    "new_environment_strategy": "verified_schema_baseline_then_forward_migrations",
+    "production_ledger_action": "none",
+    "edit_applied_migrations": false,
+    "fabricate_production_business_data_for_replay": false,
+    "baseline_artifact_status": "required_not_generated",
+    "baseline_source_master": "438ced08c6b8a2dec73f75b27b3351c39e579f74",
+    "baseline_candidate_cutoff": "20260901103500",
+    "baseline_scope": "noven_core_schema_only",
+    "excluded_state": [
+      "auth_users",
+      "business_rows",
+      "storage_objects",
+      "desafio5s_archived_data"
+    ]
+  },
+  "known_non_universal_history": [
+    {
+      "id": "legacy_handle_updated_at",
+      "kind": "legacy_schema_precondition",
+      "repository_path": "supabase/migrations/20260827000290_post_cutover_security_v1.sql",
+      "universal_replay": false,
+      "reason": "La migracion altera public.handle_updated_at(), objeto que existia en produccion antes de la cadena Git pero cuyo CREATE no esta en el historial versionado.",
+      "evidence_markers": [
+        "ALTER FUNCTION public.handle_updated_at()"
+      ],
+      "resolution": "ephemeral_compatibility_shim_1_4a"
+    },
+    {
+      "id": "admin_091_bootstrap",
+      "kind": "production_state_bootstrap",
+      "repository_path": "supabase/migrations/20260828000020_access_invitations_v1.sql",
+      "universal_replay": false,
+      "reason": "Exige exactamente un gerente_sucursal activo de la sucursal 091 y aborta una base vacia.",
+      "evidence_markers": [
+        "s.codigo = '091'",
+        "esperado 1"
+      ],
+      "resolution": "baseline_required"
+    },
+    {
+      "id": "remove_unapproved_admin_bootstrap",
+      "kind": "production_ledger_only_correction",
+      "repository_path": null,
+      "production_ledger_version": "20260828011602",
+      "production_ledger_name": "prod_20260828000021_remove_unapproved_admin_bootstrap_v1",
+      "universal_replay": false,
+      "reason": "Correccion aplicada en produccion que exige el admin_organizacion creado por el bootstrap 091; no existe como migracion homonima en Git.",
+      "evidence_markers": [
+        "Correccion bootstrap ambigua",
+        "esperado 1"
+      ],
+      "resolution": "baseline_required"
+    },
+    {
+      "id": "explicit_admin_091_identity",
+      "kind": "production_identity_bootstrap",
+      "repository_path": "supabase/migrations/20260828000040_explicit_admin_org_and_local_role_hardening_v1.sql",
+      "universal_replay": false,
+      "reason": "Exige una identidad Auth concreta y un gerente_sucursal activo en 091 antes de crear la capacidad admin_organizacion.",
+      "evidence_markers": [
+        "gerente091@gmail.com",
+        "s.codigo = '091'",
+        "esperado 1"
+      ],
+      "resolution": "baseline_required"
+    },
+    {
+      "id": "bonobon_3449476_repair",
+      "kind": "production_business_data_repair",
+      "repository_path": "supabase/migrations/20260830163500_reconciliar_tableta_bonobon_3449476.sql",
+      "universal_replay": false,
+      "reason": "Repara un incidente productivo concreto y aborta si no existen los SKU, EAN y costo observados en produccion.",
+      "evidence_markers": [
+        "3443479",
+        "3449476",
+        "7790580117979",
+        "1961.67"
+      ],
+      "resolution": "baseline_required"
+    }
+  ],
+  "known_clean_replay_exceptions": [
+    {
+      "id": "desafio5s_cold_archive",
+      "repository_path": "supabase/migrations/20260901103500_desafio5s_cold_archive_v1.sql",
+      "classification": "state_aware_but_clean_noop",
+      "reason": "La propia migracion retorna sin exigir objetos 5S cuando el entorno limpio no los contiene.",
+      "evidence_markers": [
+        "Si no existe ningún objeto 5S",
+        "return;"
+      ]
+    }
+  ]
+}
