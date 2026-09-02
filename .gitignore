@@ -39,3 +39,6 @@ supabase/migrations/20260827000285_local_replay_legacy_handle_updated_at.sql
 
 # Disposable structural fingerprint diagnostics
 structural-diff.json
+
+# Synthetic provider evaluation outputs (may contain model responses)
+.artifacts/provider-evaluation/
