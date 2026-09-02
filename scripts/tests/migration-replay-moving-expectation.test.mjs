@@ -62,11 +62,25 @@ if (digest.filenames.length === 0) {
 const dias = anchorAgeDays(expectation)
 assert.ok(
   dias <= expectation.anchor_revalidacion_maxima_dias,
-  `El ancla de producción tiene ${dias} días y el máximo declarado es `
-  + `${expectation.anchor_revalidacion_maxima_dias}. Re-materializala desde el catálogo `
-  + 'productivo siguiendo docs/MIGRATION_REPLAY_BASELINE_V1.md §14. '
-  + 'Mover la fecha sin re-materializar deja el gate verde y sin ancla: es el modo de falla '
-  + 'que este tripwire existe para evitar.',
+  [
+    `El ancla de producción tiene ${dias} días; el máximo declarado es ${expectation.anchor_revalidacion_maxima_dias}.`,
+    '',
+    'QUÉ HACER — re-materializar el ancla (docs/MIGRATION_REPLAY_BASELINE_V1.md §14.4):',
+    '  1. extraer los 39 fragmentos SQL desde el catálogo productivo hacia baseline-v1/;',
+    '  2. actualizar artifact-manifest.json con el git blob SHA de cada fragmento;',
+    '  3. correr el replay en descartable y tomar la huella:',
+    '     NOVEN_EPHEMERAL_REPLAY=1 ./scripts/migration-replay/run-baseline-replay.sh',
+    '  4. escribir esa huella en expected-fingerprint.json y su SHA-256 en',
+    '     fingerprint-metadata.json, y mover BASELINE_VERSION al cutoff nuevo;',
+    '  5. regenerar la expectativa móvil: run-baseline-replay.sh --regenerate;',
+    '  6. actualizar anchor_materialized_at en replay-expectation.json.',
+    '',
+    'CUÁNTO LLEVA — los pasos 3 a 6 están scriptados y son minutos. El paso 1 NO está',
+    'scriptado y es el grueso del trabajo: la extracción se hizo a mano en el PR #129.',
+    '',
+    'NO MUEVAS anchor_materialized_at sin hacer los pasos 1 a 5. Deja el gate verde y sin',
+    'ancla, que es exactamente el modo de falla que este tripwire existe para evitar.',
+  ].join('\n'),
 )
 
 // El regenerador nunca debe poder tocar el ancla.

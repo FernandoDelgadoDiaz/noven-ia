@@ -37,3 +37,19 @@ Como efecto secundario deseado, reduce la población que puede disparar costo en
 **Consecuencia:** desaparece el ámbito parcial por familias dentro del análisis. Con un único ámbito posible —toda la sucursal— se eliminan el filtrado por `usuario_familias_sucursal`, la variante `SYSTEM_OPERADOR` del prompt y la bifurcación `scopeCompleto`. Queda un solo system prompt, lo que además simplifica la evaluación de guardarraíles del ítem 1.5.
 
 **Condición de salida:** si en el futuro un perfil operativo necesita análisis de su propio ámbito, no reintroducir la bifurcación dentro de este endpoint. Debe ser una capacidad separada, con su propio prompt y su propio alcance declarado.
+
+## Expectativa móvil del replay y pérdida diferida del ancla — 2026-09-02
+
+**Decisión:** el gate de replay pasa de comparar contra una foto estática del catálogo productivo a comparar contra una expectativa móvil, atada por hash al conjunto exacto de migraciones posteriores al cutoff. `expected-fingerprint.json` se conserva como ancla de producción y sólo se re-materializa de forma explícita y periódica.
+
+**Motivo:** el gate anterior sólo podía estar verde con el schema congelado. El replay aplica baseline más migraciones posteriores, pero comparaba contra una foto que sólo contenía el baseline; la primera migración nueva —cualquiera— lo rompía por diseño, no por deriva.
+
+La alternativa obvia, regenerar el ancla desde la base replicada, era peor que el problema: la convertía en «lo que produjo el replay» en vez de «lo que hay en producción», dejando el gate verde y sin capacidad de detectar deriva.
+
+**Qué se cede:** el gate deja de responder, en cada corrida, si el repositorio reconstruye lo que hay en producción. Pasa a verificar reproducibilidad y cambio declarado. El ancla se mantiene viva únicamente por la re-materialización periódica.
+
+**Cuándo se cede, que es lo que hace aceptable el intercambio:** hoy no se cede nada. Con cero migraciones posteriores al cutoff el verificador exige que la expectativa móvil sea idéntica al ancla, así que el gate sigue respondiendo la pregunta completa. La pérdida se materializa recién con la primera migración —la del contador de cuota y caché de `analisis.ts`— y llega en el mismo momento en que se cobra el beneficio: la protección de un endpoint que hoy permite costo ilimitado en un tercero y salida de datos operativos sin techo.
+
+No es «aceptamos perder el ancla», es «la perdemos cuando ganamos otra cosa a cambio», y ambas cosas ocurren en el mismo PR y quedan visibles en el mismo diff.
+
+**Condición de salida:** scriptar la extracción de los fragmentos desde el catálogo productivo. Hoy es el único paso manual del procedimiento y es justamente el que sostiene el ancla: cuanto más caro es el camino legítimo, más tentador es mover la fecha del tripwire y seguir. Debería resolverse antes de la primera re-materialización real.

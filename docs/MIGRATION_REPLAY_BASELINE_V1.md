@@ -229,7 +229,11 @@ Es lo único que mantiene vivo el ancla contra producción. **Es explícita y pe
 
 **Quién.** El responsable del repositorio. Requiere acceso de lectura al catálogo productivo, que una sesión automatizada no tiene y no debe tener.
 
-**Cómo.** El procedimiento es el de la materialización original (§10, PR #129): se extraen los fragmentos desde el catálogo productivo, se re-arma la baseline, se verifica en una base descartable y se actualizan `expected-fingerprint.json`, su SHA en `fingerprint-metadata.json` y el cutoff. Después se regenera la expectativa móvil, que vuelve a partir del ancla nueva.
+**Cómo.** El procedimiento es el de la materialización original (§10, PR #129): se extraen los 39 fragmentos desde el catálogo productivo, se actualiza `artifact-manifest.json` con el git blob SHA de cada uno, se re-arma la baseline, se verifica en una base descartable, y se actualizan `expected-fingerprint.json`, su SHA en `fingerprint-metadata.json` y el cutoff. Después se regenera la expectativa móvil, que vuelve a partir del ancla nueva.
+
+**Cuánto lleva, y dónde está el punto débil.** El armado, la verificación y la regeneración están scriptados (`run-baseline-replay.sh`, `--regenerate`) y son minutos de CI. **La extracción de los fragmentos desde el catálogo productivo no está scriptada:** se hizo a mano en el PR #129 y es el grueso del trabajo.
+
+Eso convierte al paso menos automatizado del mecanismo en el único que mantiene vivo el ancla, que es una mala combinación conocida: cuanto más caro es el camino legítimo, más tentador es mover la fecha y seguir. Scriptar la extracción es la mejora de mayor valor pendiente sobre este mecanismo, y debería hacerse antes de la primera re-materialización real, no después.
 
 **Qué se rompe si nadie lo hace.** El gate sigue verde indefinidamente, porque reproducibilidad y cambio declarado se siguen cumpliendo. Lo que se degrada en silencio es la correspondencia con producción: un cambio aplicado a mano sobre producción —un `ALTER` de emergencia, un índice agregado desde el dashboard— no aparece en ninguna migración, no altera la expectativa móvil y **no lo detecta nadie**. El repositorio deja de describir producción y el primer síntoma llega cuando haya que reconstruir un entorno.
 
