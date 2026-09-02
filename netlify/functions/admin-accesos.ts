@@ -1,5 +1,6 @@
 import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
+import { esEmailDuplicadoAuth } from './_lib/auth-directory'
 import { adminActionMatchesLane, adminLaneForPath } from './_lib/admin-routing'
 import { getCorsHeaders } from './_auth'
 import { logServerError } from './_observability'
@@ -68,23 +69,6 @@ async function validarSesion(
     logServerError(event, { endpoint: ENDPOINT, operation: 'session_verify', statusCode: 502, error: err })
     return { error: 'No se pudo verificar la sesión.', status: 502 }
   }
-}
-
-async function emailYaExiste(
-  supabase: ReturnType<typeof createClient>,
-  email: string,
-): Promise<boolean> {
-  const normalized = email.toLowerCase()
-  let page = 1
-  while (page <= 20) {
-    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
-    if (error) throw error
-    const users = data.users ?? []
-    if (users.some((u) => (u.email ?? '').toLowerCase() === normalized)) return true
-    if (users.length < 1000) return false
-    page++
-  }
-  return false
 }
 
 async function handleAdminAccesos(event: HandlerEvent): Promise<HandlerResponse> {
@@ -208,18 +192,6 @@ async function handleAdminAccesos(event: HandlerEvent): Promise<HandlerResponse>
     }
   }
 
-  try {
-    if (await emailYaExiste(supabase, email)) {
-      return jsonResponse(event, 409, { success: false, error: 'Ese email ya tiene una cuenta en Noven.' })
-    }
-  } catch (err) {
-    logServerError(event, { endpoint: ENDPOINT, operation: 'verify_invite_email', statusCode: 502, error: err })
-    return jsonResponse(event, 502, {
-      success: false,
-      error: 'No se pudo verificar el email en Auth.',
-    })
-  }
-
   const redirectTo = `${(process.env.URL ?? 'https://noven-ia.netlify.app').replace(/\/$/, '')}/activar`
 
   let usuarioId = ''
@@ -249,6 +221,9 @@ async function handleAdminAccesos(event: HandlerEvent): Promise<HandlerResponse>
       usuarioId = data.user.id
     }
   } catch (err) {
+    if (esEmailDuplicadoAuth(err)) {
+      return jsonResponse(event, 409, { success: false, error: 'Ese email ya tiene una cuenta en Noven.' })
+    }
     return jsonResponse(event, 400, {
       success: false,
       error: err instanceof Error ? err.message : String(err),
