@@ -48,22 +48,47 @@ jobs:
       - name: Production build
         run: npm run build
 
-      - name: Baseline V1 replay and structural fingerprint
+      - name: Baseline V1 replay, structural fingerprint and live Supabase
         shell: bash
         env:
           NOVEN_REPLAY_DIFF_OUTPUT: ${{ runner.temp }}/structural-diff.json
+          NOVEN_REPLAY_KEEP_RUNNING: "1"
+          NOVEN_REPLAY_WORKSPACE: ${{ runner.temp }}/noven-live-isolation
           SUPABASE_TELEMETRY_DISABLED: "true"
         run: |
           set -euo pipefail
           ./scripts/migration-replay/run-baseline-replay.sh 2>&1 | tee baseline-replay.log
 
-      - name: Upload baseline replay diagnostics
+      - name: Export ephemeral Supabase credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source "${RUNNER_TEMP}/noven-live-isolation/supabase-local.env"
+          set +a
+          {
+            echo "NOVEN_EPHEMERAL_REPLAY=1"
+            echo "VITE_SUPABASE_URL=${API_URL}"
+            echo "SUPABASE_URL=${API_URL}"
+            echo "VITE_SUPABASE_ANON_KEY=${ANON_KEY}"
+            echo "SUPABASE_ANON_KEY=${ANON_KEY}"
+            echo "SUPABASE_SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Live isolation Gates 1-3
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/live-isolation/gates-1-3.mjs 2>&1 | tee live-isolation.log
+
+      - name: Upload baseline and isolation diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: baseline-replay-diagnostics
+          name: baseline-isolation-diagnostics
           path: |
             baseline-replay.log
+            live-isolation.log
             ${{ runner.temp }}/structural-diff.json
           if-no-files-found: ignore
           retention-days: 7
@@ -94,3 +119,12 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Stop ephemeral Supabase
+        if: always()
+        shell: bash
+        run: |
+          if [[ -d "${RUNNER_TEMP}/noven-live-isolation/supabase" ]]; then
+            cd "${RUNNER_TEMP}/noven-live-isolation"
+            supabase stop --no-backup || true
+          fi

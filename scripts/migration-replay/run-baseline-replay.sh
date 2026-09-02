@@ -5,12 +5,28 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 workspace="${NOVEN_REPLAY_WORKSPACE:-$(mktemp -d -t noven-baseline-replay.XXXXXX)}"
 diff_output="${NOVEN_REPLAY_DIFF_OUTPUT:-${repo_root}/structural-diff.json}"
 created_workspace=0
+keep_running="${NOVEN_REPLAY_KEEP_RUNNING:-0}"
+replay_succeeded=0
 
 if [[ -z "${NOVEN_REPLAY_WORKSPACE:-}" ]]; then
   created_workspace=1
 fi
 
+if [[ "${keep_running}" != "0" && "${keep_running}" != "1" ]]; then
+  echo "NOVEN_REPLAY_KEEP_RUNNING must be 0 or 1." >&2
+  exit 1
+fi
+
+if [[ "${keep_running}" -eq 1 && "${created_workspace}" -eq 1 ]]; then
+  echo "Keeping Supabase running requires an explicit NOVEN_REPLAY_WORKSPACE." >&2
+  exit 1
+fi
+
 cleanup() {
+  if [[ "${keep_running}" -eq 1 && "${replay_succeeded}" -eq 1 ]]; then
+    return
+  fi
+
   if [[ -d "${workspace}/supabase" ]]; then
     (
       cd "${workspace}"
@@ -50,7 +66,11 @@ node "${repo_root}/scripts/migration-replay/baseline-workspace.mjs" \
 
 (
   cd "${workspace}"
-  supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+  if [[ "${keep_running}" -eq 1 ]]; then
+    supabase start -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+  else
+    supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+  fi
   supabase status -o env > "${workspace}/supabase-local.env"
 )
 
@@ -61,3 +81,5 @@ set +a
 export NOVEN_REPLAY_DB_URL="${DB_URL}"
 node "${repo_root}/scripts/migration-replay/verify-structural-fingerprint.mjs" \
   --diff-output "${diff_output}"
+
+replay_succeeded=1
