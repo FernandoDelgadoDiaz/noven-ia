@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import { getCorsHeaders } from './_auth'
 import { logServerError } from './_observability'
 import { SYSTEM_ADMIN } from './_analisis_policy'
+import { CUOTA_ANALISIS, consumirCuota, mensajeCuota } from './_lib/cuota'
+import { createHash } from 'node:crypto'
 
 const UMBRAL_RADAR = 45
 const UMBRAL_URGENTE = 20
@@ -334,6 +336,30 @@ const handler: Handler = async (event: HandlerEvent) => {
     auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
   })
 
+  // Cuota por actor antes de cualquier trabajo caro: corta acá y no se pagan ni
+  // las ~10 consultas que arman los datos ni la llamada al proveedor.
+  //
+  // FALLA CERRADO, y es deliberado. Si el contador no responde, no se llama al
+  // proveedor. Es el criterio INVERSO al de un endpoint operativo: en Scanner o
+  // Dashboard fallar cerrado rompería la operación de la sucursal por un
+  // contador caído, mientras que acá fallar abierto significa costo ilimitado en
+  // un tercero y datos operativos saliendo del país sin techo. `analisis` es hoy
+  // el único endpoint del sistema donde este criterio aplica: no copiarlo por
+  // analogía con los demás.
+  const cuota = await consumirCuota(supabase, CUOTA_ANALISIS, uid)
+  if (!cuota.permitido) {
+    logServerError(event, {
+      endpoint: ENDPOINT,
+      operation: 'cuota_denegada',
+      statusCode: cuota.motivo === 'contador_no_disponible' ? 503 : 429,
+      error: `cuota ${cuota.motivo}`,
+    })
+    return json(cuota.motivo === 'contador_no_disponible' ? 503 : 429, {
+      success: false,
+      error: mensajeCuota(cuota),
+    })
+  }
+
   const [{ data: perfil, error: perfilError }, { data: sucursal, error: sucursalError }] = await Promise.all([
     supabase.from('usuarios').select('activo').eq('id', uid).maybeSingle(),
     supabase.from('sucursales').select('id, codigo, nombre, organizacion_id, zona_id, activa').eq('id', sucursalId).maybeSingle(),
@@ -635,6 +661,34 @@ const handler: Handler = async (event: HandlerEvent) => {
     'Límite de inferencia: no confundir trimestre abierto con trimestre completo. No afirmar estacionalidad. Si no existe base comparable previa, describir únicamente el resultado actual y su composición.',
   ].join('\n')
 
+  // Clave del caché: hash de la entrada autorizada exacta.
+  //
+  // Es segura por construcción, no por una verificación aparte: un acierto sólo
+  // ocurre si `datosFormateados` es byte a byte idéntico, y ese texto ya está
+  // filtrado por el alcance del solicitante. Dos gerentes de la misma sucursal
+  // con los mismos datos comparten resultado, que es lo correcto; cualquier
+  // diferencia de ámbito produce otra cadena y otra clave. Devolver el ámbito de
+  // otro usuario es estructuralmente imposible.
+  //
+  // Se invalida sola a diario: la fecha operacional viaja dentro de los datos.
+  const claveCache = createHash('sha256').update(`${SYSTEM_ADMIN}\n${datosFormateados}`).digest('hex')
+
+  const { data: cacheHit } = await supabase
+    .from('analisis_cache')
+    .select('analisis, generado_en')
+    .eq('clave', claveCache)
+    .maybeSingle()
+
+  if (cacheHit?.analisis) {
+    return json(200, {
+      success: true,
+      analisis: cacheHit.analisis,
+      generado_en: cacheHit.generado_en,
+      sucursal_id: sucursalId,
+      sucursal_codigo: sucursal.codigo,
+    })
+  }
+
   try {
     const dsRes = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
@@ -664,10 +718,25 @@ const handler: Handler = async (event: HandlerEvent) => {
       logServerError(event, { endpoint: ENDPOINT, operation: 'deepseek_empty', statusCode: 502, error: 'El modelo devolvió contenido vacío' })
       return json(502, { success: false, error: 'El modelo no devolvió contenido.' })
     }
+    const generadoEn = new Date().toISOString()
+
+    // Un fallo al cachear no invalida un análisis ya pagado al proveedor.
+    const { error: cacheError } = await supabase
+      .from('analisis_cache')
+      .upsert({
+        clave: claveCache,
+        sucursal_id: sucursalId,
+        analisis: contenido,
+        generado_en: generadoEn,
+      }, { onConflict: 'clave' })
+    if (cacheError) {
+      logServerError(event, { endpoint: ENDPOINT, operation: 'cache_write', statusCode: 200, error: cacheError })
+    }
+
     return json(200, {
       success: true,
       analisis: contenido,
-      generado_en: new Date().toISOString(),
+      generado_en: generadoEn,
       sucursal_id: sucursalId,
       sucursal_codigo: sucursal.codigo,
     })
