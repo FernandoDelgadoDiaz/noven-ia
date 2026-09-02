@@ -32,7 +32,10 @@ async function consumir(environment, { actor, limiteHora, limiteDia }) {
     }),
   })
 
-  assert.ok(res.ok, `consumir_cuota_actor_v1 respondió ${res.status}: ${await res.text()}`)
+  if (!res.ok) {
+    const detalle = await res.text()
+    assert.fail(`consumir_cuota_actor_v1 respondió ${res.status}: ${detalle}`)
+  }
   const filas = await res.json()
   const fila = Array.isArray(filas) ? filas[0] : filas
   assert.ok(fila, 'la RPC debe devolver una fila')

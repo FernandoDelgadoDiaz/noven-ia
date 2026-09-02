@@ -114,6 +114,19 @@ assert.match(
   'la clave debe cubrir system prompt + datos autorizados, no sólo la sucursal',
 )
 
+// El body de una Response es de un solo uso. El detalle textual sólo se lee en
+// la rama de error; una respuesta exitosa queda disponible para res.json().
+const liveQuota = read('scripts/live-isolation/cuota-analisis.mjs')
+const posRamaError = liveQuota.indexOf('if (!res.ok)')
+const posDetalleError = liveQuota.indexOf('await res.text()', posRamaError)
+const posJsonExitoso = liveQuota.indexOf('await res.json()')
+assert.ok(
+  posRamaError > 0 && posDetalleError > posRamaError && posJsonExitoso > posDetalleError,
+  'el live test no debe consumir el body exitoso al construir un mensaje de error',
+)
+assert.equal(liveQuota.indexOf('await res.text()', posDetalleError + 1), -1,
+  'el body textual sólo puede leerse una vez y dentro de la rama de error')
+
 // --- La RPC es atómica ------------------------------------------------------
 const migracion = read('supabase/migrations/20260902170000_cuota_por_actor_y_cache_analisis_v1.sql')
 const rpc = migracion.slice(
