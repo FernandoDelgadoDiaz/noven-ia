@@ -81,6 +81,12 @@ jobs:
           set -euo pipefail
           node scripts/live-isolation/gates-1-3.mjs 2>&1 | tee live-isolation.log
 
+      - name: Live quota enforcement
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/live-isolation/cuota-analisis.mjs 2>&1 | tee live-cuota.log
+
       - name: Upload baseline and isolation diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
@@ -89,6 +95,7 @@ jobs:
           path: |
             baseline-replay.log
             live-isolation.log
+            live-cuota.log
             ${{ runner.temp }}/structural-diff.json
           if-no-files-found: ignore
           retention-days: 7
