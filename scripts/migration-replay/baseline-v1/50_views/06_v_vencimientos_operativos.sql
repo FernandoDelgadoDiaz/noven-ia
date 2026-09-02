@@ -1,0 +1,41 @@
+CREATE OR REPLACE VIEW public.v_vencimientos_operativos WITH (security_invoker=true) AS
+ SELECT v.id,
+    v.producto_id,
+    v.sucursal_id,
+    v.usuario_id,
+    v.cantidad,
+    v.lote,
+    v.fecha_vencimiento,
+    v.fecha_carga,
+    v.activo,
+    v.created_at,
+    v.updated_at,
+    v.nivel_actual,
+    p.organizacion_id,
+    p.cod_art,
+    p.codigo_barras,
+    p.descripcion,
+    p.marca,
+    p.gramaje,
+    p.categoria,
+    p.proveedor,
+    p.sector,
+    p.precio_costo,
+    p.imagen_url,
+    p.imagen_thumb_url,
+    p.familia_id,
+    p.activo AS producto_activo,
+    p.created_at AS producto_created_at,
+    p.updated_at AS producto_updated_at,
+    f.sector_id,
+    s.nombre AS sector_nombre,
+    s.dias_donacion,
+    ps.stock_actual,
+    ps.venta_media_diaria,
+    ps.fecha_ultima_importacion,
+    ps.updated_at AS estado_updated_at
+   FROM vencimientos v
+     JOIN productos p ON p.id = v.producto_id
+     JOIN producto_sucursal ps ON ps.producto_id = v.producto_id AND ps.sucursal_id = v.sucursal_id AND ps.organizacion_id = p.organizacion_id
+     LEFT JOIN familias f ON f.id = p.familia_id AND f.organizacion_id = p.organizacion_id
+     LEFT JOIN sectores s ON s.id = f.sector_id AND s.organizacion_id = p.organizacion_id;;

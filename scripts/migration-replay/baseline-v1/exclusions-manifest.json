@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "baseline_scope": "noven_core_schema_only",
+  "compared_schemas": [
+    "public",
+    "noven_private"
+  ],
+  "excluded_from_core_fingerprint": [
+    {
+      "kind": "relations",
+      "objects": [
+        "public.dedup_turrocklets_backup_20260805",
+        "public.productos_descripcion_backup_20260805",
+        "public.productos_familia_backup_20260806"
+      ],
+      "reason": "historical_backup_state"
+    },
+    {
+      "kind": "schema",
+      "objects": [
+        "desafio5s_archive"
+      ],
+      "reason": "cold_archived_legacy_application"
+    },
+    {
+      "kind": "data",
+      "objects": [
+        "auth.users",
+        "core_business_rows",
+        "storage.objects"
+      ],
+      "reason": "baseline_is_structure_only"
+    },
+    {
+      "kind": "secret_values",
+      "objects": [
+        "vault.secrets.secret"
+      ],
+      "reason": "secret_values_are_never_materialized"
+    },
+    {
+      "kind": "supabase_platform",
+      "objects": [
+        "platform_managed_event_triggers",
+        "platform_default_acls",
+        "internal_supabase_schemas_and_objects"
+      ],
+      "reason": "managed_by_local_or_hosted_supabase"
+    },
+    {
+      "kind": "production_history",
+      "objects": [
+        "production_ledger_only_repairs",
+        "production_identity_bootstraps",
+        "production_business_data_repairs"
+      ],
+      "reason": "not_part_of_new_environment_installation"
+    }
+  ],
+  "external_infrastructure_evidence": {
+    "storage_buckets": [
+      {
+        "id": "productos-imagenes",
+        "public": true,
+        "file_size_limit": 1048576,
+        "allowed_mime_types": [
+          "image/webp",
+          "image/jpeg"
+        ]
+      }
+    ],
+    "cron_jobs": [
+      {
+        "jobname": "recalcular-niveles-vencimientos",
+        "schedule": "0 12 * * *",
+        "active": true
+      }
+    ],
+    "vault_secret_names": [
+      "noven_push_webhook_secret"
+    ]
+  },
+  "allowed_unexplained_structural_differences": 0
+}

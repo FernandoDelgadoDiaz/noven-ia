@@ -19,7 +19,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -30,6 +30,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - name: Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
 
       - name: Install dependencies
         run: npm ci
@@ -42,6 +47,26 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Baseline V1 replay and structural fingerprint
+        shell: bash
+        env:
+          NOVEN_REPLAY_DIFF_OUTPUT: ${{ runner.temp }}/structural-diff.json
+          SUPABASE_TELEMETRY_DISABLED: "true"
+        run: |
+          set -euo pipefail
+          ./scripts/migration-replay/run-baseline-replay.sh 2>&1 | tee baseline-replay.log
+
+      - name: Upload baseline replay diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: baseline-replay-diagnostics
+          path: |
+            baseline-replay.log
+            ${{ runner.temp }}/structural-diff.json
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Install isolated Playwright test runner
         shell: bash
