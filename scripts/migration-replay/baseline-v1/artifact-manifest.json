@@ -31,6 +31,12 @@
     "policies": 17,
     "identity_sequences": 6
   },
+  "assembly": {
+    "verified_fragments": 39,
+    "function_statement_terminators": 112,
+    "byte_length": 355807,
+    "sha256": "334a0b7555185f07f83f7342bce442f5079fe9b42cf9d5fc1a4622db7bb72abf"
+  },
   "files": {
     "00_schemas_extensions.sql": {
       "git_blob_sha": "23634c80d63bbe93950a88e9692a9a67ea313834"

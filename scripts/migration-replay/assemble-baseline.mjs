@@ -23,6 +23,28 @@ export function gitBlobSha(content) {
     .digest('hex')
 }
 
+export function executableFragment(relativePath, content) {
+  if (!relativePath.startsWith('40_functions/')) return content
+
+  const functionCount = content.match(/^CREATE OR REPLACE FUNCTION /gm)?.length ?? 0
+  let terminatorCount = 0
+  const executable = content.replace(
+    /\$function\$(?=$|\n(?:$|\n(?:CREATE OR REPLACE FUNCTION|SET check_function_bodies = true;)))/g,
+    () => {
+      terminatorCount += 1
+      return '$function$;'
+    },
+  )
+
+  if (terminatorCount !== functionCount) {
+    throw new Error(
+      `${relativePath}: expected ${functionCount} function terminators, generated ${terminatorCount}`,
+    )
+  }
+
+  return executable
+}
+
 export function verifiedFragmentPaths({ baselineDir = BASELINE_DIR } = {}) {
   const manifest = readJson(path.join(baselineDir, 'artifact-manifest.json'))
   const entries = Object.entries(manifest.files).sort(([a], [b]) => a.localeCompare(b))
@@ -74,7 +96,10 @@ export function assembleBaseline({
 
   const { manifest, entries } = verifiedFragmentPaths({ baselineDir })
   const sections = entries.map(([relativePath]) => {
-    const content = fs.readFileSync(path.join(baselineDir, relativePath), 'utf8')
+    const content = executableFragment(
+      relativePath,
+      fs.readFileSync(path.join(baselineDir, relativePath), 'utf8'),
+    )
     return `-- BEGIN VERIFIED FRAGMENT: ${relativePath}\n${content.trimEnd()}\n-- END VERIFIED FRAGMENT: ${relativePath}`
   })
 

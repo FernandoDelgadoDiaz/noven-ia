@@ -32,10 +32,14 @@ try {
   const count = (pattern) => sql.match(pattern)?.length ?? 0
 
   assert.equal(assembled.fragmentCount, 39)
+  assert.equal(assembled.byteLength, verified.manifest.assembly.byte_length)
+  assert.equal(assembled.sha256, verified.manifest.assembly.sha256)
+  assert.equal(verified.manifest.assembly.function_statement_terminators, 112)
   assert.equal(count(/^CREATE TABLE /gm), 31)
   assert.equal(count(/^ALTER TABLE ONLY .* ADD CONSTRAINT /gm), 226)
   assert.equal(count(/^CREATE (?:UNIQUE )?INDEX /gm), 128)
   assert.equal(count(/^CREATE OR REPLACE FUNCTION /gm), 112)
+  assert.equal(count(/\$function\$;/g), 112)
   assert.equal(count(/^CREATE OR REPLACE VIEW /gm), 12)
   assert.equal(count(/WITH \(security_invoker=true\)/g), 12)
   assert.equal(count(/^CREATE (?:CONSTRAINT )?TRIGGER /gm), 29)
