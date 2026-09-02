@@ -164,6 +164,8 @@ Limitaciones aceptadas conscientemente. No son invariantes: son cosas que hay qu
 
 **D-1 · Techo de rate limiting de Netlify.** El plan básico admite dos reglas `rateLimit` declaradas en código, y ambas están consumidas por `/api/admin/read/*` y `/api/admin/write/*`. Ninguna otra función está protegida por esa vía. Requiere una vía alternativa (límite por usuario en Postgres, router con path único, u otra).
 
+Desde 2026-09-02 el análisis está limitado a roles de conducción (ver `ai/decisions.md`), lo que reduce la población que puede disparar el gasto pero no lo acota: una sola cuenta de gerencia alcanza para consumir sin techo.
+
 `analisis.ts` es el caso más expuesto, y por dos motivos, no uno: no tiene rate limit **y** tampoco tiene throttle ni cache del lado del servidor. El cache del análisis vive en `localStorage` del cliente (`src/hooks/useAnalisis.ts`), de modo que no impone ningún techo real: borrar el storage, o llamar al endpoint directamente con un JWT válido, dispara una llamada completa al proveedor de inferencia cada vez. Cualquier usuario autenticado puede consumir tokens pagos en bucle.
 
 `scripts/tests/admin-rate-limit-contract.test.mjs` **no congela la cantidad de reglas**: verifica que las dos conocidas sigan declaradas y que toda regla declarada esté completa. Una tercera regla legítima pasa el contrato. Congelar el número convertía el techo del proveedor en un test que rompía cualquier intento de proteger otra función, escondiendo esta deuda en lugar de señalarla.

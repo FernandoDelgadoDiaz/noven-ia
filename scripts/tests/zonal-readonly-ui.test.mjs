@@ -25,7 +25,7 @@ assert.match(operationalRoute, /if \(!puedeOperar\) return <Navigate to="\/dashb
 assert.match(router, /element: <OperationalRoute \/>[\s\S]*?path: 'scanner'/,
   'Scanner debe estar detrás del guard operativo')
 
-assert.match(layout, /BASE_NAV_ITEMS\.filter\(\(item\) => item\.to !== '\/scanner' \|\| puedeOperar\)/,
+assert.match(layout, /BASE_NAV_ITEMS\.filter\(\(item\) => \(item\.to !== '\/scanner' \|\| puedeOperar\)/,
   'menú desktop debe ocultar Scanner al zonal')
 assert.match(layout, /\{puedeOperar && \([\s\S]*?<NavLink to="\/scanner"/,
   'acción flotante móvil de Scanner debe existir sólo con capacidad operativa')

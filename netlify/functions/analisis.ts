@@ -2,7 +2,7 @@ import type { Handler, HandlerEvent } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import { getCorsHeaders } from './_auth'
 import { logServerError } from './_observability'
-import { SYSTEM_ADMIN, SYSTEM_OPERADOR } from './_analisis_policy'
+import { SYSTEM_ADMIN } from './_analisis_policy'
 
 const UMBRAL_RADAR = 45
 const UMBRAL_URGENTE = 20
@@ -361,36 +361,22 @@ const handler: Handler = async (event: HandlerEvent) => {
   }
 
   const accesos = (accesosRaw ?? []) as AccesoRow[]
-  const scopeCompleto = accesos.some((a) =>
+  // El análisis gerencial es una capacidad de conducción, no de operación:
+  // gerente zonal de la zona de la sucursal, o gerente de sucursal / supervisor
+  // de esa sucursal exacta. El operador no genera análisis.
+  //
+  // `admin_organizacion` tampoco habilita por sí solo: hace falta además uno de
+  // esos roles, en línea con la decisión registrada en ai/decisions.md de no
+  // convertirlo en un superusuario operativo.
+  const alcanceGerencial = accesos.some((a) =>
     (a.rol === 'gerente_zonal' && a.zona_id === sucursal.zona_id)
     || ((a.rol === 'gerente_sucursal' || a.rol === 'supervisor') && a.sucursal_id === sucursalId),
   )
-  const esOperadorLocal = accesos.some((a) => a.rol === 'operador' && a.sucursal_id === sucursalId)
-  if (!scopeCompleto && !esOperadorLocal) {
-    return json(403, { success: false, error: 'No tenés acceso a la sucursal seleccionada.' })
-  }
-
-  let familiaIds: string[] = []
-  if (!scopeCompleto) {
-    const { data: familiasAsignadas, error: familiasError } = await supabase
-      .from('usuario_familias_sucursal')
-      .select('familia_id')
-      .eq('usuario_id', uid)
-      .eq('sucursal_id', sucursalId)
-      .eq('activo', true)
-    if (familiasError) {
-      logServerError(event, { endpoint: ENDPOINT, operation: 'load_operator_families', statusCode: 502, error: familiasError })
-      return json(502, { success: false, error: 'No se pudieron validar las familias.' })
-    }
-    familiaIds = (familiasAsignadas ?? []).map((r) => r.familia_id as string)
-    if (familiaIds.length === 0) {
-      return json(200, {
-        success: true,
-        analisis: 'Todavía no tenés familias asignadas en esta sucursal, así que no hay datos autorizados para analizar.',
-        generado_en: new Date().toISOString(),
-        sucursal_id: sucursalId,
-      })
-    }
+  if (!alcanceGerencial) {
+    return json(403, {
+      success: false,
+      error: 'El análisis gerencial está disponible para gerentes y supervisores.',
+    })
   }
 
   const { data: rows, error: vErr } = await supabase
@@ -403,8 +389,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     return json(502, { success: false, error: 'No se pudieron leer los vencimientos.' })
   }
 
-  let vencs = (rows ?? []) as unknown as VencRow[]
-  if (!scopeCompleto) vencs = vencs.filter((r) => r.familia_id != null && familiaIds.includes(r.familia_id))
+  const vencs = (rows ?? []) as unknown as VencRow[]
 
   const famIds = Array.from(new Set(vencs.map((r) => r.familia_id).filter((x): x is string => Boolean(x))))
   const famNombre = new Map<string, string>()
@@ -429,8 +414,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     logServerError(event, { endpoint: ENDPOINT, operation: 'load_rag', statusCode: 502, error: ragError })
     return json(502, { success: false, error: 'No se pudo leer el seguimiento RAG.' })
   }
-  let rags = (ragRaw ?? []) as unknown as RagRow[]
-  if (!scopeCompleto) rags = rags.filter((r) => r.familia_id != null && familiaIds.includes(r.familia_id))
+  const rags = (ragRaw ?? []) as unknown as RagRow[]
   const ragPorVencimiento = new Map(rags.map((r) => [r.vencimiento_id, r]))
 
   const productoIds = Array.from(new Set(vencs.map((r) => r.producto_id)))
@@ -498,9 +482,8 @@ const handler: Handler = async (event: HandlerEvent) => {
     return json(502, { success: false, error: 'No se pudo leer el historial económico.' })
   }
 
-  const filtrarHistorial = (r: HistorialRow) => scopeCompleto || (r.producto_familia_id != null && familiaIds.includes(r.producto_familia_id))
-  const histActual = ((histActualRaw ?? []) as unknown as HistorialRow[]).filter(filtrarHistorial)
-  const histAnterior = ((histAnteriorRaw ?? []) as unknown as HistorialRow[]).filter(filtrarHistorial)
+  const histActual = (histActualRaw ?? []) as unknown as HistorialRow[]
+  const histAnterior = (histAnteriorRaw ?? []) as unknown as HistorialRow[]
   const resultadoActual = resumirPeriodo(histActual)
   const resultadoAnterior = resumirPeriodo(histAnterior)
   const baseComparable = histAnterior.length > 0
@@ -615,7 +598,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   const datosFormateados = [
     `Fecha operacional: ${hoyTexto}`,
     `Sucursal analizada: ${sucursal.codigo} · ${sucursal.nombre}`,
-    `Ámbito autorizado: ${scopeCompleto ? 'toda la sucursal' : 'familias asignadas al operador en esta sucursal'}`,
+    'Ámbito autorizado: toda la sucursal',
     '',
     '=== RESUMEN GERENCIAL DETERMINÍSTICO ===',
     `Vencimientos activos dentro del circuito: ${procesados.length}`,
@@ -659,7 +642,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages: [
-          { role: 'system', content: scopeCompleto ? SYSTEM_ADMIN : SYSTEM_OPERADOR },
+          { role: 'system', content: SYSTEM_ADMIN },
           { role: 'user', content: datosFormateados },
         ],
         max_tokens: 1500,
