@@ -190,3 +190,47 @@ Estos objetos quedan como evidencia de infraestructura y no forman parte del bas
 El blob incorrecto `5108d740b95207d0cc047e1cce730ca4824573b7` de `v_problemas_economicos_historial` no provenía de normalización de base64. Sus bytes contenían una definición anterior (`resultado_at` en lugar de `resuelto_at`) y omitían un salto de línea del SQL productivo actual.
 
 La remediación fue regenerar cada view directamente desde el catálogo productivo, calcular el Git blob SHA sobre esos mismos bytes y aceptar el blob sólo si GitHub devolvía exactamente la huella esperada. Los blobs huérfanos con mismatch permanecen fuera de todo tree.
+
+## 14. Expectativa móvil y re-materialización del ancla
+
+### 14.1 El problema que resolvió
+
+La versión 1.4C comparaba el resultado del replay contra `expected-fingerprint.json`, una foto estática del catálogo productivo, con tolerancia cero.
+
+El replay aplica **baseline + migraciones posteriores al cutoff** (`baseline-workspace.mjs`), pero la foto contenía únicamente el baseline. Mientras no existió ninguna migración posterior, ambas coincidían y CI estuvo verde. La primera migración nueva —cualquiera— habría hecho fallar el gate por diseño, no por deriva.
+
+Dicho de otro modo: el gate sólo podía estar verde con el schema congelado.
+
+### 14.2 Qué se hizo
+
+La expectativa se volvió móvil. `expected-replay-fingerprint.json` es la huella esperada del conjunto que el replay aplica hoy, y `replay-expectation.json` la ata a ese conjunto exacto mediante el hash de los nombres **y el contenido** de las migraciones posteriores.
+
+Consecuencias:
+
+- agregar o editar una migración posterior sin regenerar la expectativa hace fallar el gate con instrucciones;
+- regenerarla produce un diff en el PR que muestra exactamente qué cambio estructural introduce la migración, que es lo que hay que revisar;
+- la regeneración (`run-baseline-replay.sh --regenerate`) exige `NOVEN_EPHEMERAL_REPLAY=1` y **nunca escribe sobre `expected-fingerprint.json`**.
+
+### 14.3 Qué se perdió
+
+**El gate dejó de responder, en cada corrida, la pregunta que originó el ítem 1.4: ¿el repositorio sigue reconstruyendo lo que hay en producción?**
+
+Con expectativa móvil, el gate verifica **reproducibilidad** —el mismo input produce el mismo output— y **cambio declarado** —ninguna migración altera la estructura sin que alguien lo registre. Ambas cosas son valiosas y se sostienen indefinidamente. Ninguna es un ancla contra producción.
+
+La única excepción es el caso de cero migraciones posteriores: ahí el verificador exige que la expectativa móvil sea idéntica al ancla, de modo que el replay sí reconstruye producción. Es el estado del repositorio hoy, y dejará de serlo con la primera migración.
+
+Regenerar `expected-fingerprint.json` desde la base replicada **no es una alternativa**: lo convertiría en "lo que produjo el replay" en lugar de "lo que hay en producción", el gate quedaría verde y perdería su capacidad de detectar deriva, en silencio.
+
+### 14.4 Re-materialización del ancla
+
+Es lo único que mantiene vivo el ancla contra producción. **Es explícita y periódica. Nunca automática:** un ancla que se refresca sola dentro de la corrida no ancla nada.
+
+**Cuándo.** Como máximo cada `anchor_revalidacion_maxima_dias` (hoy 180), declarado en `replay-expectation.json`. Además, siempre que se sospeche deriva: un cambio aplicado a producción fuera del flujo de migraciones, o una discrepancia entre el ledger productivo y `supabase/migrations`.
+
+**Quién.** El responsable del repositorio. Requiere acceso de lectura al catálogo productivo, que una sesión automatizada no tiene y no debe tener.
+
+**Cómo.** El procedimiento es el de la materialización original (§10, PR #129): se extraen los fragmentos desde el catálogo productivo, se re-arma la baseline, se verifica en una base descartable y se actualizan `expected-fingerprint.json`, su SHA en `fingerprint-metadata.json` y el cutoff. Después se regenera la expectativa móvil, que vuelve a partir del ancla nueva.
+
+**Qué se rompe si nadie lo hace.** El gate sigue verde indefinidamente, porque reproducibilidad y cambio declarado se siguen cumpliendo. Lo que se degrada en silencio es la correspondencia con producción: un cambio aplicado a mano sobre producción —un `ALTER` de emergencia, un índice agregado desde el dashboard— no aparece en ninguna migración, no altera la expectativa móvil y **no lo detecta nadie**. El repositorio deja de describir producción y el primer síntoma llega cuando haya que reconstruir un entorno.
+
+Por eso `migration-replay-moving-expectation.test.mjs` incluye un tripwire: si el ancla supera los días declarados, la suite falla y nombra el procedimiento. Mover la fecha sin re-materializar deja el gate verde y sin ancla — es exactamente el modo de falla que el tripwire existe para evitar, y está dicho en el mensaje de error.
