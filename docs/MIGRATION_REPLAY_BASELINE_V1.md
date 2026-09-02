@@ -1,6 +1,6 @@
 # NOVEN · MIGRATION REPLAY BASELINE V1
 
-Estado: contrato 1.4B aprobado y Baseline V1 materializada en hardening 1.4C. La verificación final en Supabase local descartable queda a cargo del job `verify` antes de cerrar el ítem.
+Estado: contrato 1.4B aprobado y Baseline V1 materializada y verificada en hardening 1.4C. El replay en Supabase local descartable con PostgreSQL 17 produjo el fingerprint canónico esperado y cero diferencias estructurales.
 
 ## 1. Problema demostrado
 
@@ -123,17 +123,28 @@ Las diferencias deliberadas deben quedar enumeradas. La exclusión de `desafio5s
 
 No se copiarán filas productivas para hacer coincidir los dos entornos.
 
+La verificación se completó en el paso `Validate materialized baseline on disposable Supabase` del run `Noven CI #335`. El resultado fue:
+
+- 31 tablas y 384 columnas;
+- 226 constraints y 128 índices;
+- 112 funciones y 12 views;
+- 29 triggers, RLS en 31 tablas y 17 policies;
+- fingerprint SHA-256 `837771691ffc6e2276c66a26f9ae010c872f12ea33b118406d48b2ad6fca38af`;
+- cero diferencias estructurales.
+
+El fallo posterior de ese run pertenecía a un E2E dependiente de la fecha real y fue aislado y corregido en el PR #130; no afectó el replay ni el diff estructural.
+
 ## 8. Relación con 1.1
 
-El PR de 1.1 permanece en draft.
+El PR de 1.1 permanece en draft hasta completar sus propios Gates 1–3, pero la dependencia de reproducibilidad queda resuelta.
 
-1.1 no debe seguir agregando shims o fixtures para atravesar migraciones históricas. Se retomará sólo cuando exista una baseline V1 materializada, el replay desde esa baseline llegue al estado actual y la comparación estructural sea aceptable.
+1.1 no debe seguir agregando shims o fixtures para atravesar migraciones históricas. Debe retomarse usando la Baseline V1 verificada y las migraciones posteriores al cutoff.
 
 Recién entonces se crearán los fixtures ORG_A / ORG_B y usuarios de prueba mediante Auth local para ejecutar Gates 1–3 con JWT reales.
 
 ## 9. Relación con producción
 
-1.4B es exclusivamente de reproducibilidad y clasificación.
+1.4B y 1.4C son exclusivamente de reproducibilidad, clasificación y verificación estructural.
 
 No realiza DDL ni DML en producción. No modifica el ledger remoto. No edita migraciones aplicadas. No cambia datos de negocio ni comportamiento productivo.
 

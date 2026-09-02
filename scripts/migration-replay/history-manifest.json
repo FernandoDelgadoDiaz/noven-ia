@@ -6,7 +6,7 @@
     "production_ledger_action": "none",
     "edit_applied_migrations": false,
     "fabricate_production_business_data_for_replay": false,
-    "baseline_artifact_status": "materialized_pending_replay_verification",
+    "baseline_artifact_status": "materialized_replay_verified",
     "baseline_source_master": "da958b6851adaa42b13fa0774dbebf36f43eb77e",
     "baseline_candidate_cutoff": "20260901103500",
     "baseline_scope": "noven_core_schema_only",

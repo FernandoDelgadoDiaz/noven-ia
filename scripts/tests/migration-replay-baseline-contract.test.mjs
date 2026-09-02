@@ -17,7 +17,7 @@ assert.equal(manifest.policy.edit_applied_migrations, false)
 assert.equal(manifest.policy.fabricate_production_business_data_for_replay, false)
 assert.equal(
   manifest.policy.baseline_artifact_status,
-  'materialized_pending_replay_verification',
+  'materialized_replay_verified',
 )
 assert.equal(manifest.policy.baseline_scope, 'noven_core_schema_only')
 assert.equal(
