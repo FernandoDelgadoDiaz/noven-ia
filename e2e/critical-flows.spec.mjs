@@ -211,6 +211,8 @@ test.describe('Noven · escrituras críticas Scanner', () => {
   })
 
   test('un control urgente registra un nuevo porcentaje RAG dentro de la RPC de control', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-08-31T12:00:00Z'))
+
     const fixture = await installScannerWriteFixture(page, {
       hasActiveControl: true,
       activeControlQuantity: 20,
