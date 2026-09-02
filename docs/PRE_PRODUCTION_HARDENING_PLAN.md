@@ -113,6 +113,12 @@ Partido en tres subítems porque el bloqueo original resultó ser de estado, no 
 
 **Lo que el gate dejó de responder en cada corrida:** "¿el repositorio reconstruye lo que hay en producción?". Ahora verifica reproducibilidad y cambio declarado. El ancla se mantiene viva sólo por la re-materialización periódica documentada en `docs/MIGRATION_REPLAY_BASELINE_V1.md` §14.4, con un tripwire en la suite si se pasa de los días declarados.
 
+**1.4E — Workflow de regeneración (este PR).** Regenerar la expectativa móvil exige levantar un Supabase descartable, y no todo entorno puede: el de las sesiones automatizadas tiene Docker, pero la política de egress le bloquea los CDN donde viven los blobs de las imágenes, lo que dejó a C3 sin poder cerrarse desde ahí. `.github/workflows/regenerate-replay-expectation.yml` corre esa regeneración en CI a pedido y devuelve los archivos como artefacto, con un resumen para revisar sin descargar.
+
+Es `workflow_dispatch` únicamente, con `permissions: contents: read`, y **no commitea**: el diff de la expectativa es lo que hay que revisar en el PR, y un workflow que lo commiteara solo convertiría esa revisión en un paso automático que nadie lee. Antes de publicar el artefacto verifica que el ancla siga intacta, que no haya cambiado nada fuera de la expectativa móvil, y que la suite pase con el resultado. Contrato: `regenerate-workflow-contract.test.mjs`.
+
+Cubre la mitad adyacente de la fricción documentada en `docs/MIGRATION_REPLAY_BASELINE_V1.md` §14.4 —correr el replay sin tener el entorno— pero **no** la extracción de fragmentos desde el catálogo productivo, que sigue manual y sigue siendo la condición de salida pendiente.
+
 **El gate es bloqueante, no advisory.** `verify-structural-fingerprint.mjs` lanza excepción ante cualquier diferencia estructural no explicada y ante un cambio del SHA de la huella productiva registrada. `run-baseline-replay.sh` corre con `set -euo pipefail`, de modo que un fallo del replay corta el job antes de los gates de aislamiento y del E2E.
 
 Documentación completa: `docs/MIGRATION_REPLAY_BASELINE_V1.md`.
