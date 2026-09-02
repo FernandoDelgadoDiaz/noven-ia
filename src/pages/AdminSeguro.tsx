@@ -105,7 +105,8 @@ async function tokenActual(): Promise<string> {
 
 async function adminRequest(body: Record<string, unknown>): Promise<AdminPayload> {
   const token = await tokenActual()
-  const res = await fetch('/.netlify/functions/admin-sucursal', {
+  const lane = body.accion === 'listar' ? 'read' : 'write'
+  const res = await fetch(`/api/admin/${lane}/sucursal`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -113,6 +114,9 @@ async function adminRequest(body: Record<string, unknown>): Promise<AdminPayload
     },
     body: JSON.stringify(body),
   })
+  if (res.status === 429) {
+    throw new Error('Hay demasiadas solicitudes administrativas. Esperá un minuto y volvé a intentar.')
+  }
   const json = await res.json().catch(() => ({ success: false, error: 'Respuesta inválida del servidor' })) as AdminPayload
   if (!res.ok || !json.success) throw new Error(json.error || 'No se pudo completar la operación.')
   return json

@@ -1,5 +1,6 @@
-import type { Handler, HandlerEvent } from '@netlify/functions'
+import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
+import { adminActionMatchesLane, adminLaneForPath } from './_lib/admin-routing'
 import { getCorsHeaders } from './_auth'
 import { logServerError } from './_observability'
 
@@ -106,7 +107,12 @@ async function crearInvitacionAuth(
   return { usuarioId: data.user.id, link: null }
 }
 
-const handler: Handler = async (event) => {
+async function handleAdminInvitaciones(event: HandlerEvent): Promise<HandlerResponse> {
+  const lane = adminLaneForPath(event.path, 'invitaciones')
+  if (!lane) {
+    return jsonResponse(event, 404, { success: false, error: 'Ruta administrativa inexistente' })
+  }
+
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: getCorsHeaders(event), body: '' }
   }
@@ -130,6 +136,9 @@ const handler: Handler = async (event) => {
     body = JSON.parse(event.body ?? '{}') as Body
   } catch {
     return jsonResponse(event, 400, { success: false, error: 'JSON inválido' })
+  }
+  if (!adminActionMatchesLane(lane, body.accion)) {
+    return jsonResponse(event, 404, { success: false, error: 'Ruta administrativa inexistente' })
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
@@ -319,4 +328,6 @@ const handler: Handler = async (event) => {
   })
 }
 
-export { handler }
+const handler: Handler = handleAdminInvitaciones
+
+export { handler, handleAdminInvitaciones }

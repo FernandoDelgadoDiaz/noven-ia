@@ -1,5 +1,6 @@
-import type { Handler, HandlerEvent } from '@netlify/functions'
+import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
+import { adminActionMatchesLane, adminLaneForPath } from './_lib/admin-routing'
 import { getCorsHeaders } from './_auth'
 import { logServerError } from './_observability'
 
@@ -127,13 +128,16 @@ async function eliminarAuthUser(
   }
 }
 
-const handler: Handler = async (event: HandlerEvent) => {
+async function handleAdminSucursal(event: HandlerEvent): Promise<HandlerResponse> {
   const cors = getCorsHeaders(event)
   const json = (statusCode: number, payload: unknown) => ({
     statusCode,
     headers: { ...cors, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
+
+  const lane = adminLaneForPath(event.path, 'sucursal')
+  if (!lane) return json(404, { success: false, error: 'Ruta administrativa inexistente' })
 
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: cors, body: '' }
   if (event.httpMethod !== 'POST') return json(405, { success: false, error: 'Método no permitido' })
@@ -154,6 +158,9 @@ const handler: Handler = async (event: HandlerEvent) => {
     body = JSON.parse(event.body ?? '{}') as Body
   } catch {
     return json(400, { success: false, error: 'JSON inválido' })
+  }
+  if (!adminActionMatchesLane(lane, body.accion)) {
+    return json(404, { success: false, error: 'Ruta administrativa inexistente' })
   }
 
   const sucursalId = body.sucursalId?.trim() ?? ''
@@ -347,4 +354,6 @@ const handler: Handler = async (event: HandlerEvent) => {
   return json(400, { success: false, error: 'Acción inválida' })
 }
 
-export { handler }
+const handler: Handler = handleAdminSucursal
+
+export { handler, handleAdminSucursal }
