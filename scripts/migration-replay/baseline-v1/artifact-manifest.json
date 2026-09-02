@@ -1,0 +1,159 @@
+{
+  "version": 1,
+  "source": {
+    "project_ref": "meqvjabgyrgwkxpclqxp",
+    "source_kind": "production_catalog_read_only",
+    "source_master": "da958b6851adaa42b13fa0774dbebf36f43eb77e",
+    "cutoff_version": "20260901103500",
+    "cutoff_name": "desafio5s_cold_archive_v1",
+    "includes_business_rows": false,
+    "includes_auth_users": false,
+    "includes_secret_values": false
+  },
+  "inventory": {
+    "schemas": [
+      "public",
+      "noven_private"
+    ],
+    "tables": 31,
+    "columns": 384,
+    "constraints": 226,
+    "primary_keys": 31,
+    "unique_constraints": 29,
+    "check_constraints": 64,
+    "foreign_keys": 102,
+    "standalone_indexes": 128,
+    "functions": 112,
+    "views": 12,
+    "triggers": 29,
+    "rls_tables": 31,
+    "force_rls_tables": 0,
+    "policies": 17,
+    "identity_sequences": 6
+  },
+  "assembly": {
+    "verified_fragments": 39,
+    "function_statement_terminators": 112,
+    "byte_length": 355807,
+    "sha256": "334a0b7555185f07f83f7342bce442f5079fe9b42cf9d5fc1a4622db7bb72abf"
+  },
+  "files": {
+    "00_schemas_extensions.sql": {
+      "git_blob_sha": "23634c80d63bbe93950a88e9692a9a67ea313834"
+    },
+    "10_tables.sql": {
+      "git_blob_sha": "338812e980bc3ef98ffd7ea6180315732286fee1"
+    },
+    "20_constraints_primary_unique.sql": {
+      "git_blob_sha": "b4e2bd3f98336924313eeec74dc74b0d7ee6958b"
+    },
+    "21_constraints_checks.sql": {
+      "git_blob_sha": "54e075603024547a4f015b3815b3cbfd337396b0"
+    },
+    "22_constraints_fk.sql": {
+      "git_blob_sha": "461c71f367dc6a7aeea322a7af8b1e566e086742"
+    },
+    "30_indexes.sql": {
+      "git_blob_sha": "f0b89b516e866a1c60d1e0651da8aca790aaa2ea"
+    },
+    "40_functions/01.sql": {
+      "git_blob_sha": "f5edf0b3fba5b9766e33b56c784109790ce1657c"
+    },
+    "40_functions/02.sql": {
+      "git_blob_sha": "272de91778c6eeeb2e5eac27e925bc9ae7d5a22f"
+    },
+    "40_functions/03.sql": {
+      "git_blob_sha": "f157f7ac17313cf890ba030278baf00dd04a798b"
+    },
+    "40_functions/04.sql": {
+      "git_blob_sha": "f5c2776f1236af24fc7009ab6cc67a725feb5eac"
+    },
+    "40_functions/05.sql": {
+      "git_blob_sha": "ef90052784c00324368cae04afa36bf700caff77"
+    },
+    "40_functions/06.sql": {
+      "git_blob_sha": "dee0240dbd34a4f552e40337575a79f1841c9f70"
+    },
+    "40_functions/07.sql": {
+      "git_blob_sha": "3ee07dd0424ebf51ffebb46acf000755035bd62d"
+    },
+    "40_functions/08.sql": {
+      "git_blob_sha": "f2c40d5fb5298e41152046d11ec2da09f3574018"
+    },
+    "40_functions/09.sql": {
+      "git_blob_sha": "f8a2d1d788cf5e8d1065498bf6e869e22995f307"
+    },
+    "40_functions/10.sql": {
+      "git_blob_sha": "691d6054423da5e13fe32b60da0a2dcc14229f7d"
+    },
+    "40_functions/11.sql": {
+      "git_blob_sha": "da1237c81c828fa99b3ae42d794a5c63e9116638"
+    },
+    "40_functions/12.sql": {
+      "git_blob_sha": "30dc0b5a0a45df1c47961faba09dc850cee56aac"
+    },
+    "40_functions/13.sql": {
+      "git_blob_sha": "c22a0210d082d12a041e003aa856629b28409133"
+    },
+    "40_functions/14.sql": {
+      "git_blob_sha": "7584cbc0896128a03e4e70c0d35c24313d4ee110"
+    },
+    "40_functions/15.sql": {
+      "git_blob_sha": "7baefc13834219f5c152344aac330a01bd09ef5a"
+    },
+    "40_functions/16.sql": {
+      "git_blob_sha": "aa2b859ffeb849b69205b47c122810b311b5ab00"
+    },
+    "50_views/01_v_problemas_economicos_historial.sql": {
+      "git_blob_sha": "1f7d875e12b5d99fcf16569f32658586ce2c6143"
+    },
+    "50_views/02_v_producto_sucursal_operativo.sql": {
+      "git_blob_sha": "d5556eace4166eb905dde44a3da5bf61256f0238"
+    },
+    "50_views/03_v_productos_catalogo.sql": {
+      "git_blob_sha": "ff66a7629f9974e2ecec1e56df777176881d94b9"
+    },
+    "50_views/04_v_resultado_vencimiento_tramos.sql": {
+      "git_blob_sha": "d42c5fd15ed90b57be5d4b252728d75807c3fce5"
+    },
+    "50_views/05_v_seguimiento_rag_actual.sql": {
+      "git_blob_sha": "567b0ac3a1bd25b461ff4f0b3ffdb0843c633159"
+    },
+    "50_views/06_v_vencimientos_operativos.sql": {
+      "git_blob_sha": "a7507d20d59fac9f6ef6dd8447809f7a93caba6e"
+    },
+    "50_views/07_vw_usuarios_completos.sql": {
+      "git_blob_sha": "9bc4f1b0e59e818ab370de295d6c2c8b5859589f"
+    },
+    "50_views/08_v_acciones_operativas_historial.sql": {
+      "git_blob_sha": "ea39c309ab9d88fa7f8f0472a9730fa1b28e8d19"
+    },
+    "50_views/09_v_efectividad_intervencion_rag.sql": {
+      "git_blob_sha": "ea2555b43d5f274cb666f4a26ef0d9d0b160680e"
+    },
+    "50_views/10_v_resultado_operador_rag.sql": {
+      "git_blob_sha": "627120db1edef7d2b1afbfb08d31f823a743a5e7"
+    },
+    "50_views/11_v_efectividad_rag_operador.sql": {
+      "git_blob_sha": "365bbcb2279be8296d8f4edda04db33e50aee3b5"
+    },
+    "50_views/12_v_efectividad_rag_resumen.sql": {
+      "git_blob_sha": "684fbf6d882944b19ef3183d7ec070ce1e2ba27a"
+    },
+    "60_triggers.sql": {
+      "git_blob_sha": "6d9a276b444c16702f335ca75ad076d93d31b37a"
+    },
+    "70_rls_policies.sql": {
+      "git_blob_sha": "7e79b1082a3a8ef9ce5f5b0d0f0e6ee5ec199f14"
+    },
+    "80_schema_acl.sql": {
+      "git_blob_sha": "729fd3ad17157b679a0d3a681fb385023b78fff4"
+    },
+    "81_relation_sequence_acl.sql": {
+      "git_blob_sha": "3f3e865ca797c04ca06dcbf6221bfddf4b08b0cf"
+    },
+    "82_function_acl.sql": {
+      "git_blob_sha": "61969075cbf349efdb61e4a9e0716fbdcd063459"
+    }
+  }
+}
