@@ -211,6 +211,12 @@ Consecuencias:
 - regenerarla produce un diff en el PR que muestra exactamente qué cambio estructural introduce la migración, que es lo que hay que revisar;
 - la regeneración (`run-baseline-replay.sh --regenerate`) exige `NOVEN_EPHEMERAL_REPLAY=1` y **nunca escribe sobre `expected-fingerprint.json`**.
 
+Regenerar exige levantar un Supabase descartable: Docker, la CLI y acceso a los registries de contenedores. Cuando el entorno de trabajo no puede —el de las sesiones automatizadas tiene Docker, pero la política de egress le bloquea los CDN donde viven los blobs de las imágenes— está el workflow manual **Regenerar expectativa del replay** (`.github/workflows/regenerate-replay-expectation.yml`).
+
+Se dispara a mano sobre la rama que corresponda, corre la misma regeneración en CI y devuelve los dos archivos como artefacto `expectativa-replay-regenerada`, más un resumen con el contenido de `replay-expectation.json` para revisar sin descargar. Después hay que copiarlos, correr `npm test` y commitearlos.
+
+**No commitea ni pushea, y es de sólo lectura sobre el repositorio.** Es deliberado: el diff de la expectativa es exactamente lo que hay que mirar en el PR, porque muestra qué cambio estructural introduce la migración. Un workflow que lo commiteara solo convertiría esa revisión en un paso automático que nadie lee. Antes de publicar el artefacto verifica que el ancla no haya sido tocada, que no haya cambiado nada fuera de la expectativa móvil, y que la suite pase entera con el resultado.
+
 ### 14.3 Qué se perdió
 
 **El gate dejó de responder, en cada corrida, la pregunta que originó el ítem 1.4: ¿el repositorio sigue reconstruyendo lo que hay en producción?**
@@ -234,6 +240,8 @@ Es lo único que mantiene vivo el ancla contra producción. **Es explícita y pe
 **Cuánto lleva, y dónde está el punto débil.** El armado, la verificación y la regeneración están scriptados (`run-baseline-replay.sh`, `--regenerate`) y son minutos de CI. **La extracción de los fragmentos desde el catálogo productivo no está scriptada:** se hizo a mano en el PR #129 y es el grueso del trabajo.
 
 Eso convierte al paso menos automatizado del mecanismo en el único que mantiene vivo el ancla, que es una mala combinación conocida: cuanto más caro es el camino legítimo, más tentador es mover la fecha y seguir. Scriptar la extracción es la mejora de mayor valor pendiente sobre este mecanismo, y debería hacerse antes de la primera re-materialización real, no después.
+
+El workflow manual descrito en §14.2 resuelve la mitad adyacente del problema —correr el replay sin tener el entorno— pero **no** la extracción desde el catálogo productivo, que sigue siendo manual y sigue requiriendo acceso de lectura a producción.
 
 **Qué se rompe si nadie lo hace.** El gate sigue verde indefinidamente, porque reproducibilidad y cambio declarado se siguen cumpliendo. Lo que se degrada en silencio es la correspondencia con producción: un cambio aplicado a mano sobre producción —un `ALTER` de emergencia, un índice agregado desde el dashboard— no aparece en ninguna migración, no altera la expectativa móvil y **no lo detecta nadie**. El repositorio deja de describir producción y el primer síntoma llega cuando haya que reconstruir un entorno.
 

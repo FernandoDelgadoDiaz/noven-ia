@@ -1,0 +1,140 @@
+# Regeneración de la expectativa móvil del replay.
+#
+# Agregar una migración posterior al cutoff hace fallar el gate de CI hasta que
+# alguien regenere la expectativa móvil, y regenerarla exige levantar un Supabase
+# descartable: Docker más la CLI más acceso a los registries de contenedores.
+# No todo entorno de trabajo puede hacerlo — el de las sesiones automatizadas,
+# por ejemplo, tiene Docker pero la política de egress le bloquea los CDN donde
+# viven los blobs de las imágenes.
+#
+# Este workflow corre esa regeneración donde sí se puede y devuelve los archivos
+# como artefacto, para que alguien los revise y los commitee.
+#
+# NO commitea ni pushea nada. Eso es deliberado: el diff de la expectativa es
+# exactamente lo que hay que mirar en el PR, porque muestra qué cambio
+# estructural introduce la migración. Un workflow que lo commiteara solo
+# convertiría esa revisión en un paso automático que nadie lee.
+
+name: Regenerar expectativa del replay
+
+on:
+  workflow_dispatch:
+    inputs:
+      motivo:
+        description: 'Por qué se regenera (queda en el historial de runs)'
+        required: true
+        type: string
+
+# Sólo lectura: este workflow no puede escribir en el repositorio.
+permissions:
+  contents: read
+
+jobs:
+  regenerar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Regenerar expectativa móvil
+        shell: bash
+        env:
+          SUPABASE_TELEMETRY_DISABLED: 'true'
+        run: |
+          set -euo pipefail
+          echo "Motivo: ${{ inputs.motivo }}"
+          ./scripts/migration-replay/run-baseline-replay.sh --regenerate 2>&1 | tee regenerate.log
+
+      # El script ya tiene prohibido escribir el ancla, y un contrato lo verifica
+      # sobre su código fuente. Esto es una segunda red, acá donde el resultado
+      # sale del entorno descartable hacia un humano.
+      - name: Verificar que el ancla no fue tocada
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- scripts/migration-replay/baseline-v1/expected-fingerprint.json \
+                                   scripts/migration-replay/baseline-v1/fingerprint-metadata.json; then
+            echo "::error::La regeneración modificó el ancla de producción. Eso nunca debe pasar."
+            git diff --stat -- scripts/migration-replay/baseline-v1/
+            exit 1
+          fi
+          echo "Ancla de producción intacta."
+
+      - name: Verificar que sólo cambió la expectativa móvil
+        shell: bash
+        run: |
+          set -euo pipefail
+          cambios="$(git diff --name-only)"
+          esperado=$'scripts/migration-replay/baseline-v1/expected-replay-fingerprint.json\nscripts/migration-replay/baseline-v1/replay-expectation.json'
+          if [[ "$(echo "${cambios}" | sort)" != "$(echo "${esperado}" | sort)" ]]; then
+            echo "::error::La regeneración tocó archivos inesperados."
+            echo "${cambios}"
+            exit 1
+          fi
+          echo "Sólo cambió la expectativa móvil."
+
+      # Si la expectativa regenerada es coherente, la suite pasa entera. Si no,
+      # es preferible enterarse acá que después de commitear el artefacto.
+      - name: Suite completa con la expectativa nueva
+        run: npm test
+
+      - name: Resumen para revisar sin descargar
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Expectativa móvil regenerada'
+            echo
+            echo "**Motivo:** ${{ inputs.motivo }}"
+            echo
+            echo '### replay-expectation.json'
+            echo
+            echo '```json'
+            cat scripts/migration-replay/baseline-v1/replay-expectation.json
+            echo '```'
+            echo
+            echo '### Diff'
+            echo
+            echo '```'
+            git diff --stat -- scripts/migration-replay/baseline-v1/ || true
+            echo '```'
+            echo
+            echo 'Descargá el artefacto `expectativa-replay-regenerada`, copiá los dos archivos'
+            echo 'sobre `scripts/migration-replay/baseline-v1/`, corré `npm test` y commiteá.'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Publicar expectativa regenerada
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: expectativa-replay-regenerada
+          path: |
+            scripts/migration-replay/baseline-v1/expected-replay-fingerprint.json
+            scripts/migration-replay/baseline-v1/replay-expectation.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Diagnóstico si falló
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: regenerate-diagnostics
+          path: regenerate.log
+          if-no-files-found: ignore
+          retention-days: 7
