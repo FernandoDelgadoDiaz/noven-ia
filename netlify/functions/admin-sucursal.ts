@@ -1,5 +1,6 @@
 import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
+import { esEmailDuplicadoAuth, resolverEmailsAuthPorIds } from './_lib/auth-directory'
 import { adminActionMatchesLane, adminLaneForPath } from './_lib/admin-routing'
 import { getCorsHeaders } from './_auth'
 import { logServerError } from './_observability'
@@ -77,32 +78,6 @@ async function validarSesion(
     logServerError(event, { endpoint: ENDPOINT, operation: 'session_verify', statusCode: 502, error: err })
     return { error: 'No se pudo verificar la sesión.', status: 502 }
   }
-}
-
-async function listarEmailsAuth(
-  supabaseUrl: string,
-  serviceRoleKey: string,
-): Promise<Map<string, string>> {
-  const emails = new Map<string, string>()
-  let page = 1
-
-  while (page <= 20) {
-    const res = await fetch(`${supabaseUrl}/auth/v1/admin/users?page=${page}&per_page=1000`, {
-      headers: {
-        Authorization: `Bearer ${serviceRoleKey}`,
-        apikey: serviceRoleKey,
-        Accept: 'application/json',
-      },
-    })
-    if (!res.ok) throw new Error(`No se pudo consultar Auth (HTTP ${res.status})`)
-    const data = await res.json() as { users?: Array<{ id: string; email?: string }> }
-    const users = data.users ?? []
-    for (const u of users) emails.set(u.id, u.email ?? '')
-    if (users.length < 1000) break
-    page++
-  }
-
-  return emails
 }
 
 async function eliminarAuthUser(
@@ -188,14 +163,17 @@ async function handleAdminSucursal(event: HandlerEvent): Promise<HandlerResponse
 
     try {
       const payload = (data ?? {}) as AdminPayload
-      const emails = await listarEmailsAuth(supabaseUrl, serviceRoleKey)
+      const ids = (payload.usuarios ?? [])
+        .map((usuario) => usuario.id)
+        .filter((id): id is string => typeof id === 'string' && id.trim() !== '')
+      const emails = await resolverEmailsAuthPorIds(supabase.auth.admin, ids)
       const usuarios = (payload.usuarios ?? []).map((u) => ({
         ...u,
         email: typeof u.id === 'string' ? (emails.get(u.id) ?? '') : '',
       }))
       return json(200, { success: true, ...payload, usuarios })
     } catch (err) {
-      logServerError(event, { endpoint: ENDPOINT, operation: 'listar_auth_users', statusCode: 502, error: err })
+      logServerError(event, { endpoint: ENDPOINT, operation: 'resolver_auth_users_scoped', statusCode: 502, error: err })
       return json(502, { success: false, error: 'No se pudo completar el listado de usuarios.' })
     }
   }
@@ -244,16 +222,6 @@ async function handleAdminSucursal(event: HandlerEvent): Promise<HandlerResponse
       })
     }
 
-    try {
-      const emails = await listarEmailsAuth(supabaseUrl, serviceRoleKey)
-      if (Array.from(emails.values()).some((value) => value.trim().toLowerCase() === email)) {
-        return json(409, { success: false, error: 'Ese email ya tiene una cuenta en Noven.' })
-      }
-    } catch (err) {
-      logServerError(event, { endpoint: ENDPOINT, operation: 'verify_invite_email', statusCode: 502, error: err })
-      return json(502, { success: false, error: 'No se pudo verificar el email en Auth.' })
-    }
-
     const redirectTo = `${(process.env.URL ?? 'https://noven-ia.netlify.app').replace(/\/$/, '')}/activar`
     let usuarioId = ''
     let link: string | null = null
@@ -282,6 +250,9 @@ async function handleAdminSucursal(event: HandlerEvent): Promise<HandlerResponse
         usuarioId = data.user.id
       }
     } catch (err) {
+      if (esEmailDuplicadoAuth(err)) {
+        return json(409, { success: false, error: 'Ese email ya tiene una cuenta en Noven.' })
+      }
       return json(400, { success: false, error: err instanceof Error ? err.message : String(err) })
     }
 
