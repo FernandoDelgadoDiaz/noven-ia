@@ -81,7 +81,7 @@ Regla de trabajo vigente: un PR por ítem, rama → PR → CI verde → merge. N
 - Bypass cerrado: los handlers legacy devuelven 404 cuando `adminLaneForPath` no matchea, de modo que `/.netlify/functions/admin-*` ya no es una vía alternativa sin límite.
 - Contrato: `scripts/tests/admin-rate-limit-contract.test.mjs`.
 
-**Qué quedó incompleto.** La cobertura es exclusivamente administrativa. Las otras 17 funciones de `netlify/functions/` no tienen ningún límite, incluida `analisis.ts`, que es un endpoint autenticado que gasta tokens de un proveedor pago por request.
+**Qué quedó incompleto.** La cobertura es exclusivamente administrativa. Las otras 17 funciones de `netlify/functions/` no tienen ningún límite, incluida `analisis.ts`, que es un endpoint autenticado que gasta tokens de un proveedor pago por request y que tampoco tiene throttle ni cache server-side.
 
 El techo del plan básico de Netlify (dos reglas `rateLimit` declaradas en código) ya está consumido. Ver §6 — **deuda conocida D-1**.
 
@@ -162,7 +162,11 @@ Estado de producción al mismo corte (`meqvjabgyrgwkxpclqxp`, Postgres 17.6, `sa
 
 Limitaciones aceptadas conscientemente. No son invariantes: son cosas que hay que resolver cuando el contexto lo permita.
 
-**D-1 · Techo de rate limiting de Netlify.** El plan básico admite dos reglas `rateLimit` declaradas en código, y ambas están consumidas por `/api/admin/read/*` y `/api/admin/write/*`. Ninguna otra función puede protegerse por esa vía. `analisis.ts` es el caso más expuesto. Requiere una vía alternativa (límite por usuario en Postgres, router con path único, u otra).
+**D-1 · Techo de rate limiting de Netlify.** El plan básico admite dos reglas `rateLimit` declaradas en código, y ambas están consumidas por `/api/admin/read/*` y `/api/admin/write/*`. Ninguna otra función está protegida por esa vía. Requiere una vía alternativa (límite por usuario en Postgres, router con path único, u otra).
+
+`analisis.ts` es el caso más expuesto, y por dos motivos, no uno: no tiene rate limit **y** tampoco tiene throttle ni cache del lado del servidor. El cache del análisis vive en `localStorage` del cliente (`src/hooks/useAnalisis.ts`), de modo que no impone ningún techo real: borrar el storage, o llamar al endpoint directamente con un JWT válido, dispara una llamada completa al proveedor de inferencia cada vez. Cualquier usuario autenticado puede consumir tokens pagos en bucle.
+
+`scripts/tests/admin-rate-limit-contract.test.mjs` **no congela la cantidad de reglas**: verifica que las dos conocidas sigan declaradas y que toda regla declarada esté completa. Una tercera regla legítima pasa el contrato. Congelar el número convertía el techo del proveedor en un test que rompía cualquier intento de proteger otra función, escondiendo esta deuda en lugar de señalarla.
 
 **D-2 · Dependencia viva del schema archivado.** `desafio5s_es_admin()` consulta `public.rol_actual()` y por esa vía `public.usuarios` de NoVen. Se conserva a propósito para permitir restauración en el proyecto actual, pero significa que un refactor de `rol_actual()` o de `usuarios` rompe silenciosamente un módulo que nadie está mirando. Condición de salida en `ai/decisions.md`.
 
