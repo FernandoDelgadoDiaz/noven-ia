@@ -152,6 +152,10 @@ for (const tabla of ['rate_limit_consumo', 'analisis_cache']) {
 for (const fn of ['consumir_cuota_actor_v1', 'purgar_cuota_y_cache_v1']) {
   assert.match(migracion, new RegExp(`REVOKE ALL ON FUNCTION public\\.${fn}\\([^)]*\\)\\s*\\n\\s*FROM PUBLIC, anon, authenticated`),
     `${fn}: no ejecutable desde el browser`)
+  // El default de Postgres es EXECUTE a PUBLIC: sin el GRANT explícito, revocar
+  // deja a service_role sin permiso y la cuota falla cerrada para siempre.
+  assert.match(migracion, new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${fn}\\([^)]*\\)\\s*\\n\\s*TO service_role`),
+    `${fn}: service_role debe conservar EXECUTE explícitamente`)
 }
 
 console.log('✓ Cuota por actor: abuso cortado, uso normal intacto, contador caído cierra')

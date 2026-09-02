@@ -133,8 +133,13 @@ BEGIN
 END;
 $$;
 
+-- El default de Postgres es EXECUTE a PUBLIC. Revocarlo sin el GRANT explícito
+-- dejaría a service_role sin permiso, la cuota fallaría cerrada y el análisis
+-- quedaría en 503 permanente.
 REVOKE ALL ON FUNCTION public.consumir_cuota_actor_v1(uuid, text, integer, integer)
   FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.consumir_cuota_actor_v1(uuid, text, integer, integer)
+  TO service_role;
 
 -- -----------------------------------------------------------------------------
 -- Purga de ventanas y caché vencidos
@@ -166,5 +171,7 @@ $$;
 
 REVOKE ALL ON FUNCTION public.purgar_cuota_y_cache_v1(interval, interval)
   FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.purgar_cuota_y_cache_v1(interval, interval)
+  TO service_role;
 
 COMMIT;
