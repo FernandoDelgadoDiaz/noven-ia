@@ -33,11 +33,15 @@ async function tokenActual(): Promise<string> {
 
 async function request(body: Record<string, unknown>): Promise<Contexto | ResultadoInvitacion> {
   const token = await tokenActual()
-  const res = await fetch('/.netlify/functions/admin-accesos', {
+  const lane = body.accion === 'listar' ? 'read' : 'write'
+  const res = await fetch(`/api/admin/${lane}/accesos`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
   })
+  if (res.status === 429) {
+    throw new Error('Hay demasiadas solicitudes administrativas. Esperá un minuto y volvé a intentar.')
+  }
   const data = await res.json().catch(() => ({ success: false, error: 'Respuesta inválida del servidor' }))
   if (!res.ok || !data.success) throw new Error(data.error || 'No se pudo completar la operación.')
   return data

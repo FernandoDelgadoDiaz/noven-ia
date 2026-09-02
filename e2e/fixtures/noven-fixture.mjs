@@ -202,10 +202,14 @@ export async function installNovenFixture(page, options = {}) {
     return route.fulfill({ status: 200, headers: jsonHeaders(), body: '[]' })
   })
 
-  await page.route('**/.netlify/functions/**', async (route) => {
+  await page.route(/\/(?:\.netlify\/functions\/|api\/admin\/)/, async (route) => {
     const request = route.request()
     const url = new URL(request.url())
-    const fn = url.pathname.split('/.netlify/functions/')[1] ?? ''
+    const legacyFn = url.pathname.split('/.netlify/functions/')[1] ?? ''
+    const adminResource = url.pathname.startsWith('/api/admin/')
+      ? url.pathname.split('/').at(-1) ?? ''
+      : ''
+    const fn = adminResource ? `admin-${adminResource}` : legacyFn
     let body = {}
     try { body = request.postDataJSON() ?? {} } catch { body = {} }
 

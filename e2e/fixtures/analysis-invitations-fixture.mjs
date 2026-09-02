@@ -75,7 +75,7 @@ export async function installInvitationFixture(page) {
   const invitationCalls = []
   let invitations = []
 
-  await page.route('**/.netlify/functions/admin-sucursal', async (route) => {
+  await page.route('**/api/admin/*/sucursal', async (route) => {
     const request = route.request()
     let body = {}
     try { body = request.postDataJSON() ?? {} } catch { body = {} }
@@ -111,7 +111,7 @@ export async function installInvitationFixture(page) {
     return route.fulfill({ status: 400, headers: jsonHeaders(), body: JSON.stringify({ success: false, error: 'Acción local E2E no soportada' }) })
   })
 
-  await page.route('**/.netlify/functions/admin-invitaciones', async (route) => {
+  await page.route('**/api/admin/*/invitaciones', async (route) => {
     const request = route.request()
     let body = {}
     try { body = request.postDataJSON() ?? {} } catch { body = {} }
