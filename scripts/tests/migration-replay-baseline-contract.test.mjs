@@ -15,8 +15,19 @@ assert.equal(
 assert.equal(manifest.policy.production_ledger_action, 'none')
 assert.equal(manifest.policy.edit_applied_migrations, false)
 assert.equal(manifest.policy.fabricate_production_business_data_for_replay, false)
-assert.equal(manifest.policy.baseline_artifact_status, 'required_not_generated')
+assert.equal(
+  manifest.policy.baseline_artifact_status,
+  'materialized_replay_verified',
+)
 assert.equal(manifest.policy.baseline_scope, 'noven_core_schema_only')
+assert.equal(
+  manifest.policy.baseline_artifact_path,
+  'scripts/migration-replay/baseline-v1',
+)
+assert.equal(
+  manifest.policy.legacy_production_fingerprint_sha256,
+  '2cdba36ae58117100c8d0c8f9ddf235beeb8eaa372c90d9c777c43a991ad2020',
+)
 assert.ok(manifest.policy.excluded_state.includes('auth_users'))
 assert.ok(manifest.policy.excluded_state.includes('business_rows'))
 assert.ok(manifest.policy.excluded_state.includes('storage_objects'))
