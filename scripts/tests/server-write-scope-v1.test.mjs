@@ -67,12 +67,14 @@ assert.match(pendingRead, /ua\.rol IN \('gerente_sucursal','supervisor'\)[\s\S]*
 assert.doesNotMatch(pendingRead, /admin_organizacion/,
   'jerarquía no amplía la lectura de pendientes')
 
-const analysisScope = analisis.match(/const scopeCompleto = accesos\.some\([\s\S]*?\n\s*\)/)?.[0] ?? ''
+const analysisScope = analisis.match(/const alcanceGerencial = accesos\.some\([\s\S]*?\n\s*\)/)?.[0] ?? ''
 assert.ok(analysisScope, 'Análisis IA debe tener un gate de scope explícito')
 assert.match(analysisScope, /gerente_zonal/)
 assert.match(analysisScope, /gerente_sucursal/)
 assert.match(analysisScope, /supervisor/)
 assert.doesNotMatch(analysisScope, /admin_organizacion/,
   'admin_organizacion no debe abrir sucursales en Análisis IA')
+assert.doesNotMatch(analysisScope, /operador/,
+  'el análisis gerencial no se concede al operador')
 
 console.log('✓ writers server-only locales + lecturas zonales sin expansión jerárquica')

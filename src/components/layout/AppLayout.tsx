@@ -6,6 +6,7 @@ import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
 import { useNovenAccessContext } from '@/hooks/useNovenAccessContext'
 import { usePuedeOperarSucursal } from '@/hooks/usePuedeOperarSucursal'
 import { usePuedeGestionarCatalogoSucursal } from '@/hooks/usePuedeGestionarCatalogoSucursal'
+import { usePuedeVerAnalisis } from '@/hooks/usePuedeVerAnalisis'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import SucursalContextSelector from './SucursalContextSelector'
 import InvitationManagementDock from '@/components/admin/InvitationManagementDock'
@@ -53,6 +54,7 @@ export default function AppLayout() {
   const { sucursalId, sucursalesPermitidas } = useNovenAccessContext()
   const { puedeOperar } = usePuedeOperarSucursal()
   const { puedeGestionar: gestionaCatalogo } = usePuedeGestionarCatalogoSucursal()
+  const { puedeVerAnalisis } = usePuedeVerAnalisis()
   const navigate = useNavigate()
 
   // Las capacidades multirrol se acumulan, pero cada una conserva SU alcance.
@@ -90,7 +92,8 @@ export default function AppLayout() {
   }
 
   const navItems: NavItem[] = [
-    ...BASE_NAV_ITEMS.filter((item) => item.to !== '/scanner' || puedeOperar),
+    ...BASE_NAV_ITEMS.filter((item) => (item.to !== '/scanner' || puedeOperar)
+      && (item.to !== '/analisis' || puedeVerAnalisis)),
     ...(gestionaCatalogo ? [IMPORT_NAV_ITEM] : []),
     ...(administraSucursal ? [ADMIN_NAV_ITEM] : []),
     ...(administraJerarquia ? [ACCESS_ADMIN_NAV_ITEM] : []),
@@ -99,7 +102,7 @@ export default function AppLayout() {
   // Si la cuenta gerente 091 tiene además la capacidad jerárquica, Accesos se
   // mantiene disponible sin alterar el alcance operativo local de la 091.
   const mobileNavRight: NavItem[] = [
-    ...MOBILE_NAV_RIGHT_BASE,
+    ...MOBILE_NAV_RIGHT_BASE.filter((item) => item.to !== '/analisis' || puedeVerAnalisis),
     ...(gestionaCatalogo ? [IMPORT_NAV_ITEM] : []),
     ...(administraSucursal ? [ADMIN_NAV_ITEM] : []),
     ...(administraJerarquia && !administraSucursal ? [ACCESS_ADMIN_NAV_ITEM] : []),

@@ -25,3 +25,15 @@
 **Dependencia conocida:** `desafio5s_es_admin()` depende de `public.rol_actual()` y, por esa vía, de `public.usuarios` de NoVen. Esa dependencia se conserva únicamente para permitir una restauración futura en el proyecto actual; no debe trasladarse a un proyecto 5S independiente.
 
 **Condición de salida:** Antes de reactivar Desafío 5S para uso real, crear su proyecto Supabase independiente cuando el costo sea aceptado, restaurar allí estructura/datos/Storage, reemplazar `public.rol_actual()` por autorización propia de 5S, validar el flujo participante y administrador, y recién después retirar el archivo frío del proyecto de NoVen.
+
+## Análisis gerencial limitado a roles de conducción — 2026-09-02
+
+**Decisión:** `netlify/functions/analisis.ts` sólo se concede a `gerente_zonal` de la zona de la sucursal, y a `gerente_sucursal` o `supervisor` de esa sucursal exacta. El rol `operador` deja de generar análisis. `admin_organizacion` sigue sin habilitar por sí solo.
+
+**Motivo:** el análisis es una capacidad de conducción, no de operación: compara el trimestre en curso contra la ventana equivalente previa y prioriza dónde interviene la gestión. El operador trabaja sobre su propia bandeja de familias, donde el Dashboard y Vencimientos ya le dan lo que necesita para actuar.
+
+Como efecto secundario deseado, reduce la población que puede disparar costo en el proveedor de inferencia y enviarle datos operativos. No lo reemplaza: sigue haciendo falta el límite por actor del ítem C2/C3, porque una sola cuenta de conducción alcanza para consumir sin techo.
+
+**Consecuencia:** desaparece el ámbito parcial por familias dentro del análisis. Con un único ámbito posible —toda la sucursal— se eliminan el filtrado por `usuario_familias_sucursal`, la variante `SYSTEM_OPERADOR` del prompt y la bifurcación `scopeCompleto`. Queda un solo system prompt, lo que además simplifica la evaluación de guardarraíles del ítem 1.5.
+
+**Condición de salida:** si en el futuro un perfil operativo necesita análisis de su propio ámbito, no reintroducir la bifurcación dentro de este endpoint. Debe ser una capacidad separada, con su propio prompt y su propio alcance declarado.

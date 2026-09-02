@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import AppLayout from '../components/layout/AppLayout'
 import PrivateRoute from '../components/auth/PrivateRoute'
 import OperationalRoute from '../components/auth/OperationalRoute'
+import AnalysisRoute from '../components/auth/AnalysisRoute'
 import CatalogWriteRoute from '../components/auth/CatalogWriteRoute'
 import AdminRoute from '../components/auth/AdminRoute'
 import AccessAdminRoute from '../components/auth/AccessAdminRoute'
@@ -64,8 +65,16 @@ export const router = createBrowserRouter([
             element: <ErrorBoundary><Suspense {...suspenseProps}><Historial /></Suspense></ErrorBoundary>,
           },
           {
-            path: 'analisis',
-            element: <ErrorBoundary><Suspense {...suspenseProps}><Analisis /></Suspense></ErrorBoundary>,
+            // El análisis gerencial es capacidad de conducción: zonal, gerente
+            // de sucursal y supervisor. El operador queda fuera y el endpoint
+            // responde 403 aunque llegue por URL directa.
+            element: <AnalysisRoute />,
+            children: [
+              {
+                path: 'analisis',
+                element: <ErrorBoundary><Suspense {...suspenseProps}><Analisis /></Suspense></ErrorBoundary>,
+              },
+            ],
           },
           {
             path: 'problemas',
