@@ -2,6 +2,15 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# --regenerate reescribe la expectativa movil del replay desde la base
+# descartable. Nunca toca el ancla de produccion expected-fingerprint.json.
+regenerate=""
+for arg in "$@"; do
+  case "${arg}" in
+    --regenerate) regenerate=1 ;;
+  esac
+done
 workspace="${NOVEN_REPLAY_WORKSPACE:-$(mktemp -d -t noven-baseline-replay.XXXXXX)}"
 diff_output="${NOVEN_REPLAY_DIFF_OUTPUT:-${repo_root}/structural-diff.json}"
 created_workspace=0
@@ -80,6 +89,7 @@ set +a
 
 export NOVEN_REPLAY_DB_URL="${DB_URL}"
 node "${repo_root}/scripts/migration-replay/verify-structural-fingerprint.mjs" \
+  ${regenerate:+--regenerate} \
   --diff-output "${diff_output}"
 
 replay_succeeded=1

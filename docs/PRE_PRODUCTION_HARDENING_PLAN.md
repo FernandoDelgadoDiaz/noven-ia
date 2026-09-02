@@ -109,6 +109,10 @@ Partido en tres subítems porque el bloqueo original resultó ser de estado, no 
 - Fingerprint canónico V1: `837771691ffc6e2276c66a26f9ae010c872f12ea33b118406d48b2ad6fca38af`.
 - Huella productiva legacy preservada: `2cdba36ae58117100c8d0c8f9ddf235beeb8eaa372c90d9c777c43a991ad2020`.
 
+**1.4D — Expectativa móvil (este PR).** El gate de 1.4C sólo podía estar verde con el schema congelado: el replay aplica baseline + migraciones posteriores al cutoff, pero comparaba contra una foto estática que sólo contenía el baseline. La primera migración nueva —cualquiera— lo rompía por diseño. La expectativa pasó a ser móvil y atada por hash al conjunto exacto de migraciones posteriores; el ancla de producción `expected-fingerprint.json` queda intacta y sólo se re-materializa de forma explícita y periódica. Contrato: `migration-replay-moving-expectation.test.mjs`.
+
+**Lo que el gate dejó de responder en cada corrida:** "¿el repositorio reconstruye lo que hay en producción?". Ahora verifica reproducibilidad y cambio declarado. El ancla se mantiene viva sólo por la re-materialización periódica documentada en `docs/MIGRATION_REPLAY_BASELINE_V1.md` §14.4, con un tripwire en la suite si se pasa de los días declarados.
+
 **El gate es bloqueante, no advisory.** `verify-structural-fingerprint.mjs` lanza excepción ante cualquier diferencia estructural no explicada y ante un cambio del SHA de la huella productiva registrada. `run-baseline-replay.sh` corre con `set -euo pipefail`, de modo que un fallo del replay corta el job antes de los gates de aislamiento y del E2E.
 
 Documentación completa: `docs/MIGRATION_REPLAY_BASELINE_V1.md`.

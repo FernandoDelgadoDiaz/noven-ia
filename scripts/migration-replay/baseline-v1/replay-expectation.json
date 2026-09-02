@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "proposito": "Expectativa movil del replay: huella esperada de baseline + migraciones posteriores al cutoff.",
+  "forward_migrations": [],
+  "forward_migrations_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "replay_fingerprint_sha256": "837771691ffc6e2276c66a26f9ae010c872f12ea33b118406d48b2ad6fca38af",
+  "anchor_fingerprint_sha256": "837771691ffc6e2276c66a26f9ae010c872f12ea33b118406d48b2ad6fca38af",
+  "anchor_materialized_at": "2026-09-01",
+  "anchor_materialized_from": "catalogo productivo meqvjabgyrgwkxpclqxp (PR #129)",
+  "anchor_revalidacion_maxima_dias": 180,
+  "regenerado_at": "2026-09-02"
+}
