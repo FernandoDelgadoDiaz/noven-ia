@@ -13,7 +13,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { verificar } from '../live-isolation/clasificacion-exposicion.mjs'
+import { exclusionesDeLaBaseline, verificar } from '../live-isolation/clasificacion-exposicion.mjs'
 import {
   ACOTAMIENTOS, CLASES, CLASES_VISTA,
   CLASIFICACION, CLASIFICACION_VISTAS, VISTAS_EXIGEN_SECURITY_INVOKER,
@@ -70,6 +70,7 @@ for (const [nombre, def] of Object.entries(CLASES_VISTA)) {
 const catalogoValido = {
   tablas: [
     { tabla: 'productos', rls: true },
+    { tabla: 'producto_sucursal', rls: true },
     { tabla: 'usuarios', rls: true },
     { tabla: 'push_subscriptions', rls: true },
     { tabla: 'rate_limit_consumo', rls: true },
@@ -80,6 +81,7 @@ const catalogoValido = {
     ...['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']
       .map((privilegio) => ({ tabla: 'push_subscriptions', grantee: 'authenticated', privilegio })),
     { tabla: 'v_productos_catalogo', grantee: 'authenticated', privilegio: 'SELECT' },
+    { tabla: 'producto_sucursal', grantee: 'authenticated', privilegio: 'SELECT' },
   ],
   vistas: [
     { vista: 'v_productos_catalogo', duenio: 'postgres', security_invoker: true },
@@ -89,12 +91,17 @@ const catalogoValido = {
     { tabla: 'productos', politica: 'productos_select_scope_v1', cmd: 'SELECT', usando: 'noven_private.tiene_acceso_organizacion(organizacion_id)', chequeo: '' },
     { tabla: 'usuarios', politica: 'usuarios_select_own', cmd: 'SELECT', usando: '(( SELECT auth.uid() AS uid) = id)', chequeo: '' },
     { tabla: 'push_subscriptions', politica: 'push_propias', cmd: 'ALL', usando: '(auth.uid() = usuario_id)', chequeo: '(auth.uid() = usuario_id)' },
+    // Declarada TO public, que incluye a authenticated. Producción tiene cinco
+    // así, acotadas por producto+sucursal.
+    { tabla: 'producto_sucursal', politica: 'producto_sucursal_select_scope', cmd: 'SELECT', roles: '{public}', usando: 'noven_private.puede_leer_producto_sucursal(sucursal_id, producto_id)', chequeo: '' },
   ],
 }
 
 // El catálogo de prueba no contiene todas las tablas clasificadas, así que se
 // esperan avisos de "ya no existe": se filtran para probar el resto.
-const soloReales = (errores) => errores.filter((e) => !e.includes('ya no existe en public'))
+const soloReales = (errores) => errores.filter(
+  (e) => !e.includes('no existe en public ni figura entre las') && !e.includes('ya no existe en public'),
+)
 
 assert.deepEqual(soloReales(verificar(catalogoValido)), [],
   `un catálogo correcto no debe producir errores. Produjo:\n${soloReales(verificar(catalogoValido)).join('\n')}`)
@@ -154,9 +161,24 @@ const REGRESIONES = [
     esperado: /NINGUNA política/,
   },
   {
-    nombre: 'política sobre una tabla server-only',
-    mutar: (c) => c.politicas.push({ tabla: 'rate_limit_consumo', politica: 'x', cmd: 'SELECT', usando: 'true', chequeo: '' }),
-    esperado: /no debería tener políticas para authenticated/,
+    // Con cero grants una política no se puede ejercer, así que lo que importa
+    // no es la política sino el grant: si aparece uno, la tabla deja de estar
+    // negada y la política pasa a decidir. Ese es el caso que se prueba.
+    nombre: 'tabla server-only con grant Y política permisiva',
+    mutar: (c) => {
+      c.grants.push({ tabla: 'rate_limit_consumo', grantee: 'authenticated', privilegio: 'SELECT' })
+      c.politicas.push({ tabla: 'rate_limit_consumo', politica: 'x', cmd: 'SELECT', roles: '{public}', usando: 'true', chequeo: '' })
+    },
+    esperado: /grants de más para authenticated: SELECT/,
+  },
+  {
+    // El caso que mi primera versión no veía: filtraba las políticas por
+    // 'authenticated' = ANY(roles), y una declarada TO public quedaba fuera
+    // del análisis pese a aplicarle igual. Era el agujero justo en la forma
+    // más peligrosa de política.
+    nombre: 'política USING(true) declarada TO public (aplica a authenticated)',
+    mutar: (c) => { c.politicas.find((p) => p.tabla === 'producto_sucursal').usando = 'true' },
+    esperado: /no acota por tenant/,
   },
   {
     nombre: 'vista SIN security_invoker (evalúa RLS como su dueño)',
@@ -192,6 +214,30 @@ for (const { nombre, mutar, esperado } of REGRESIONES) {
     `NO detectó: ${nombre}.\n  esperaba algo que matchee ${esperado}\n  obtuvo:\n${errores.map((e) => `    - ${e.split('\n')[0]}`).join('\n') || '    (ningún error)'}`,
   )
 }
+
+// --- Las exclusiones de la baseline se leen del manifiesto ------------------
+//
+// La clasificación describe producción; el verificador corre contra el replay,
+// que excluye deliberadamente los respaldos históricos. Sin esto, cada
+// exclusión declarada aparecería como "tabla que ya no existe" y el ítem
+// quedaría rojo por un desacuerdo esperado.
+
+const excluidas = exclusionesDeLaBaseline()
+assert.ok(excluidas.size > 0,
+  'deben leerse las exclusiones de relations del manifiesto de la baseline')
+for (const respaldo of Object.entries(CLASIFICACION).filter(([, c]) => c === 'respaldo_historico').map(([t]) => t)) {
+  assert.ok(excluidas.has(respaldo),
+    `"${respaldo}" está clasificado como respaldo histórico pero no figura excluido de la baseline`)
+}
+
+// Una tabla clasificada que no existe Y no está excluida sigue siendo un error.
+assert.ok(
+  verificar({ ...catalogoValido, excluidas }).some((e) => e.includes('rate_limit_consumo')) === false,
+  'las tablas presentes no deben reportarse como ausentes',
+)
+const sinExcluir = verificar({ ...catalogoValido, excluidas: new Set() })
+assert.ok(sinExcluir.some((e) => e.includes('dedup_turrocklets_backup')),
+  'sin el manifiesto, una exclusión declarada debe reportarse: el filtro no puede ser incondicional')
 
 // --- El paso corre en CI ---------------------------------------------------
 

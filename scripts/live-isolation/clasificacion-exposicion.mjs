@@ -19,10 +19,34 @@ import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
+import fs from 'node:fs'
+
 import {
   ACOTAMIENTOS, ANON_SIN_GRANTS, CLASES, CLASES_VISTA,
   CLASIFICACION, CLASIFICACION_VISTAS, VISTAS_EXIGEN_SECURITY_INVOKER,
 } from './clasificacion-tablas.mjs'
+
+/**
+ * La clasificación describe PRODUCCIÓN, pero el verificador corre contra el
+ * replay, y la baseline excluye deliberadamente algunas relaciones. Sin esto,
+ * cada exclusión declarada aparecería como "la clasificación nombra una tabla
+ * que ya no existe" y el ítem quedaría rojo por un desacuerdo esperado.
+ *
+ * Se leen del manifiesto, no se copian: si alguien cambia qué excluye la
+ * baseline, esto lo sigue.
+ */
+export function exclusionesDeLaBaseline(
+  ruta = 'scripts/migration-replay/baseline-v1/exclusions-manifest.json',
+) {
+  if (!fs.existsSync(ruta)) return new Set()
+  const manifiesto = JSON.parse(fs.readFileSync(ruta, 'utf8'))
+  const relaciones = (manifiesto.excluded_from_core_fingerprint ?? [])
+    .filter((e) => e.kind === 'relations')
+    .flatMap((e) => e.objects ?? [])
+    .filter((o) => o.startsWith('public.'))
+    .map((o) => o.slice('public.'.length))
+  return new Set(relaciones)
+}
 
 function consultar(databaseUrl, sql) {
   const res = spawnSync('psql', [databaseUrl, '--no-psqlrc', '-At', '-c', sql], {
@@ -62,7 +86,7 @@ function fallar(mensajes) {
  * permisiva, un grant de más— sin levantar Postgres. Un verificador que sólo se
  * ejerce contra la base real se prueba únicamente cuando ya es tarde.
  */
-export function verificar({ tablas, grants, politicas, vistas = [] }) {
+export function verificar({ tablas, grants, politicas, vistas = [], excluidas = new Set() }) {
   const errores = []
   const nombres = tablas.map((t) => t.tabla)
 
@@ -78,9 +102,15 @@ export function verificar({ tablas, grants, politicas, vistas = [] }) {
     }
   }
   for (const tabla of Object.keys(CLASIFICACION)) {
-    if (!nombres.includes(tabla)) {
-      errores.push(`La clasificación nombra "${tabla}", que ya no existe en public. Sacala.`)
-    }
+    if (nombres.includes(tabla)) continue
+    // Una relación que la baseline excluye a propósito no está en el replay, y
+    // eso es correcto: la clasificación describe producción.
+    if (excluidas.has(tabla)) continue
+    errores.push(
+      `La clasificación nombra "${tabla}", que no existe en public ni figura entre las\n`
+      + `      exclusiones declaradas de la baseline. O se eliminó y hay que sacarla de la\n`
+      + `      clasificación, o falta declararla en exclusions-manifest.json.`,
+    )
   }
 
   // --- RLS habilitada en todas --------------------------------------------
@@ -148,14 +178,11 @@ export function verificar({ tablas, grants, politicas, vistas = [] }) {
       continue
     }
 
-    if (!def.politicaDebeAcotar) {
-      if (suyas.length > 0) {
-        errores.push(
-          `"${tabla}" (${clase}) no debería tener políticas para authenticated y tiene ${suyas.length}.`,
-        )
-      }
-      continue
-    }
+    // Una clase sin grants no necesita reglas sobre sus políticas: sin
+    // privilegio de tabla, una política no se puede ejercer. Los respaldos de
+    // agosto, por ejemplo, conservan una política heredada que restringe a
+    // admin y es inofensiva porque nadie tiene SELECT sobre ellos.
+    if (!def.politicaDebeAcotar) continue
 
     const patrones = ACOTAMIENTOS[def.politicaDebeAcotar]
     for (const p of suyas) {
@@ -255,10 +282,15 @@ function main() {
 
   const politicas = consultar(db, `
     SELECT coalesce(json_agg(row_to_json(t)), '[]'::json) FROM (
-      SELECT tablename AS tabla, policyname AS politica, cmd,
+      SELECT tablename AS tabla, policyname AS politica, cmd, roles::text AS roles,
              coalesce(qual, '') AS usando, coalesce(with_check, '') AS chequeo
       FROM pg_policies
-      WHERE schemaname = 'public' AND 'authenticated' = ANY(roles)
+      WHERE schemaname = 'public'
+        -- El rol public incluye a authenticated: una politica TO public le
+        -- aplica igual. Filtrar solo por 'authenticated' dejaba ciega la
+        -- verificacion justo donde vive el caso mas peligroso: USING(true)
+        -- declarada TO public.
+        AND ('authenticated' = ANY(roles) OR 'public' = ANY(roles))
     ) t;`)
 
   const vistas = consultar(db, `
@@ -272,7 +304,7 @@ function main() {
       ORDER BY c.relname
     ) t;`)
 
-  const errores = verificar({ tablas, grants, politicas, vistas })
+  const errores = verificar({ tablas, grants, politicas, vistas, excluidas: exclusionesDeLaBaseline() })
   const nombres = tablas.map((t) => t.tabla)
 
   if (errores.length) {

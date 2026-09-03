@@ -133,6 +133,10 @@ export const ACOTAMIENTOS = Object.freeze({
     /noven_private\.tiene_acceso_organizacion\(/,
     /noven_private\.tiene_acceso_zona\(/,
     /noven_private\.tiene_acceso_sucursal\(/,
+    // Resuelve el alcance por producto+sucursal para las tablas operativas.
+    // Faltaba, y su ausencia hacía que cinco tablas correctamente acotadas
+    // parecieran sin acotar.
+    /noven_private\.puede_leer_producto_sucursal\(/,
   ],
   usuario: [
     /auth\.uid\(\)/,
