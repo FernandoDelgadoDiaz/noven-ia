@@ -222,22 +222,34 @@ for (const { nombre, mutar, esperado } of REGRESIONES) {
 // exclusión declarada aparecería como "tabla que ya no existe" y el ítem
 // quedaría rojo por un desacuerdo esperado.
 
+// Toda tabla clasificada que la baseline no reconstruya tiene que estar
+// declarada como exclusión. Al archivarse los respaldos en `noven_archive`
+// dejaron `public`, así que hoy no hay ninguna exclusión de `public.`: la
+// aserción se escribe sobre la relación, no sobre un número.
 const excluidas = exclusionesDeLaBaseline()
-assert.ok(excluidas.size > 0,
-  'deben leerse las exclusiones de relations del manifiesto de la baseline')
 for (const respaldo of Object.entries(CLASIFICACION).filter(([, c]) => c === 'respaldo_historico').map(([t]) => t)) {
   assert.ok(excluidas.has(respaldo),
     `"${respaldo}" está clasificado como respaldo histórico pero no figura excluido de la baseline`)
 }
 
-// Una tabla clasificada que no existe Y no está excluida sigue siendo un error.
-assert.ok(
-  verificar({ ...catalogoValido, excluidas }).some((e) => e.includes('rate_limit_consumo')) === false,
-  'las tablas presentes no deben reportarse como ausentes',
-)
-const sinExcluir = verificar({ ...catalogoValido, excluidas: new Set() })
-assert.ok(sinExcluir.some((e) => e.includes('dedup_turrocklets_backup')),
-  'sin el manifiesto, una exclusión declarada debe reportarse: el filtro no puede ser incondicional')
+// El filtro no puede ser incondicional: una tabla clasificada que no existe y
+// que NO está declarada como exclusión sigue siendo un error.
+const faltante = verificar({
+  ...catalogoValido,
+  tablas: catalogoValido.tablas.filter((t) => t.tabla !== 'productos'),
+  excluidas,
+})
+assert.ok(faltante.some((e) => e.includes('"productos"') && e.includes('no existe en public')),
+  'una tabla clasificada, ausente y no declarada como exclusión debe reportarse')
+
+// Y una que sí está declarada, no.
+const conExclusion = verificar({
+  ...catalogoValido,
+  tablas: catalogoValido.tablas.filter((t) => t.tabla !== 'productos'),
+  excluidas: new Set(['productos']),
+})
+assert.ok(!conExclusion.some((e) => e.includes('"productos"') && e.includes('no existe en public')),
+  'una exclusión declarada no debe reportarse como tabla faltante')
 
 // --- El paso corre en CI ---------------------------------------------------
 

@@ -86,13 +86,31 @@ jobs:
         run: |
           set -euo pipefail
           cambios="$(git diff --name-only)"
-          esperado=$'scripts/migration-replay/baseline-v1/expected-replay-fingerprint.json\nscripts/migration-replay/baseline-v1/replay-expectation.json'
-          if [[ "$(echo "${cambios}" | sort)" != "$(echo "${esperado}" | sort)" ]]; then
+
+          # Se verifica que NINGÚN archivo fuera de la expectativa móvil haya
+          # cambiado, no que hayan cambiado los dos.
+          #
+          # Exigir exactamente dos era demasiado estricto y rechazaba un caso
+          # legítimo: una migración cuyo efecto queda fuera del fingerprint core
+          # —por ejemplo mover relaciones a un schema que el manifiesto excluye—
+          # deja `expected-replay-fingerprint.json` byte a byte igual y sólo
+          # mueve la lista de migraciones y sus hashes. Eso es correcto y el
+          # guard lo daba por sospechoso.
+          #
+          # Lo que importa proteger es que no se toque nada más, y eso se
+          # mantiene intacto.
+          inesperados="$(echo "${cambios}" | grep -vE '^scripts/migration-replay/baseline-v1/(expected-replay-fingerprint|replay-expectation)\.json$' || true)"
+          if [[ -n "${inesperados}" ]]; then
             echo "::error::La regeneración tocó archivos inesperados."
-            echo "${cambios}"
+            echo "${inesperados}"
             exit 1
           fi
-          echo "Sólo cambió la expectativa móvil."
+          if [[ -z "${cambios}" ]]; then
+            echo "::error::La regeneración no cambió nada. ¿Sobraba regenerar?"
+            exit 1
+          fi
+          echo "Sólo cambió la expectativa móvil:"
+          echo "${cambios}"
 
       # Si la expectativa regenerada es coherente, la suite pasa entera. Si no,
       # es preferible enterarse acá que después de commitear el artefacto.

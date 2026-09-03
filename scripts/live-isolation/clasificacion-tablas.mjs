@@ -112,10 +112,10 @@ export const CLASIFICACION = Object.freeze({
   usuario_familias: 'solo_servidor',
 
   // --- Respaldos de agosto -------------------------------------------------
-  // Sin rol en el circuito. Su destino se decide en el ítem E4.
-  dedup_turrocklets_backup_20260805: 'respaldo_historico',
-  productos_descripcion_backup_20260805: 'respaldo_historico',
-  productos_familia_backup_20260806: 'respaldo_historico',
+  // Ya no están en `public`: el ítem E4 los movió a `noven_archive`, fuera del
+  // alcance de esta clasificación, que sólo cubre `public`. La clase
+  // `respaldo_historico` se conserva porque describe una forma de exposición
+  // que puede volver a aparecer, no porque hoy la use alguna tabla.
 })
 
 /**
