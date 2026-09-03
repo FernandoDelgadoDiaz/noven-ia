@@ -86,6 +86,50 @@ for (const origen of ['sugerida_aceptada', 'sugerida_rechazada', 'manual']) {
   assert.ok(sql.includes(`'${origen}'`), `falta el origen ${origen}`)
 }
 
+// --- 3b. La instrumentación se escribe, no queda decorativa -----------------
+//
+// Columnas que nadie llena no sirven para nada en seis meses.
+
+assert.match(sql, /CREATE OR REPLACE FUNCTION noven_private\.instrumentar_sugerencia_rag_impl/,
+  'tiene que existir el impl que escribe la instrumentación')
+assert.match(sql, /CREATE OR REPLACE FUNCTION public\.instrumentar_sugerencia_rag/,
+  'y su wrapper público')
+
+const impl = sql.slice(
+  sql.indexOf('CREATE OR REPLACE FUNCTION noven_private.instrumentar_sugerencia_rag_impl'),
+  sql.indexOf('CREATE OR REPLACE FUNCTION public.instrumentar_sugerencia_rag'),
+)
+
+// `authenticated` sólo tiene SELECT sobre intervenciones_rag y no debe tener
+// más, así que la escritura pasa por un DEFINER acotado, como el resto del
+// repositorio.
+assert.match(impl, /SECURITY DEFINER/, 'el impl escribe donde authenticated no puede')
+assert.match(impl, /SET search_path = ''/, 'un DEFINER sin search_path fijo es una escalada esperando')
+assert.match(impl, /noven_private\.puede_ver_producto_sucursal/,
+  'el DEFINER tiene que verificar permiso sobre el producto, no confiar en el llamador')
+assert.match(impl, /auth\.uid\(\)/, 'la identidad sale del token, no de un parámetro')
+
+// Se escribe una sola vez: es evidencia histórica, no un campo de estado.
+assert.match(impl, /origen_sugerencia IS NOT NULL THEN\s*\n\s*RETURN;/,
+  'la instrumentación no se pisa: una intervención ya instrumentada queda como está')
+
+// Los escalones aplicados los calcula el SERVIDOR contra la escala. Si los
+// informara el cliente, la evidencia dependería de que el browser los calcule
+// bien, que es justo lo que no se puede auditar después.
+assert.match(impl, /FROM public\.rag_escala_descuento/,
+  'los escalones aplicados se derivan de la escala en el servidor')
+assert.doesNotMatch(impl, /p_escalones_aplicados/,
+  'el cliente no informa los escalones aplicados: los calcula el servidor')
+
+// Un porcentaje fuera de la escala deja NULL, no un número inventado.
+assert.match(impl, /v_esc_desde IS NULL OR v_esc_hasta IS NULL THEN NULL/,
+  'si algún porcentaje no está en la escala, los escalones quedan NULL')
+
+const grantRpc = /GRANT EXECUTE ON FUNCTION public\.instrumentar_sugerencia_rag\([^)]*\)\s*\n?\s*TO authenticated/
+assert.match(sql, grantRpc, 'el cliente tiene que poder llamar al wrapper')
+assert.match(sql, /REVOKE ALL ON FUNCTION noven_private\.instrumentar_sugerencia_rag_impl[\s\S]{0,120}FROM PUBLIC, anon, authenticated/,
+  'el impl no se llama directo desde el cliente')
+
 // --- 4. El juicio usa la necesaria de su propia ventana ---------------------
 
 assert.match(sql, /velocidad_necesaria_al_aplicar/,
@@ -143,14 +187,22 @@ assert.match(bloqueCobertura, /v\.fecha_vencimiento - op\.hoy - s\.dias_donacion
 
 // --- 6. Nada destructivo, nada fuera de alcance -----------------------------
 
+// Se mira el SQL que la migración EJECUTA al aplicarse, sin los cuerpos de
+// función: un UPDATE dentro de una función corre después, sobre la fila que el
+// usuario acaba de crear, y es justamente lo que la instrumentación necesita.
+// Lo que no puede haber es una reescritura masiva el día que se aplica.
+const alAplicar = sql.replace(/\$function\$[\s\S]*?\$function\$/g, '')
+
 for (const prohibido of [
   /\bDROP\s+TABLE\b/i,
   /\bDROP\s+COLUMN\b/i,
+  /\bDROP\s+FUNCTION\b/i,
   /\bTRUNCATE\b/i,
   /\bDELETE\s+FROM\b/i,
-  /\bUPDATE\s+public\.intervenciones_rag\b/i,
+  /\bUPDATE\s+public\./i,
 ]) {
-  assert.doesNotMatch(sql, prohibido, 'la historia RAG no se toca: es auditable')
+  assert.doesNotMatch(alAplicar, prohibido,
+    'al aplicarse, la migración no reescribe ni borra nada: la historia RAG es auditable')
 }
 
 // Los umbrales de riesgo y la política de donación no son de este bloque.

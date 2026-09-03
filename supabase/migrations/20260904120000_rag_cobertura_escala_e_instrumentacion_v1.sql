@@ -144,6 +144,122 @@ COMMENT ON COLUMN public.intervenciones_rag.escalones_aplicados IS
 COMMENT ON COLUMN public.intervenciones_rag.origen_sugerencia IS
   'sugerida_aceptada | sugerida_rechazada | manual. NULL en intervenciones previas a la instrumentación.';
 
+-- --- 2b. Escribir la instrumentación -----------------------------------------
+--
+-- Columnas que nadie llena son decoración. Esto las llena.
+--
+-- Va como RPC dedicada y ADITIVA en vez de extender
+-- `registrar_control_vencimiento_dashboard`: agregarle parámetros con default
+-- crearía una segunda función del mismo nombre y las llamadas existentes
+-- pasarían a ser ambiguas, obligando a dropear la firma que hoy usa
+-- producción. Una función nueva no toca nada de lo que ya funciona.
+--
+-- Sigue el patrón del repositorio: wrapper público SECURITY INVOKER sobre un
+-- impl SECURITY DEFINER en `noven_private`, porque `authenticated` sólo tiene
+-- SELECT sobre `intervenciones_rag` y no debe tener más.
+--
+-- `escalones_aplicados` se calcula EN EL SERVIDOR contra la escala de la
+-- organización, no lo informa el cliente: es el dato con el que después se va a
+-- confrontar la regla contra la realidad, y no debería depender de que el
+-- browser lo calcule bien.
+
+CREATE OR REPLACE FUNCTION noven_private.instrumentar_sugerencia_rag_impl(
+  p_vencimiento_id      uuid,
+  p_cobertura           numeric,
+  p_escalones_sugeridos smallint,
+  p_origen              text
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+  v_uid       uuid := (SELECT auth.uid());
+  v_rag       public.intervenciones_rag%ROWTYPE;
+  v_anterior  numeric;
+  v_esc_desde smallint;
+  v_esc_hasta smallint;
+BEGIN
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'No autenticado' USING ERRCODE = '42501';
+  END IF;
+
+  IF p_origen IS NULL OR p_origen NOT IN ('sugerida_aceptada', 'sugerida_rechazada', 'manual') THEN
+    RAISE EXCEPTION 'Origen de sugerencia invalido' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT * INTO v_rag
+  FROM public.intervenciones_rag r
+  WHERE r.vencimiento_id = p_vencimiento_id
+    AND r.finalizado_at IS NULL
+  ORDER BY r.aplicado_at DESC, r.created_at DESC, r.id DESC
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+
+  IF NOT noven_private.puede_ver_producto_sucursal(v_rag.sucursal_id, v_rag.producto_id) THEN
+    RAISE EXCEPTION 'Sin permiso sobre este producto' USING ERRCODE = '42501';
+  END IF;
+
+  -- La instrumentacion se escribe UNA vez. Si ya la tiene, no se pisa: es
+  -- evidencia historica, no un campo de estado.
+  IF v_rag.origen_sugerencia IS NOT NULL THEN
+    RETURN;
+  END IF;
+
+  SELECT r.porcentaje_descuento INTO v_anterior
+  FROM public.intervenciones_rag r
+  WHERE r.vencimiento_id = p_vencimiento_id
+    AND r.id <> v_rag.id
+  ORDER BY r.aplicado_at DESC, r.created_at DESC, r.id DESC
+  LIMIT 1;
+
+  SELECT e.escalon INTO v_esc_desde
+  FROM public.rag_escala_descuento e
+  WHERE e.organizacion_id = v_rag.organizacion_id AND e.porcentaje = v_anterior;
+
+  SELECT e.escalon INTO v_esc_hasta
+  FROM public.rag_escala_descuento e
+  WHERE e.organizacion_id = v_rag.organizacion_id AND e.porcentaje = v_rag.porcentaje_descuento;
+
+  UPDATE public.intervenciones_rag
+  SET cobertura_al_sugerir = p_cobertura,
+      escalones_sugeridos  = p_escalones_sugeridos,
+      escalones_aplicados  = CASE
+                               WHEN v_esc_desde IS NULL OR v_esc_hasta IS NULL THEN NULL
+                               ELSE (v_esc_hasta - v_esc_desde)::smallint
+                             END,
+      origen_sugerencia    = p_origen
+  WHERE id = v_rag.id;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.instrumentar_sugerencia_rag(
+  p_vencimiento_id      uuid,
+  p_cobertura           numeric DEFAULT NULL,
+  p_escalones_sugeridos smallint DEFAULT NULL,
+  p_origen              text DEFAULT 'manual'
+)
+RETURNS void
+LANGUAGE sql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+  SELECT noven_private.instrumentar_sugerencia_rag_impl(
+    p_vencimiento_id, p_cobertura, p_escalones_sugeridos, p_origen
+  );
+$$;
+
+REVOKE ALL ON FUNCTION noven_private.instrumentar_sugerencia_rag_impl(uuid, numeric, smallint, text)
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.instrumentar_sugerencia_rag(uuid, numeric, smallint, text)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.instrumentar_sugerencia_rag(uuid, numeric, smallint, text)
+  TO authenticated;
+
 -- --- 3. La vista expone las magnitudes de cobertura --------------------------
 
 CREATE OR REPLACE VIEW public.v_seguimiento_rag_actual WITH (security_invoker=true) AS
