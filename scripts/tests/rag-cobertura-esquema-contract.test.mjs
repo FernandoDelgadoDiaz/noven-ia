@@ -111,6 +111,24 @@ assert.match(estandar, /rag\.aplicado_at AT TIME ZONE/,
 assert.doesNotMatch(estandar.replace(/COALESCE\([\s\S]*$/, ''), /op\.hoy/,
   'la comparación primaria no puede usar la ventana de hoy')
 
+// --- 4b. Las columnas nuevas van al final de la vista -----------------------
+//
+// `CREATE OR REPLACE VIEW` en Postgres SÓLO permite agregar columnas al final:
+// insertarlas en el medio cambia el nombre de una columna existente en esa
+// posición y la sentencia falla entera.
+//
+// Esto no es teórico: la primera versión de esta migración las insertaba antes
+// de `estado_seguimiento_rag` y el replay se cayó al aplicarla. Cambiar el
+// orden vuelve a romperlo, así que queda asertado.
+
+const posEstado = sql.indexOf('END AS estado_seguimiento_rag')
+assert.ok(posEstado !== -1, 'la vista debe conservar estado_seguimiento_rag')
+for (const nueva of ['velocidad_necesaria_al_aplicar', 'cobertura', 'dias_desde_ultimo_rag']) {
+  assert.ok(sql.indexOf(`END AS ${nueva}`) > posEstado,
+    `"${nueva}" tiene que ir DESPUÉS de estado_seguimiento_rag:\n`
+    + '  CREATE OR REPLACE VIEW sólo admite columnas nuevas al final')
+}
+
 // --- 5. Las magnitudes que el motor necesita --------------------------------
 
 for (const columna of ['cobertura', 'dias_desde_ultimo_rag']) {

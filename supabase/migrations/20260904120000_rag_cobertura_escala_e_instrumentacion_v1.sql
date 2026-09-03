@@ -187,6 +187,32 @@ CREATE OR REPLACE VIEW public.v_seguimiento_rag_actual WITH (security_invoker=tr
             ELSE COALESCE(obs.cantidad_comprometida, v.cantidad::numeric) / GREATEST(v.fecha_vencimiento - op.hoy - s.dias_donacion, 0)::numeric
         END AS velocidad_necesaria,
 
+    -- CAMBIADO · El juicio usa la necesaria de la ventana observada, no la de hoy.
+        CASE
+            WHEN (v.fecha_vencimiento - op.hoy) <= 0 THEN 'decomiso'::text
+            WHEN (v.fecha_vencimiento - op.hoy) <= s.dias_donacion THEN 'donacion'::text
+            WHEN rag.id IS NULL THEN 'sin_rag'::text
+            WHEN obs.id IS NULL THEN
+            CASE
+                WHEN GREATEST(v.fecha_vencimiento - op.hoy - s.dias_donacion, 0) > 0 AND ps.venta_media_diaria >= (v.cantidad::numeric / GREATEST(v.fecha_vencimiento - op.hoy - s.dias_donacion, 1)::numeric) THEN 'efectivo_por_vmd'::text
+                ELSE 'pendiente_control_operador'::text
+            END
+            WHEN obs.cantidad_comprometida > rag.cantidad_comprometida_al_aplicar THEN 'dato_a_revisar'::text
+            WHEN obs.cantidad_comprometida = 0::numeric THEN 'efectivo'::text
+            WHEN obs.cantidad_comprometida = rag.cantidad_comprometida_al_aplicar THEN 'sin_movimiento'::text
+            WHEN obs.observada_at <= rag.aplicado_at THEN 'pendiente_control_operador'::text
+            WHEN (GREATEST(rag.cantidad_comprometida_al_aplicar - obs.cantidad_comprometida, 0::numeric) / NULLIF(EXTRACT(epoch FROM obs.observada_at - rag.aplicado_at) / 86400.0, 0::numeric))
+                 >= COALESCE(
+                      NULLIF(rag.cantidad_comprometida_al_aplicar
+                             / NULLIF(GREATEST(v.fecha_vencimiento - (rag.aplicado_at AT TIME ZONE 'America/Argentina/Buenos_Aires')::date - s.dias_donacion, 0), 0)::numeric, 0),
+                      -- Si la ventana ya estaba cerrada al aplicar, no hay
+                      -- estándar histórico contra el cual juzgar: se cae a la
+                      -- necesaria de hoy en vez de dar por bueno cualquier ritmo.
+                      obs.cantidad_comprometida / GREATEST(v.fecha_vencimiento - op.hoy - s.dias_donacion, 1)::numeric
+                    ) THEN 'efectivo'::text
+            ELSE 'insuficiente'::text
+        END AS estado_seguimiento_rag,
+
     -- NUEVO · La necesaria que regía cuando se aplicó el RAG.
     --
     -- Se reconstruye con la ventana comercial de ESE día y el stock comprometido
@@ -213,33 +239,7 @@ CREATE OR REPLACE VIEW public.v_seguimiento_rag_actual WITH (security_invoker=tr
         CASE
             WHEN rag.id IS NULL THEN NULL::numeric
             ELSE EXTRACT(epoch FROM op.ahora - rag.aplicado_at) / 86400.0
-        END AS dias_desde_ultimo_rag,
-
-    -- CAMBIADO · El juicio usa la necesaria de la ventana observada, no la de hoy.
-        CASE
-            WHEN (v.fecha_vencimiento - op.hoy) <= 0 THEN 'decomiso'::text
-            WHEN (v.fecha_vencimiento - op.hoy) <= s.dias_donacion THEN 'donacion'::text
-            WHEN rag.id IS NULL THEN 'sin_rag'::text
-            WHEN obs.id IS NULL THEN
-            CASE
-                WHEN GREATEST(v.fecha_vencimiento - op.hoy - s.dias_donacion, 0) > 0 AND ps.venta_media_diaria >= (v.cantidad::numeric / GREATEST(v.fecha_vencimiento - op.hoy - s.dias_donacion, 1)::numeric) THEN 'efectivo_por_vmd'::text
-                ELSE 'pendiente_control_operador'::text
-            END
-            WHEN obs.cantidad_comprometida > rag.cantidad_comprometida_al_aplicar THEN 'dato_a_revisar'::text
-            WHEN obs.cantidad_comprometida = 0::numeric THEN 'efectivo'::text
-            WHEN obs.cantidad_comprometida = rag.cantidad_comprometida_al_aplicar THEN 'sin_movimiento'::text
-            WHEN obs.observada_at <= rag.aplicado_at THEN 'pendiente_control_operador'::text
-            WHEN (GREATEST(rag.cantidad_comprometida_al_aplicar - obs.cantidad_comprometida, 0::numeric) / NULLIF(EXTRACT(epoch FROM obs.observada_at - rag.aplicado_at) / 86400.0, 0::numeric))
-                 >= COALESCE(
-                      NULLIF(rag.cantidad_comprometida_al_aplicar
-                             / NULLIF(GREATEST(v.fecha_vencimiento - (rag.aplicado_at AT TIME ZONE 'America/Argentina/Buenos_Aires')::date - s.dias_donacion, 0), 0)::numeric, 0),
-                      -- Si la ventana ya estaba cerrada al aplicar, no hay
-                      -- estándar histórico contra el cual juzgar: se cae a la
-                      -- necesaria de hoy en vez de dar por bueno cualquier ritmo.
-                      obs.cantidad_comprometida / GREATEST(v.fecha_vencimiento - op.hoy - s.dias_donacion, 1)::numeric
-                    ) THEN 'efectivo'::text
-            ELSE 'insuficiente'::text
-        END AS estado_seguimiento_rag
+        END AS dias_desde_ultimo_rag
    FROM vencimientos v
      JOIN productos p ON p.id = v.producto_id
      JOIN producto_sucursal ps ON ps.producto_id = v.producto_id AND ps.sucursal_id = v.sucursal_id AND ps.organizacion_id = p.organizacion_id
