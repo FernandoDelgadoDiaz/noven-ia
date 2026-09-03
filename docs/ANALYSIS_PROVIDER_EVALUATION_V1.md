@@ -1,14 +1,14 @@
 # NOVEN · Evaluación de proveedor de análisis V1
 
 **Corte documental:** 2026-09-03.
-**Estado:** corpus, runner y contratos listos; ejecución empírica pendiente de `OPENAI_API_KEY`.
+**Estado:** corpus, runner y contratos listos; **ejecución empírica pendiente de `OPENAI_API_KEY`**, que debe cargarse en los secretos de GitHub Actions y en Netlify.
 **Decisión de producto:** OpenAI, tomada por el responsable del producto el 2026-09-03.
 
 ## 1. Qué se evalúa
 
 El benchmark mide exclusivamente si la respuesta respeta la verdad determinística y los guardarraíles de `SYSTEM_ADMIN`. No puntúa tono, fluidez, extensión ni preferencia estilística.
 
-El corpus `scripts/provider-evaluation/corpus-v1.json` contiene tres sucursales, productos, identificadores y EAN deliberadamente sintéticos. Para cada caso fija:
+El corpus vive en `scripts/evaluacion-proveedor/` y contiene **ocho escenarios**: sucursal, productos, identificadores y EAN deliberadamente sintéticos, sin un solo dato comercial real. Para cada caso fija:
 
 - unidades expuestas, calculadas como `max(cantidad_comprometida - VMD × días_comerciales, 0)`, sin `floor`;
 - dinero en riesgo a costo unitario sin IVA;
@@ -16,7 +16,27 @@ El corpus `scripts/provider-evaluation/corpus-v1.json` contiene tres sucursales,
 - trimestre actual abierto;
 - membresía exacta del conjunto de productos recurrentes.
 
-El scorer produce evidencia por aserción y cinco dimensiones: fidelidad económica, comparabilidad, trimestre abierto, estacionalidad y recurrencia. La validación falla si el modelo inventa una mejora sin base comparable, cierra el trimestre abierto, afirma estacionalidad con dos ventanas o llama recurrente a un producto presente en una sola ventana.
+Cada escenario declara además la **trampa** que pone: la cosa concreta que un modelo flojo hace mal con esa entrada. Un corpus sin trampas mide que el modelo sepa leer; con trampas mide que sepa abstenerse, que es lo caro.
+
+El scorer aplica diez verificadores. **Tres son obligatorios** y deciden si un proveedor sirve —`porcentaje-sin-base`, `estacionalidad-inventada` y `trimestre-abierto-como-cerrado`—; los otros siete informan calidad sin bloquear, porque son más sensibles al fraseo y un falso positivo no debería vetar una migración.
+
+Los detectores son deliberadamente conservadores. `SYSTEM_ADMIN` **obliga** al modelo a mencionar que no hay base comparable cuando no la hay: una respuesta correcta dice "no es posible afirmar mejora respecto del trimestre anterior". Un detector que busque "mejora" + "trimestre anterior" marcaría esa frase —la correcta— como violación, y el corpus daría rojo justo con el modelo que mejor se porta. Por eso cada verificador exige que la afirmación sea afirmativa, mirando frases de abstención y la negación inmediatamente anterior al marcador.
+
+## 1.1 Qué impide que el corpus mienta
+
+Tres mecanismos, en `scripts/tests/corpus-evaluacion-contract.test.mjs`, que corren en `npm test` sin red:
+
+- **Deriva del prompt.** `formato.mjs` replica el armado del prompt de `analisis.ts`. El contrato compara once marcadores estructurales y cuatro acciones determinísticas entre ambos archivos y falla si se separan. Sin esto el corpus mediría un texto que nadie envía.
+- **Deriva de la configuración.** `proveedor.mjs` **extrae** de `analisis.ts` la URL, el modelo, la credencial y los parámetros de inferencia, en vez de declararlos. Si producción cambia de modelo, la evaluación cambia con ella en la misma corrida. Declararlos por separado falla en silencio: el corpus da verde mientras producción corre otro modelo.
+- **Que los verificadores verifiquen.** Cada guardarraíl se prueba contra una respuesta que lo viola **y** contra una respuesta correcta que habla del mismo tema. Un guardarraíl que no dispara da verde siempre y no protege nada.
+
+Además, una tabla de anclas escrita a mano fija unidades, monto, cobertura y base comparable de los ocho escenarios. Recalcular la verdad desde los mismos productos que la generaron no prueba nada; el ancla no se mueve sola, así que un cambio aparece en el diff.
+
+## 1.2 Nota de consolidación
+
+Durante un tiempo hubo **dos corpus a la vez**: `scripts/provider-evaluation/` y `scripts/evaluacion-proveedor/`, construidos en paralelo en sesiones distintas sin verse. Se consolidó en el segundo, que tiene ocho escenarios en vez de tres, la atadura al prompt y a la configuración de producción, y la autoprueba de los detectores. Del primero se conservó el workflow de evaluación contra la API real, reapuntado.
+
+El contrato del workflow verifica que `scripts/provider-evaluation/` no reaparezca: dos corpus significan que uno queda sin mantener y nadie sabe cuál.
 
 ## 2. Proveedor seleccionado
 
@@ -44,7 +64,8 @@ La credencial se entrega como variable de entorno y nunca se guarda en Git:
 ```bash
 export OPENAI_API_KEY=...
 npm run eval:analysis-providers -- --preflight
-npm run eval:analysis-providers -- --output .artifacts/provider-evaluation/d2.json
+npm run eval:analysis-providers -- --preflight
+npm run eval:analysis-providers -- --repeticiones 3 --output .artifacts/provider-evaluation/openai-us.json
 ```
 
 El runner toma `SYSTEM_ADMIN` directamente de `netlify/functions/_analisis_policy.ts`, registra SHA-256 del prompt y del corpus, guarda la respuesta textual y el uso informado por OpenAI, y se niega a sobrescribir un resultado existente. No abre Supabase ni lee datos de producción.

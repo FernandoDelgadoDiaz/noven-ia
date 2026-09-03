@@ -16,21 +16,29 @@ verdad de base conocida en vez de contra la impresión de quien lea la salida.
 ## Cómo se corre
 
 ```bash
-OPENAI_API_KEY=... node scripts/evaluacion-proveedor/correr.mjs --proveedor openai
+OPENAI_API_KEY=... npm run eval:analysis-providers -- --preflight
+OPENAI_API_KEY=... npm run eval:analysis-providers -- --repeticiones 3
 ```
 
 Opciones:
 
 | Flag | Qué hace |
 |---|---|
-| `--proveedor openai\|deepseek` | Cuál se evalúa. Default `openai`. |
+| `--preflight` | Verifica credencial y modelo con una llamada mínima, sin evaluar. |
 | `--repeticiones N` | Corre cada escenario N veces. Default 1. |
 | `--escenario <id>` | Corre uno solo, para iterar sobre el prompt. |
 | `--salida informe.json` | Guarda el informe completo con las respuestas. |
 
-El modelo se elige con `OPENAI_MODEL` / `DEEPSEEK_MODEL`. Los parámetros de
-inferencia son los mismos que usa producción (`temperature: 0.2`,
-`max_tokens: 1500`): evaluar con otros mediría un sistema que nadie despliega.
+**El proveedor no se elige por flag.** Endpoint, modelo, credencial y parámetros
+de inferencia se extraen de `netlify/functions/analisis.ts` (ver
+`proveedor.mjs`). Una evaluación con configuración propia mide un sistema que
+nadie despliega, y falla en silencio: da verde mientras producción corre otro
+modelo. Para evaluar otro proveedor se cambia la Function, que es donde la
+decisión vive.
+
+`--preflight` separa "el proveedor no responde" de "el modelo no adhiere": un
+problema de despliegue y uno de calidad se arreglan distinto, y confundirlos
+hace perder una ronda entera.
 
 **Sobre `--repeticiones`:** `temperature` no es 0, así que la respuesta no es
 determinista aunque el corpus sí lo sea. Un guardarraíl que falla una vez de
@@ -43,6 +51,7 @@ tres es un guardarraíl que falla. Para una decisión de proveedor, correr con
   concreta que un modelo flojo hace mal con esa entrada. La verdad de base se
   deriva de los mismos objetos con los que se arma el prompt.
 - `formato.mjs` — el armado del prompt, replicado de `analisis.ts`.
+- `proveedor.mjs` — extrae de `analisis.ts` la configuración real de inferencia.
 - `guardrails.mjs` — los verificadores.
 - `correr.mjs` — el corredor.
 
@@ -93,7 +102,7 @@ y cubre tres cosas:
    de importarlo, porque importarlo exigiría refactorizar producción para
    acomodar un script de evaluación. La copia se paga con riesgo de deriva, y
    el contrato lo cubre: si producción cambia un marcador estructural y el
-   corpus no, va rojo.
+   corpus no, va rojo. La configuración de inferencia no se copia: se extrae.
 2. **Verdad de base.** Una tabla de anclas escrita a mano fija unidades, monto,
    cobertura y base comparable de los ocho escenarios. Editar un producto mueve
    la verdad calculada pero no el ancla, así que el cambio aparece en el diff.

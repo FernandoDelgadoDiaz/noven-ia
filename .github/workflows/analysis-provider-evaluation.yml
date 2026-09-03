@@ -8,7 +8,7 @@ on:
       - .github/workflows/analysis-provider-evaluation.yml
       - netlify/functions/_analisis_policy.ts
       - netlify/functions/analisis.ts
-      - scripts/provider-evaluation/**
+      - scripts/evaluacion-proveedor/**
 
 permissions:
   contents: read
@@ -43,7 +43,7 @@ jobs:
       - name: Evaluate deterministic synthetic corpus
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: npm run eval:analysis-providers -- --output .artifacts/provider-evaluation/openai-us.json
+        run: npm run eval:analysis-providers -- --repeticiones 3 --output .artifacts/provider-evaluation/openai-us.json
 
       - name: Upload synthetic evaluation evidence
         if: always()

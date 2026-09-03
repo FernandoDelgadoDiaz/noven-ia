@@ -167,9 +167,13 @@ Alcance comprometido en el PR #125:
 |---|---|
 | 1 · corpus sintético determinístico | **HECHO** — PR #146 |
 | 2 · medir adherencia a guardarraíles | **BLOQUEADO** — falta `OPENAI_API_KEY` |
-| 3 · jurisdicción y retención | PENDIENTE |
-| 4 · presentar la comparación | PENDIENTE |
-| 5 · migración + `ai/decisions.md` | PENDIENTE |
+| 3 · jurisdicción y retención | **HECHO** — PR #141 |
+| 4 · presentar la comparación | **N/A por decisión del responsable** |
+| 5 · migración + `ai/decisions.md` | **ESCRITO, sin mergear** — PR #141, en draft |
+
+El paso 4 se canceló explícitamente: el responsable del producto eligió OpenAI el 2026-09-03 y la comparación contra otros candidatos se descartó antes de ejecutar llamadas pagas. **No se fabricaron resultados comparativos.**
+
+El PR #141 queda **en draft a propósito**. Tiene la migración completa, el registro en `ai/decisions.md` con jurisdicción y retención, y el workflow que corre el corpus contra la API real. Lo que no tiene es la corrida: sin `OPENAI_API_KEY` el paso 2 no puede ejecutarse, y mergear la migración sin haber medido adherencia sería cambiar el comportamiento del análisis a ciegas. El workflow está configurado para correr sobre ese mismo PR en cuanto el secreto exista, así que el PR es su propio gate.
 
 El corpus vive en `scripts/evaluacion-proveedor/`: ocho escenarios deterministas con verdad de base conocida —unidades en riesgo, monto expuesto, existencia de ventana previa comparable, recurrencia—, sin datos comerciales reales. Diez verificadores, de los cuales tres son obligatorios y deciden si un proveedor sirve: `porcentaje-sin-base`, `estacionalidad-inventada` y `trimestre-abierto-como-cerrado`.
 
