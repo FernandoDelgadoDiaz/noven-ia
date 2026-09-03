@@ -1,0 +1,94 @@
+# Configuración de secret scanning para NoVen.
+#
+# Extiende el set de reglas por defecto de gitleaks y le agrega las formas
+# concretas que este repositorio maneja. Las reglas genéricas no reconocen un
+# JWT de Supabase ni una clave VAPID: son cadenas válidas de base64 que sólo
+# significan algo acá.
+#
+# QUÉ SE ESCANEA
+#
+# El árbol de trabajo, no el historial. El riesgo real no es el commit
+# deliberado de una credencial —eso se rota y se sabe— sino el archivo de
+# diagnóstico pegado dentro de un PR sin mirar qué contenía. Escanear el árbol
+# lo detecta antes del merge; escanear el historial completo en cada PR marca
+# lo mismo una y otra vez hasta que alguien deja de leer la salida.
+
+title = "NoVen · reglas de secret scanning"
+
+[extend]
+useDefault = true
+
+# --- Claves de Supabase -----------------------------------------------------
+#
+# `service_role` bypassa RLS por completo: es la credencial más grave del
+# proyecto. Va en las Netlify Functions y jamás en el cliente.
+#
+# La `anon` key es pública por diseño (viaja en el bundle del browser), así que
+# no se marca: marcarla generaría ruido en cada build y enseñaría a ignorar la
+# alerta, que es el modo en que muere una herramienta como ésta.
+
+# La regla genérica `jwt` ya marca cualquier JWT, pero no distingue una anon
+# key —pública por diseño— de la credencial que bypassa RLS entera. Ésta sí.
+#
+# `service_role` viaja dentro del payload en base64, y base64 codifica de a
+# tres bytes: el mismo texto produce tres cadenas distintas según en qué offset
+# caiga dentro del JSON. Un solo literal deja pasar dos de cada tres casos —de
+# hecho la primera versión de esta regla no disparó contra un JWT de prueba
+# real, y sólo se notó porque el reporte mostró qué regla había cazado qué.
+[[rules]]
+id = "supabase-service-role-jwt"
+description = "JWT de Supabase con rol service_role (bypassa RLS)"
+regex = '''eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]*?(c2VydmljZV9yb2xl|cnZpY2Vfcm9s|ZXJ2aWNlX3Jv)[A-Za-z0-9_-]*\.[A-Za-z0-9_-]{10,}'''
+keywords = ["eyj"]
+
+[[rules]]
+id = "supabase-secret-key"
+description = "Clave secreta de Supabase (formato sb_secret_)"
+regex = '''sb_secret_[A-Za-z0-9_-]{20,}'''
+keywords = ["sb_secret_"]
+
+# --- Proveedores de inferencia ---------------------------------------------
+
+[[rules]]
+id = "openai-api-key"
+description = "Clave de API de OpenAI"
+regex = '''sk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}'''
+keywords = ["sk-"]
+
+[[rules]]
+id = "deepseek-api-key"
+description = "Clave de API de DeepSeek"
+regex = '''(?i)deepseek[_-]?api[_-]?key["'\s:=]{1,10}[A-Za-z0-9_-]{20,}'''
+keywords = ["deepseek"]
+
+# --- Web push ---------------------------------------------------------------
+#
+# La clave VAPID privada permite firmar notificaciones como si fueran de NoVen.
+# La pública no: va al browser por diseño.
+
+[[rules]]
+id = "vapid-private-key"
+description = "Clave privada VAPID de web-push"
+regex = '''(?i)vapid[_-]?private[_-]?key["'\s:=]{1,10}[A-Za-z0-9_-]{40,}'''
+keywords = ["vapid"]
+
+[allowlist]
+description = "Rutas y valores que no son secretos"
+
+paths = [
+  # Artefactos de build: contienen la anon key embebida, que es pública.
+  '''^dist/''',
+  '''^node_modules/''',
+  # El corpus de evaluación usa EAN y códigos inventados que disparan reglas
+  # genéricas de números largos.
+  '''^scripts/evaluacion-proveedor/corpus\.mjs$''',
+  # Los artefactos del replay son hashes y SQL de catálogo, no credenciales.
+  '''^scripts/migration-replay/baseline-v1/''',
+  # Este mismo archivo: las regex de arriba parecen secretos.
+  '''^\.gitleaks\.toml$''',
+]
+
+regexes = [
+  # Placeholders de documentación y de .env.example.
+  '''(?i)(tu[_-]clave|your[_-]key|reemplaz|placeholder|xxxx+|\.\.\.)''',
+]
