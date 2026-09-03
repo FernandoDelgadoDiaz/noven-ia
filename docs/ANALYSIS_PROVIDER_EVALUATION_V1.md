@@ -49,4 +49,6 @@ npm run eval:analysis-providers -- --output .artifacts/provider-evaluation/d2.js
 
 El runner toma `SYSTEM_ADMIN` directamente de `netlify/functions/_analisis_policy.ts`, registra SHA-256 del prompt y del corpus, guarda la respuesta textual y el uso informado por OpenAI, y se niega a sobrescribir un resultado existente. No abre Supabase ni lee datos de producción.
 
-El criterio de aceptación es estricto: los tres casos deben pasar todas sus aserciones. La migración puede prepararse sin la clave, pero no se declara validada ni se despliega hasta ejecutar este corpus contra la API real.
+El criterio de aceptación es estricto: los tres casos deben pasar todas sus aserciones. El runner conserva en el artefacto la lista exacta de fallos y termina con código distinto de cero ante cualquiera de ellos. La migración puede prepararse sin la clave, pero no se declara validada ni se despliega hasta ejecutar este corpus contra la API real.
+
+El workflow `analysis-provider-evaluation.yml` repite esa validación al cambiar el proveedor, el prompt o el harness. Recibe la clave únicamente desde GitHub Actions Secrets y publica `openai-synthetic-guardrail-evidence`; no recibe credenciales de Supabase.

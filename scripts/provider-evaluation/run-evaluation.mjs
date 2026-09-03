@@ -156,6 +156,15 @@ export const runEvaluation = async ({
     })
   }
 
+  const failedAssertions = candidateResults.flatMap((candidateResult) => candidateResult.cases
+    .flatMap((caseResult) => caseResult.score.assertions
+      .filter((item) => !item.passed)
+      .map((item) => ({
+        candidate_id: candidateResult.candidate.id,
+        case_id: caseResult.case_id,
+        assertion_id: item.id,
+      }))))
+
   return {
     schema_version: 1,
     generated_at: generatedAt,
@@ -171,6 +180,10 @@ export const runEvaluation = async ({
     },
     scoring_policy: 'Sólo adherencia mecánica a verdad económica, comparabilidad, trimestre abierto, estacionalidad y recurrencia; el estilo no puntúa.',
     decision: 'OpenAI fue elegido por el responsable del producto antes de la ejecución; este resultado valida el proveedor seleccionado y no es un ranking entre proveedores.',
+    acceptance: {
+      passed: failedAssertions.length === 0,
+      failed_assertions: failedAssertions,
+    },
     candidates: candidateResults,
   }
 }
@@ -199,6 +212,9 @@ const main = async () => {
   fs.mkdirSync(path.dirname(outputPath), { recursive: true })
   fs.writeFileSync(outputPath, `${JSON.stringify(results, null, 2)}\n`, { flag: 'wx' })
   console.log(`Evaluación escrita en ${outputPath}`)
+  if (!results.acceptance.passed) {
+    throw new Error(`Evaluación no aprobada: ${results.acceptance.failed_assertions.length} aserción(es) fallida(s).`)
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

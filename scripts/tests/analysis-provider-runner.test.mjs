@@ -69,6 +69,9 @@ assert.ok(requests.every((request) => JSON.parse(request.init.body).store === fa
 assert.equal(result.candidates.length, 1)
 assert.equal(result.candidates[0].cases.length, 3)
 assert.match(result.decision, /OpenAI fue elegido/)
+assert.equal(result.acceptance.passed, false,
+  'una respuesta incompleta no puede dejar el benchmark en verde')
+assert.ok(result.acceptance.failed_assertions.length > 0)
 assert.doesNotMatch(JSON.stringify(result), new RegExp(secret), 'la evidencia nunca incluye la clave')
 
 const source = fs.readFileSync(path.join(process.cwd(), 'scripts/provider-evaluation/run-evaluation.mjs'), 'utf8')
@@ -76,5 +79,7 @@ assert.doesNotMatch(source, /SUPABASE_(?:URL|SERVICE_ROLE_KEY)|meqvjabgyrgwkxpcl
 assert.match(source, /synthetic_deterministic_only/)
 assert.match(source, /SYNTHETIC-NOT-A-REAL-EAN-/)
 assert.match(source, /flag: 'wx'/, 'el resultado no debe sobrescribir evidencia anterior')
+assert.match(source, /if \(!results\.acceptance\.passed\)/,
+  'el comando debe fallar cuando OpenAI incumple cualquier aserción')
 
 console.log('✓ Runner del OpenAI elegido usa sólo corpus sintético, ruta US y falla sin credencial')
