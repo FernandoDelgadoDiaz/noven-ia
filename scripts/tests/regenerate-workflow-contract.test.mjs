@@ -26,6 +26,11 @@ for (const automatico of ['push:', 'pull_request:', 'schedule:', 'workflow_run:'
 }
 assert.match(workflow, /motivo:\s*\n\s*description:/,
   'cada regeneración deja registrado su motivo en el historial de runs')
+assert.match(
+  workflow,
+  /emitir_payload_en_log:\s*\n\s*description:[^\n]*\n\s*required:\s*false\s*\n\s*default:\s*false\s*\n\s*type:\s*boolean/,
+  'el respaldo en el log debe permanecer apagado por defecto',
+)
 
 // --- No puede escribir en el repositorio ------------------------------------
 assert.match(workflow, /permissions:\s*\n\s*contents:\s*read/,
@@ -60,6 +65,36 @@ assert.match(workflow, /if-no-files-found: error/,
   'un artefacto vacío es un fallo, no un éxito silencioso')
 assert.match(workflow, /GITHUB_STEP_SUMMARY/,
   'el resumen permite revisar sin descargar')
+
+// --- Recuperación desde log, sólo por decisión explícita --------------------
+assert.match(
+  workflow,
+  /- name: Emitir respaldo verificable en el log\s*\n\s*if: \$\{\{ inputs\.emitir_payload_en_log \}\}/,
+  'el payload del log sólo se emite cuando se activa su input manual',
+)
+assert.match(
+  workflow,
+  /extraer-expectativa-del-log\.mjs --emit/,
+  'el workflow usa el emisor/extractor versionado del repositorio',
+)
+
+const extractor = fs.readFileSync(
+  path.join(root, 'scripts/migration-replay/extraer-expectativa-del-log.mjs'),
+  'utf8',
+)
+for (const delimitador of [
+  'NOVEN_REPLAY_EXPECTED_FINGERPRINT_GZIP_BASE64_V1_BEGIN',
+  'NOVEN_REPLAY_EXPECTATION_GZIP_BASE64_V1_BEGIN',
+]) {
+  assert.match(extractor, new RegExp(delimitador),
+    'cada archivo debe tener un delimitador propio')
+}
+assert.match(extractor, /gzipSync/,
+  'los archivos salen comprimidos antes de codificarse para el log')
+assert.match(extractor, /createHash\('sha256'\)/,
+  'cada archivo queda protegido por SHA-256')
+assert.match(extractor, /checksum SHA-256 no coincide/,
+  'el extractor debe rechazar bytes que no coincidan con el checksum')
 
 // --- Espeja el entorno de CI ------------------------------------------------
 // Una expectativa generada con otra versión no coincidiría con la que produce

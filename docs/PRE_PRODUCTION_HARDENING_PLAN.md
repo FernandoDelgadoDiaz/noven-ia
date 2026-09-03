@@ -133,6 +133,10 @@ Es `workflow_dispatch` únicamente, con `permissions: contents: read`, y **no co
 
 Cubre la mitad adyacente de la fricción documentada en `docs/MIGRATION_REPLAY_BASELINE_V1.md` §14.4 —correr el replay sin tener el entorno— pero **no** la extracción de fragmentos desde el catálogo productivo, que sigue manual y sigue siendo la condición de salida pendiente.
 
+**1.4F — Respaldo verificable en logs.** El artefacto sigue siendo la vía principal, pero el workflow incorpora una recuperación opt-in para entornos donde no pueda descargarse: emite `expected-replay-fingerprint.json` y `replay-expectation.json` como `gzip+base64`, cada uno entre delimitadores propios y acompañado por su SHA-256. El input `emitir_payload_en_log` es booleano y permanece apagado por defecto.
+
+`scripts/migration-replay/extraer-expectativa-del-log.mjs` sirve como emisor versionado y como extractor. Al extraer exige exactamente un bloque de cada archivo, valida delimitadores, nombre, encoding, base64 canónico, gzip, checksum y JSON antes de escribir únicamente los dos nombres permitidos. Contratos: `regenerate-workflow-contract.test.mjs` y `replay-log-extractor.test.mjs`.
+
 **Primer ejercicio real del mecanismo.** La migración de C3 fue la primera posterior al cutoff. El workflow se disparó sobre su rama (run `33677961434`), regeneró la expectativa, verificó que el ancla siguiera intacta, que sólo cambiaran los dos archivos de la expectativa, y corrió la suite completa con el resultado. La expectativa quedó atada a `20260902170000_cuota_por_actor_y_cache_analisis_v1.sql` en el commit `129db11`. El mecanismo funcionó de punta a punta en su primer uso.
 
 **El gate es bloqueante, no advisory.** `verify-structural-fingerprint.mjs` lanza excepción ante cualquier diferencia estructural no explicada y ante un cambio del SHA de la huella productiva registrada. `run-baseline-replay.sh` corre con `set -euo pipefail`, de modo que un fallo del replay corta el job antes de los gates de aislamiento y del E2E.
@@ -183,10 +187,10 @@ La auditoría original enunciaba cuatro fases (0, 1, 2 y 3), pero el contenido d
 
 Qué corre y qué prueba, al 2026-09-02:
 
-- **`scripts/tests/`: 94 archivos `.test.mjs`.** Contratos en Node puro (`node:assert`), sin framework: leen el código fuente o transpilan un módulo TS y afirman invariantes. `scripts/test.mjs` los corre en procesos separados y devuelve exit≠0 si alguno falla. Trece fueron creados por este plan: `admin-rate-limit-contract`, `auth-directory-scope-contract`, `ci-trigger-contract`, `cuota-analisis-contract`, `desafio5s-cold-archive-contract`, `live-isolation-gates-contract`, `no-browser-business-writes`, `regenerate-workflow-contract` y los cinco `migration-replay-*`.
+- **`scripts/tests/`: 95 archivos `.test.mjs`.** Contratos en Node puro (`node:assert`), sin framework: leen el código fuente o transpilan un módulo TS y afirman invariantes. `scripts/test.mjs` los corre en procesos separados y devuelve exit≠0 si alguno falla. Catorce fueron creados por este plan: `admin-rate-limit-contract`, `auth-directory-scope-contract`, `ci-trigger-contract`, `cuota-analisis-contract`, `desafio5s-cold-archive-contract`, `live-isolation-gates-contract`, `no-browser-business-writes`, `regenerate-workflow-contract`, `replay-log-extractor` y los cinco `migration-replay-*`.
 - **`e2e/`: 2 specs, 14 tests** (12 en `critical-flows.spec.mjs`, 2 en `catalog-role-boundary.spec.mjs`), 3 fixtures. **Corren contra un Supabase interceptado por fixture** (`VITE_SUPABASE_URL=http://127.0.0.1:4173/__supabase`), no real: son tests de flujo de UI y **no ejercen RLS**. La verificación con backend real vive exclusivamente en `scripts/live-isolation/`.
 - **`.github/workflows/ci.yml`: un único job `verify`,** en orden — `npm test` → `npm run lint` → `npm run build` → replay de Baseline V1 con fingerprint estructural → export de credenciales efímeras → Gates 1–3 de aislamiento → cuota por actor bajo concurrencia → Playwright/Chromium → parada del Supabase efímero (`if: always()`). Triggers: push a `master` y pull request contra `master`. El trigger dedicado de la rama histórica `feat/multitenant-architecture-v1`, ya fusionada, fue retirado en E1 y quedó cubierto por `ci-trigger-contract.test.mjs`.
-- **`.github/workflows/regenerate-replay-expectation.yml`:** manual, para regenerar la expectativa móvil sin tener el entorno. Ver 1.4E.
+- **`.github/workflows/regenerate-replay-expectation.yml`:** manual, para regenerar la expectativa móvil sin tener el entorno; opcionalmente emite el respaldo verificable en logs, apagado por defecto. Ver 1.4E–1.4F.
 
 Estado de producción al mismo corte (`meqvjabgyrgwkxpclqxp`, Postgres 17.6, `sa-east-1`):
 

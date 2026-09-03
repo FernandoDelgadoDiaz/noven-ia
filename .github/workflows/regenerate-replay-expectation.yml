@@ -24,6 +24,11 @@ on:
         description: 'Por qué se regenera (queda en el historial de runs)'
         required: true
         type: string
+      emitir_payload_en_log:
+        description: 'Respaldo gzip+base64 verificable si no se puede descargar el artefacto'
+        required: false
+        default: false
+        type: boolean
 
 # Sólo lectura: este workflow no puede escribir en el repositorio.
 permissions:
@@ -94,6 +99,13 @@ jobs:
       - name: Suite completa con la expectativa nueva
         run: npm test
 
+      # Vía de recuperación, apagada por defecto para no llenar el log. El
+      # emisor usa delimitadores distintos y SHA-256 por archivo; el extractor
+      # valida ambos payloads completos antes de escribir cualquiera.
+      - name: Emitir respaldo verificable en el log
+        if: ${{ inputs.emitir_payload_en_log }}
+        run: node scripts/migration-replay/extraer-expectativa-del-log.mjs --emit
+
       - name: Resumen para revisar sin descargar
         if: always()
         shell: bash
@@ -117,6 +129,10 @@ jobs:
             echo
             echo 'Descargá el artefacto `expectativa-replay-regenerada`, copiá los dos archivos'
             echo 'sobre `scripts/migration-replay/baseline-v1/`, corré `npm test` y commiteá.'
+            echo
+            echo 'Si activaste `emitir_payload_en_log`, también podés descargar el log y extraer'
+            echo 'su respaldo con `extraer-expectativa-del-log.mjs`; el script verifica el SHA-256'
+            echo 'de ambos archivos antes de escribirlos.'
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Publicar expectativa regenerada

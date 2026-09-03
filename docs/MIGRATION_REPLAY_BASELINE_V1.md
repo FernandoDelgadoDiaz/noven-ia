@@ -217,6 +217,14 @@ Se dispara a mano sobre la rama que corresponda, corre la misma regeneración en
 
 **No commitea ni pushea, y es de sólo lectura sobre el repositorio.** Es deliberado: el diff de la expectativa es exactamente lo que hay que mirar en el PR, porque muestra qué cambio estructural introduce la migración. Un workflow que lo commiteara solo convertiría esa revisión en un paso automático que nadie lee. Antes de publicar el artefacto verifica que el ancla no haya sido tocada, que no haya cambiado nada fuera de la expectativa móvil, y que la suite pase entera con el resultado.
 
+Si GitHub no permite descargar el artefacto, el input manual `emitir_payload_en_log` habilita una vía de recuperación apagada por defecto. El workflow emite ambos archivos como `gzip+base64`, con delimitadores distintos y SHA-256 por archivo. El log descargado se extrae en un directorio separado —nunca directamente sobre el ancla— con:
+
+```bash
+node scripts/migration-replay/extraer-expectativa-del-log.mjs workflow.log /tmp/expectativa-replay
+```
+
+El extractor exige exactamente un bloque de cada tipo, valida base64 y gzip, compara el SHA-256 sobre los bytes descomprimidos, comprueba que ambos sean JSON y recién entonces escribe los dos nombres permitidos. Un bloque faltante, repetido, truncado o alterado termina con código distinto de cero sin aceptar el resultado.
+
 ### 14.3 Qué se perdió
 
 **El gate dejó de responder, en cada corrida, la pregunta que originó el ítem 1.4: ¿el repositorio sigue reconstruyendo lo que hay en producción?**
