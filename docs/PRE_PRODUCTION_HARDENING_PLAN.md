@@ -1,7 +1,7 @@
 # NOVEN · Plan de endurecimiento pre-producción
 
 **Estado del documento:** reconstruido desde evidencia del repositorio el 2026-09-02.
-**Punto de verificación:** `master` = `ef89dcd`.
+**Punto de verificación:** `master` = `c9ef560`.
 
 ## 0. Por qué existe este documento
 
@@ -82,7 +82,7 @@ Regla de trabajo vigente: un PR por ítem, rama → PR → CI verde → merge. N
 - Bypass cerrado: los handlers legacy devuelven 404 cuando `adminLaneForPath` no matchea, de modo que `/.netlify/functions/admin-*` ya no es una vía alternativa sin límite.
 - Contrato: `scripts/tests/admin-rate-limit-contract.test.mjs`.
 
-**Cuota por actor en Postgres (este PR).** La vía nativa de Netlify no alcanzaba, por dos razones que se descubrieron al medirlas: `config.rateLimit` sólo existe en el runtime v2 y **14 de las 16 funciones son handlers v1**, de modo que el techo real no era "dos reglas" sino "dos reglas *y* migrar cada función a v2"; y la agregación es por IP, que en un supermercado —donde toda la sucursal sale por una IP pública— traba a los operadores legítimos sin frenar a quien cambie de red.
+**Cuota por actor en Postgres (C3, PR #140).** La vía nativa de Netlify no alcanzaba, por dos razones que se descubrieron al medirlas: `config.rateLimit` sólo existe en el runtime v2 y **14 de las 16 funciones son handlers v1**, de modo que el techo real no era "dos reglas" sino "dos reglas *y* migrar cada función a v2"; y la agregación es por IP, que en un supermercado —donde toda la sucursal sale por una IP pública— traba a los operadores legítimos sin frenar a quien cambie de red.
 
 El actor que hay que limitar es el usuario, y la única capa que lo conoce de forma confiable es la base.
 
@@ -93,7 +93,7 @@ El actor que hay que limitar es el usuario, y la única capa que lo conoce de fo
 - Límites 10/hora y 20/día por usuario. 429 al superarlos, 503 si el contador no responde.
 - Contratos: `cuota-analisis-contract.test.mjs` (uso normal, ambos límites, las tres formas de contador caído, orden de las operaciones, atomicidad de la RPC y ACL server-only) y `scripts/live-isolation/cuota-analisis.mjs`, que contra Postgres real dispara **40 llamadas concurrentes contra un límite de 10** y exige exactamente 10 permitidas con consumos consecutivos sin repeticiones. Eso es lo único que prueba la atomicidad: una prueba secuencial la pasaría igual un contador con carrera.
 
-**Orden de despliegue — importante.** La migración no se aplica sola. Al mergear, Netlify despliega `analisis.ts`, que llama a `consumir_cuota_actor_v1`; mientras esa función no exista en producción la cuota falla, y como falla cerrada por diseño el análisis responde 503. **Aplicar la migración a producción inmediatamente después del merge**, o antes.
+**Estado productivo.** La migración fue aplicada después del merge. Git la conserva como `20260902170000_cuota_por_actor_y_cache_analisis_v1.sql`; producción la registró como versión `20260902211635`, con el mismo nombre `cuota_por_actor_y_cache_analisis_v1`. El desfase de timestamp proviene del mecanismo remoto usado al aplicarla y está inventariado en `history-manifest.json`; no se normaliza el ledger.
 
 **Qué sigue incompleto.** Diez endpoints autenticados por JWT siguen sin cuota por actor. Tres de ellos —los administrativos— tienen al menos el límite por IP del router. Los siete restantes no tienen ninguno: `costos-riesgo`, `problemas-activos`, `importar-familia`, `importar-asistido-completo`, `aprender-pendientes-familia`, `listar-pendientes-catalogo` y `resolver-pendiente-catalogo`.
 
@@ -133,7 +133,13 @@ Es `workflow_dispatch` únicamente, con `permissions: contents: read`, y **no co
 
 Cubre la mitad adyacente de la fricción documentada en `docs/MIGRATION_REPLAY_BASELINE_V1.md` §14.4 —correr el replay sin tener el entorno— pero **no** la extracción de fragmentos desde el catálogo productivo, que sigue manual y sigue siendo la condición de salida pendiente.
 
+**1.4F — Respaldo verificable en logs.** El artefacto sigue siendo la vía principal, pero el workflow incorpora una recuperación opt-in para entornos donde no pueda descargarse: emite `expected-replay-fingerprint.json` y `replay-expectation.json` como `gzip+base64`, cada uno entre delimitadores propios y acompañado por su SHA-256. El input `emitir_payload_en_log` es booleano y permanece apagado por defecto.
+
+`scripts/migration-replay/extraer-expectativa-del-log.mjs` sirve como emisor versionado y como extractor. Al extraer exige exactamente un bloque de cada archivo, valida delimitadores, nombre, encoding, base64 canónico, gzip, checksum y JSON antes de escribir únicamente los dos nombres permitidos. Contratos: `regenerate-workflow-contract.test.mjs` y `replay-log-extractor.test.mjs`.
+
 **Primer ejercicio real del mecanismo.** La migración de C3 fue la primera posterior al cutoff. El workflow se disparó sobre su rama (run `33677961434`), regeneró la expectativa, verificó que el ancla siguiera intacta, que sólo cambiaran los dos archivos de la expectativa, y corrió la suite completa con el resultado. La expectativa quedó atada a `20260902170000_cuota_por_actor_y_cache_analisis_v1.sql` en el commit `129db11`. El mecanismo funcionó de punta a punta en su primer uso.
+
+Al aplicarla a producción, Supabase registró la misma migración bajo la versión remota `20260902211635`. La equivalencia y la decisión explícita de no reescribir el ledger quedaron fijadas en `history-manifest.json` para distinguir este caso conocido de una deriva futura.
 
 **El gate es bloqueante, no advisory.** `verify-structural-fingerprint.mjs` lanza excepción ante cualquier diferencia estructural no explicada y ante un cambio del SHA de la huella productiva registrada. `run-baseline-replay.sh` corre con `set -euo pipefail`, de modo que un fallo del replay corta el job antes de los gates de aislamiento y del E2E.
 
@@ -183,17 +189,17 @@ La auditoría original enunciaba cuatro fases (0, 1, 2 y 3), pero el contenido d
 
 Qué corre y qué prueba, al 2026-09-02:
 
-- **`scripts/tests/`: 93 archivos `.test.mjs`.** Contratos en Node puro (`node:assert`), sin framework: leen el código fuente o transpilan un módulo TS y afirman invariantes. `scripts/test.mjs` los corre en procesos separados y devuelve exit≠0 si alguno falla. Doce fueron creados por este plan: `admin-rate-limit-contract`, `auth-directory-scope-contract`, `cuota-analisis-contract`, `desafio5s-cold-archive-contract`, `live-isolation-gates-contract`, `no-browser-business-writes`, `regenerate-workflow-contract` y los cinco `migration-replay-*`.
+- **`scripts/tests/`: 95 archivos `.test.mjs`.** Contratos en Node puro (`node:assert`), sin framework: leen el código fuente o transpilan un módulo TS y afirman invariantes. `scripts/test.mjs` los corre en procesos separados y devuelve exit≠0 si alguno falla. Catorce fueron creados por este plan: `admin-rate-limit-contract`, `auth-directory-scope-contract`, `ci-trigger-contract`, `cuota-analisis-contract`, `desafio5s-cold-archive-contract`, `live-isolation-gates-contract`, `no-browser-business-writes`, `regenerate-workflow-contract`, `replay-log-extractor` y los cinco `migration-replay-*`.
 - **`e2e/`: 2 specs, 14 tests** (12 en `critical-flows.spec.mjs`, 2 en `catalog-role-boundary.spec.mjs`), 3 fixtures. **Corren contra un Supabase interceptado por fixture** (`VITE_SUPABASE_URL=http://127.0.0.1:4173/__supabase`), no real: son tests de flujo de UI y **no ejercen RLS**. La verificación con backend real vive exclusivamente en `scripts/live-isolation/`.
-- **`.github/workflows/ci.yml`: un único job `verify`,** en orden — `npm test` → `npm run lint` → `npm run build` → replay de Baseline V1 con fingerprint estructural → export de credenciales efímeras → Gates 1–3 de aislamiento → cuota por actor bajo concurrencia → Playwright/Chromium → parada del Supabase efímero (`if: always()`). Triggers: push a `master`, push a `feat/multitenant-architecture-v1` (rama ya fusionada, ver E1) y pull request contra `master`.
-- **`.github/workflows/regenerate-replay-expectation.yml`:** manual, para regenerar la expectativa móvil sin tener el entorno. Ver 1.4E.
+- **`.github/workflows/ci.yml`: un único job `verify`,** en orden — `npm test` → `npm run lint` → `npm run build` → replay de Baseline V1 con fingerprint estructural → export de credenciales efímeras → Gates 1–3 de aislamiento → cuota por actor bajo concurrencia → Playwright/Chromium → parada del Supabase efímero (`if: always()`). Triggers: push a `master` y pull request contra `master`. El trigger dedicado de la rama histórica `feat/multitenant-architecture-v1`, ya fusionada, fue retirado en E1 y quedó cubierto por `ci-trigger-contract.test.mjs`.
+- **`.github/workflows/regenerate-replay-expectation.yml`:** manual, para regenerar la expectativa móvil sin tener el entorno; opcionalmente emite el respaldo verificable en logs, apagado por defecto. Ver 1.4E–1.4F.
 
 Estado de producción al mismo corte (`meqvjabgyrgwkxpclqxp`, Postgres 17.6, `sa-east-1`):
 
 - 1 organización, 17 zonas, 183 sucursales cargadas y activas — **datos operativos únicamente en la 091**: 713 filas de `producto_sucursal` y 145 vencimientos, todas de 091;
 - 713 productos de catálogo, 3 importaciones;
 - 3 usuarios y 4 accesos activos;
-- ledger de migraciones: 142 versiones aplicadas, última `20260901134512`; el repositorio tiene 107 archivos, y la brecha está inventariada en `history-manifest.json`. **La migración de cuota y caché de C3 está en el repositorio pero no en el ledger hasta que se aplique a producción** — ver el orden de despliegue en 1.2;
+- ledger de migraciones: 143 versiones aplicadas, última `20260902211635` (`cuota_por_actor_y_cache_analisis_v1`); el archivo equivalente en Git usa `20260902170000`. La brecha histórica y este desfase conocido están inventariados en `history-manifest.json`;
 - `authenticated` tiene sólo `SELECT` sobre `productos`, `vencimientos` y `producto_sucursal`; **0** policies de `SELECT USING(true)` en `public`;
 - advisors de seguridad: sin ERROR; 22 INFO `rls_enabled_no_policy` (7 del schema archivado, correcto por diseño; 15 de tablas NoVen deliberadamente server-only); 3 WARN — `pg_net` en `public`, protección de contraseñas filtradas desactivada, y `aceptar_invitacion_acceso_v1()` ejecutable por `authenticated` como `SECURITY DEFINER` (intencional: es el canje de invitación).
 
@@ -225,7 +231,6 @@ Lo que queda de esta deuda son los siete endpoints autenticados que no tienen ni
 
 Requieren intervención manual del responsable:
 
-- **aplicar a producción la migración de cuota y caché** inmediatamente después de mergear C3 — ver el orden de despliegue en 1.2;
 - verificar y completar las reglas de protección de `master` en la UI de GitHub (ver 0.1);
 - activar leaked-password protection en Supabase Auth;
 - mover la extensión `pg_net` fuera del schema `public`;
