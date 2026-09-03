@@ -51,41 +51,6 @@ export const buildProviderRequest = (candidate, apiKey, systemPrompt, userPrompt
     }
   }
 
-  if (candidate.api === 'openai_responses') {
-    return {
-      endpoint: candidate.endpoint,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: {
-        model: candidate.model,
-        input: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        ...candidate.request_options,
-      },
-    }
-  }
-
-  if (candidate.api === 'anthropic_messages') {
-    return {
-      endpoint: candidate.endpoint,
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json',
-      },
-      body: {
-        model: candidate.model,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-        ...candidate.request_options,
-      },
-    }
-  }
-
   throw new Error(`API no soportada en el benchmark: ${candidate.api}`)
 }
 
@@ -93,17 +58,6 @@ export const extractProviderResponse = (candidate, payload) => {
   let text = ''
   if (candidate.api === 'openai_chat') {
     text = payload.choices?.[0]?.message?.content ?? ''
-  } else if (candidate.api === 'openai_responses') {
-    text = payload.output_text ?? payload.output
-      ?.flatMap((item) => item.content ?? [])
-      .filter((item) => item.type === 'output_text')
-      .map((item) => item.text ?? '')
-      .join('\n') ?? ''
-  } else if (candidate.api === 'anthropic_messages') {
-    text = payload.content
-      ?.filter((item) => item.type === 'text')
-      .map((item) => item.text ?? '')
-      .join('\n') ?? ''
   }
 
   if (!text.trim()) throw new Error(`${candidate.id}: respuesta sin texto evaluable.`)
@@ -216,6 +170,7 @@ export const runEvaluation = async ({
       sha256: sha256(systemPrompt),
     },
     scoring_policy: 'Sólo adherencia mecánica a verdad económica, comparabilidad, trimestre abierto, estacionalidad y recurrencia; el estilo no puntúa.',
+    decision: 'OpenAI fue elegido por el responsable del producto antes de la ejecución; este resultado valida el proveedor seleccionado y no es un ranking entre proveedores.',
     candidates: candidateResults,
   }
 }

@@ -53,3 +53,17 @@ La alternativa obvia, regenerar el ancla desde la base replicada, era peor que e
 No es «aceptamos perder el ancla», es «la perdemos cuando ganamos otra cosa a cambio», y ambas cosas ocurren en el mismo PR y quedan visibles en el mismo diff.
 
 **Condición de salida:** scriptar la extracción de los fragmentos desde el catálogo productivo. Hoy es el único paso manual del procedimiento y es justamente el que sostiene el ancla: cuanto más caro es el camino legítimo, más tentador es mover la fecha del tripwire y seguir. Debería resolverse antes de la primera re-materialización real.
+
+## OpenAI como proveedor del análisis gerencial — 2026-09-03
+
+**Decisión:** `netlify/functions/analisis.ts` usa OpenAI con el modelo `gpt-5.6-terra` mediante Chat Completions en `https://us.api.openai.com/v1/chat/completions`. La credencial server-only es `OPENAI_API_KEY`; la solicitud fija `store=false`, `reasoning_effort=none`, `temperature=0.2` y `max_completion_tokens=1500`. No existe fallback automático a DeepSeek ni a una ruta global.
+
+**Responsable de la decisión:** el responsable del producto eligió OpenAI explícitamente el 2026-09-03. La comparación inicialmente prevista contra Fireworks y Anthropic se canceló antes de ejecutar llamadas pagas; no se fabrican resultados comparativos. El corpus sintético determinístico permanece como gate de aceptación del proveedor elegido.
+
+**Motivo:** Chat Completions conserva el contrato que ya consumía la Function —mensajes `system`/`user` y respuesta `choices[0].message.content`—, por lo que el cambio de proveedor no exige reescribir el prompt, la lógica económica, la cuota por actor, el caché ni el frontend. `gpt-5.6-terra` cubre el rol de análisis gerencial con un equilibrio explícito entre capacidad y costo, y el endpoint regional fija procesamiento y almacenamiento en Estados Unidos.
+
+**Límites:** `store=false` desactiva el almacenamiento voluntario de la respuesta para productos de distillation/evals, pero no equivale por sí solo a Zero Data Retention. Bajo la política estándar pueden existir logs de abuso por hasta 30 días; ZDR requiere aprobación de OpenAI. Esta es una decisión técnica documentada, no una conclusión legal sobre transferencias internacionales desde Argentina.
+
+**Despliegue:** configurar `OPENAI_API_KEY` en Netlify antes del merge. Sin la variable, `analisis.ts` falla cerrado con error de configuración y la capacidad queda indisponible. Antes del cutover deben pasar los tres casos del corpus sintético contra la API real; después del deploy se realiza un smoke controlado y recién entonces se revoca la credencial anterior de DeepSeek.
+
+**Condición de salida:** reevaluar proveedor o modelo si el corpus detecta una regresión de guardarraíles, cambia la residencia o retención publicada, el costo/latencia deja de ser compatible con la operación, o aparece un requisito legal que la configuración actual no cubra. Cualquier reemplazo repite evaluación sintética, decisión explícita y despliegue sin fallback silencioso.
