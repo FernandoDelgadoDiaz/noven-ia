@@ -3,10 +3,11 @@
   "proposito": "Expectativa movil del replay: huella esperada de baseline + migraciones posteriores al cutoff.",
   "forward_migrations": [
     "20260902170000_cuota_por_actor_y_cache_analisis_v1.sql",
+    "20260903103749_archive_august_backups_v1.sql",
     "20260903120000_regiones_solo_select_v1.sql",
     "20260903160000_exposicion_vistas_v1.sql"
   ],
-  "forward_migrations_sha256": "178cb06dc115ab9048ba12581bb29f06bd825a6f758cb13555fbd04e68af7dc0",
+  "forward_migrations_sha256": "6d30efbb85b260db62632d6935b671f17f138239c493a021bcd20abdbefcae02",
   "replay_fingerprint_sha256": "cadcbb6069bddd3febc68c3d775245da43ec9a004f4f0700b69d837663ebb9de",
   "anchor_fingerprint_sha256": "837771691ffc6e2276c66a26f9ae010c872f12ea33b118406d48b2ad6fca38af",
   "anchor_materialized_at": "2026-09-01",
