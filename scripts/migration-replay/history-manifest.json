@@ -86,6 +86,23 @@
       "resolution": "baseline_required"
     }
   ],
+  "known_production_ledger_divergences": [
+    {
+      "id": "cuota_y_cache_timestamp",
+      "kind": "repository_production_version_mismatch",
+      "repository_path": "supabase/migrations/20260902170000_cuota_por_actor_y_cache_analisis_v1.sql",
+      "repository_version": "20260902170000",
+      "production_ledger_version": "20260902211635",
+      "production_ledger_name": "cuota_por_actor_y_cache_analisis_v1",
+      "universal_replay": true,
+      "reason": "Al aplicar el archivo versionado mediante el mecanismo remoto de Supabase, el ledger registro el timestamp de ejecucion 20260902211635 en lugar del timestamp 20260902170000 del nombre en Git, conservando el mismo nombre y efecto estructural.",
+      "evidence_markers": [
+        "CREATE TABLE IF NOT EXISTS public.rate_limit_consumo",
+        "CREATE TABLE IF NOT EXISTS public.analisis_cache"
+      ],
+      "resolution": "document_only_no_ledger_normalization"
+    }
+  ],
   "known_clean_replay_exceptions": [
     {
       "id": "desafio5s_cold_archive",

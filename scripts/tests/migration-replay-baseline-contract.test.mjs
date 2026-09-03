@@ -73,6 +73,36 @@ assert.equal(explicit091.resolution, 'baseline_required')
 const bonobon = byId.get('bonobon_3449476_repair')
 assert.equal(bonobon.resolution, 'baseline_required')
 
+const ledgerDivergences = new Map(
+  manifest.known_production_ledger_divergences.map((entry) => [entry.id, entry]),
+)
+assert.deepEqual([...ledgerDivergences.keys()], ['cuota_y_cache_timestamp'])
+const cuotaCacheTimestamp = ledgerDivergences.get('cuota_y_cache_timestamp')
+assert.equal(cuotaCacheTimestamp.kind, 'repository_production_version_mismatch')
+assert.equal(cuotaCacheTimestamp.repository_version, '20260902170000')
+assert.equal(cuotaCacheTimestamp.production_ledger_version, '20260902211635')
+assert.equal(cuotaCacheTimestamp.production_ledger_name, 'cuota_por_actor_y_cache_analisis_v1')
+assert.equal(cuotaCacheTimestamp.universal_replay, true)
+assert.equal(cuotaCacheTimestamp.resolution, 'document_only_no_ledger_normalization')
+assert.notEqual(
+  cuotaCacheTimestamp.repository_version,
+  cuotaCacheTimestamp.production_ledger_version,
+  'la divergencia documentada no puede colapsarse silenciosamente',
+)
+assert.ok(
+  path.basename(cuotaCacheTimestamp.repository_path).startsWith(
+    `${cuotaCacheTimestamp.repository_version}_`,
+  ),
+  'la versión Git debe corresponder al nombre del archivo versionado',
+)
+const cuotaCacheSql = fs.readFileSync(
+  path.join(root, cuotaCacheTimestamp.repository_path),
+  'utf8',
+)
+for (const marker of cuotaCacheTimestamp.evidence_markers) {
+  assert.ok(cuotaCacheSql.includes(marker), `C3: no se encontró evidencia ${marker}`)
+}
+
 const cleanExceptions = new Map(
   manifest.known_clean_replay_exceptions.map((entry) => [entry.id, entry]),
 )
