@@ -94,6 +94,7 @@ jobs:
             echo "VITE_SUPABASE_ANON_KEY=${ANON_KEY}"
             echo "SUPABASE_ANON_KEY=${ANON_KEY}"
             echo "SUPABASE_SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}"
+            echo "NOVEN_REPLAY_DB_URL=${DB_URL}"
           } >> "${GITHUB_ENV}"
 
       - name: Live isolation Gates 1-3
@@ -108,6 +109,14 @@ jobs:
           set -euo pipefail
           node scripts/live-isolation/cuota-analisis.mjs 2>&1 | tee live-cuota.log
 
+      # Clasificación de tablas por exposición: contra la base reconstruida, no
+      # contra el texto de las migraciones. Un grant es un hecho del catálogo.
+      - name: Live table exposure classification
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/live-isolation/clasificacion-exposicion.mjs 2>&1 | tee live-exposicion.log
+
       - name: Upload baseline and isolation diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
@@ -118,6 +127,7 @@ jobs:
             gitleaks.sarif
             live-isolation.log
             live-cuota.log
+            live-exposicion.log
             ${{ runner.temp }}/structural-diff.json
           if-no-files-found: ignore
           retention-days: 7
