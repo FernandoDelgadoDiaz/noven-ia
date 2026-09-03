@@ -54,6 +54,20 @@ assert.match(workflow, /La regeneración modificó el ancla de producción/,
 assert.match(workflow, /La regeneración tocó archivos inesperados/,
   'debe fallar si cambió algo fuera de la expectativa móvil')
 
+// El guard verifica que no cambie NADA FUERA de la expectativa móvil, no que
+// cambien los dos archivos. Exigir exactamente dos rechazaba un caso legítimo:
+// una migración cuyo efecto queda fuera del fingerprint core deja
+// `expected-replay-fingerprint.json` idéntico y sólo mueve la lista de
+// migraciones. Eso pasó de verdad con el archivo frío de los respaldos.
+assert.match(workflow, /inesperados=.*grep -vE/,
+  'el guard debe filtrar lo que NO está permitido, en vez de exigir un conjunto exacto')
+assert.doesNotMatch(workflow, /if \[\[ "\$\(echo "\$\{cambios\}" \| sort\)" != /,
+  'la comparación exacta rechaza migraciones que no alteran el fingerprint core')
+
+// Pero tampoco puede pasar en vacío: si no cambió nada, regenerar no tenía sentido.
+assert.match(workflow, /La regeneración no cambió nada/,
+  'una regeneración que no produce cambios es un error, no un éxito silencioso')
+
 // --- El resultado se valida antes de salir ----------------------------------
 assert.match(workflow, /- name: Suite completa con la expectativa nueva\s*\n\s*run: npm test/,
   'la suite corre con la expectativa regenerada: mejor enterarse acá que después de commitear')
