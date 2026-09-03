@@ -1,6 +1,6 @@
 # NOVEN · Plan de endurecimiento pre-producción
 
-**Estado del documento:** reconstruido desde evidencia del repositorio el 2026-09-03.
+**Estado del documento:** reconstruido desde evidencia del repositorio el 2026-09-02; Fases 2 y 3 definidas el 2026-09-03.
 **Punto de verificación:** `master` = `3ea53da`.
 
 ## 0. Por qué existe este documento
@@ -19,6 +19,8 @@ El contenido de Fase 0 y Fase 1 fue reconstruido a partir de:
 - consultas de sólo lectura contra Supabase producción (`meqvjabgyrgwkxpclqxp`).
 
 Los veredictos de abajo se apoyan en esa evidencia, no en el enunciado original de la auditoría, que no está disponible.
+
+**Fases 2 y 3 se definieron el 2026-09-03** y ya no figuran como NO DEFINIDAS. Su contenido no se reconstruyó —no había qué reconstruir, quedó fuera de Git junto con el resto— sino que se acordó y se bajó acá. Los veredictos de sus ítems se apoyan en el relevamiento de sólo lectura de producción de esa fecha: grants, políticas RLS, advisors de seguridad y workflows de CI.
 
 ## 1. Convenciones
 
@@ -145,9 +147,11 @@ Al aplicarla a producción, Supabase registró la misma migración bajo la versi
 
 Documentación completa: `docs/MIGRATION_REPLAY_BASELINE_V1.md`.
 
-### 1.5 · Decisión de proveedor de inferencia — PENDIENTE
+### 1.5 · Decisión de proveedor de inferencia — PARCIAL
 
-Nada implementado. `netlify/functions/analisis.ts` sigue enviando a `https://api.deepseek.com/chat/completions` (modelo `deepseek-chat`, `temperature 0.2`, `max_tokens 1500`). No existe entrada en `ai/decisions.md`.
+**Paso 1 del alcance entregado; el resto bloqueado por credencial.**
+
+`netlify/functions/analisis.ts` sigue enviando a `https://api.deepseek.com/chat/completions` (modelo `deepseek-chat`, `temperature 0.2`, `max_tokens 1500`). No existe entrada en `ai/decisions.md`.
 
 Alcance comprometido en el PR #125:
 
@@ -156,6 +160,22 @@ Alcance comprometido en el PR #125:
 3. sumar el análisis documental de jurisdicción y política de retención de cada candidato;
 4. presentar la comparación **antes** de migrar; la decisión es del responsable del producto;
 5. una vez tomada, migración y registro en `ai/decisions.md` van en el mismo PR.
+
+**Estado por paso:**
+
+| Paso | Estado |
+|---|---|
+| 1 · corpus sintético determinístico | **HECHO** — PR #146 |
+| 2 · medir adherencia a guardarraíles | **BLOQUEADO** — falta `OPENAI_API_KEY` |
+| 3 · jurisdicción y retención | PENDIENTE |
+| 4 · presentar la comparación | PENDIENTE |
+| 5 · migración + `ai/decisions.md` | PENDIENTE |
+
+El corpus vive en `scripts/evaluacion-proveedor/`: ocho escenarios deterministas con verdad de base conocida —unidades en riesgo, monto expuesto, existencia de ventana previa comparable, recurrencia—, sin datos comerciales reales. Diez verificadores, de los cuales tres son obligatorios y deciden si un proveedor sirve: `porcentaje-sin-base`, `estacionalidad-inventada` y `trimestre-abierto-como-cerrado`.
+
+**No es sólo para esta migración.** Es la verificación de regresión de cualquier cambio futuro de modelo o de prompt, y `corpus-evaluacion-contract.test.mjs` lo mantiene atado al prompt real: si `analisis.ts` cambia un marcador estructural y el corpus no, CI va rojo.
+
+**El bloqueo es una credencial, no un problema técnico.** Medir adherencia exige llamar al proveedor. `OPENAI_API_KEY` tiene que cargarse en Netlify y en los secretos de GitHub Actions; nadie más que el responsable del proyecto puede hacerlo. El corredor falla con instrucciones explícitas y código de salida 2 en vez de colgarse.
 
 Desde el PR #137 hay **un solo system prompt** que evaluar (`SYSTEM_ADMIN`), no dos: al limitarse el análisis a roles de conducción desapareció la variante de operador. Eso reduce la superficie de la evaluación.
 
@@ -185,19 +205,113 @@ La revisión previa confirmó que no tienen foreign keys, vistas, funciones, tri
 
 La decisión, evidencia de catálogo, mecanismo reversible y condición de restauración están en `docs/NOVEN_AUGUST_BACKUPS_COLD_ARCHIVE.md`. El contrato `august-backups-cold-archive-contract.test.mjs` verifica las guardas no destructivas, el inventario exacto, el comportamiento del replay y las exclusiones del fingerprint. El ítem permanece **EN EJECUCIÓN** hasta merge, aplicación y verificación productiva.
 
-## 4. Fases 2 y 3 — NO DEFINIDAS
+## 4. Fase 2 — Superficie de exposición
 
-**No existen en el repositorio.** No hay commit, rama, PR, archivo ni referencia que las mencione. Toda la actividad posterior al 2026-08-30 corresponde a Fase 0 y Fase 1.
+Fase 2 cierra la superficie que Fase 1 dejó verificada pero no acotada. Fase 1 probó que el aislamiento multitenant funciona; Fase 2 reduce lo que habría que atravesar si dejara de funcionar.
 
-La auditoría original enunciaba cuatro fases (0, 1, 2 y 3), pero el contenido de las dos últimas quedó fuera de Git junto con el resto del documento.
+Estado verificado contra producción (`meqvjabgyrgwkxpclqxp`) al 2026-09-03: **36 tablas en `public`, todas con RLS habilitada, `anon` sin un solo grant en ninguna.** El punto de partida es bueno; lo que falta es que siga siéndolo sin depender de que alguien se acuerde.
 
-**Acción requerida:** definir el alcance de Fases 2 y 3 y registrarlo en este archivo antes de darlas por planificadas. Hasta entonces, cualquier afirmación sobre su estado es especulación.
+### 2.1 · Leaked-password protection — PENDIENTE (dashboard)
 
-## 5. Verificación del estado actual
+El advisor de seguridad devuelve `auth_leaked_password_protection` en nivel WARN: "Leaked password protection is currently disabled". Supabase Auth puede contrastar contra HaveIBeenPwned en el alta y el cambio de contraseña.
+
+**No es automatizable desde sesión.** Es un toggle de Authentication → Policies en el dashboard. Queda a cargo del responsable del proyecto.
+
+Sin verificación posterior el ítem no se cierra: una vez activado, el advisor deja de emitir ese lint y eso es la evidencia.
+
+### 2.2 · Reducir el grant de `public.regiones` a SELECT — PENDIENTE
+
+`authenticated` tiene sobre `public.regiones`: `DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE`.
+
+Es la **única** tabla de negocio con DML abierto a `authenticated`. La otra tabla con grants de escritura es `push_subscriptions`, que es legítima: el browser registra su propia suscripción push y `no-browser-business-writes.test.mjs` la exceptúa explícitamente por eso.
+
+Hoy no es explotable en la práctica —la política `regiones_select_scope` sólo cubre `SELECT`, así que un `INSERT` de un cliente sería rechazado por RLS al no encontrar política permisiva de escritura— pero el grant sobra y la protección depende de una ausencia, no de una negativa. Cualquier política de escritura que alguien agregue después la vuelve explotable sin que el grant vuelva a discutirse.
+
+Va como migración nueva con `REVOKE`, dejando `SELECT`.
+
+### 2.3 · Secret scanning en CI — PENDIENTE
+
+No existe. Verificado: ninguno de los cinco workflows (`ci.yml`, `deploy-smoke.yml`, `netlify-diagnostic.yml`, `regenerate-replay-expectation.yml`, `site-http-diagnostic.yml`) contiene un paso de escaneo de secretos.
+
+El repositorio maneja `SUPABASE_SERVICE_ROLE_KEY`, claves de proveedor de inferencia y claves VAPID de web-push. El riesgo concreto no es el commit deliberado sino el archivo de diagnóstico pegado en un PR.
+
+### 2.4 · Aserción anti-`USING(true)` sobre todas las tablas de negocio — PENDIENTE
+
+**Verificado hoy: cero políticas con `USING(true)` o `WITH CHECK(true)` en `public`.** Las trece políticas de `authenticated` pasan sin excepción por `noven_private.tiene_acceso_organizacion/zona/sucursal(...)` o por `auth.uid()`.
+
+Es decir: **este ítem no arregla nada, preserva algo.** Ese es exactamente el motivo por el que va como test de CI y no como aserción dentro de una migración histórica. Una aserción en una migración se evalúa una vez, el día que se aplica, y después es texto muerto; el invariante que hay que sostener es "de acá en adelante ninguna política nueva es permisiva", y eso sólo lo sostiene algo que corra en cada PR.
+
+### 2.5 · Clasificación explícita de tablas por exposición — PENDIENTE
+
+Un test que falle ante una tabla nueva sin clasificar. La clasificación que sale del relevamiento de producción tiene cinco clases:
+
+| Clase | Qué la define | Tablas |
+|---|---|---|
+| `lectura_tenant` | `authenticated` con `SELECT` y política acotada por organización/zona/sucursal | `acciones_operativas`, `familias`, `intervenciones_rag`, `organizaciones`, `producto_codigos`, `producto_sucursal`, `productos`, `regiones`, `sectores`, `sucursales`, `vencimiento_observaciones`, `vencimientos`, `zonas` |
+| `propia_del_usuario` | `authenticated` con `SELECT` acotado por `auth.uid()` | `usuarios`, `usuario_accesos`, `usuario_familias_sucursal` |
+| `escritura_propia` | Único escritor legítimo desde el browser | `push_subscriptions` |
+| `solo_servidor` | Sin grants a `authenticated`; se escribe por Netlify Function con `service_role` | `alertas_zonales`, `alertas_zonales_destinos`, `analisis_cache`, `importacion_0258_detalle`, `importaciones`, `invitaciones_acceso`, `problemas_economicos_ciclos`, `producto_costo_observaciones`, `producto_costo_ultima_observacion`, `producto_imagen_cambios`, `producto_pendiente_detecciones`, `producto_snapshots`, `productos_pendientes_catalogo`, `rag_escalamientos`, `rate_limit_consumo`, `usuario_familias` |
+| `respaldo_historico` | Tablas de respaldo de agosto, sin rol en el circuito | `dedup_turrocklets_backup_20260805`, `productos_descripcion_backup_20260805`, `productos_familia_backup_20260806` |
+
+**Este ítem subsume a 2.4 y conviene implementarlos juntos**: si cada tabla declara su clase y el test verifica que sus grants y políticas reales coinciden con la clase declarada, entonces una política `USING(true)` sobre una tabla `lectura_tenant` falla por definición. Dos tests separados dirían dos veces lo mismo con una costura entre ellos.
+
+Los veinticuatro lints `rls_enabled_no_policy` del advisor —dieciséis en `public`, siete en `desafio5s_archive`— **no son un defecto**: son tablas `solo_servidor` con RLS habilitada y sin grants, es decir, negación total para `authenticated`. La clasificación tiene que registrar eso como intencional, o el advisor va a seguir pareciendo una lista de pendientes que nadie atiende.
+
+**Salvedad registrada:** el advisor marca `public.aceptar_invitacion_acceso_v1()` como `SECURITY DEFINER` ejecutable por `authenticated` vía REST. Se revisó el cuerpo de la función: **no es un defecto.** No toma argumentos, deriva la identidad de `auth.uid()`, cruza contra el email del propio `auth.users` y sólo activa filas de `usuario_accesos` de ese mismo `usuario_id`, con `SET search_path`. Es `SECURITY DEFINER` porque tiene que escribir en tablas que `authenticated` no puede tocar, que es el patrón correcto. Queda anotado para que no se re-investigue.
+
+### 2.6 · Migrar `desafio5s_*` a su propio proyecto Supabase — PENDIENTE
+
+El PR #124 (ítem 0.2) movió las nueve relaciones de Desafío 5S a `desafio5s_archive` dentro del **mismo** proyecto. Era el paso correcto y no es el destino: el archivo frío sigue compartiendo instancia, backups, cuota y superficie de Auth con NoVen.
+
+La dependencia registrada en 0.2 es la que ata el nudo: `desafio5s_es_admin() → public.rol_actual() → public.usuarios`. Mientras exista, el archivo no es autónomo y no se puede mover sin romperlo o sin replicar usuarios.
+
+**Alcance:** proyecto Supabase propio, migración de las nueve relaciones y del bucket `desafio5s-imagenes`, corte de la dependencia hacia `public.usuarios`, y baja de `desafio5s_archive` de este proyecto una vez verificado el destino.
+
+**Es el ítem más grande de Fase 2 y el único con riesgo sobre datos.** No se hace en la misma tanda que los otros cinco.
+
+## 5. Fase 3 — Capacidad multitenant real
+
+Fase 2 acota la exposición de un despliegue de una sucursal. Fase 3 es lo que hace falta para que la segunda organización no sea un proyecto en sí misma.
+
+Ninguno de estos ítems está empezado. Los cuatro tienen en común que hoy funcionan porque hay **una** organización con **una** sucursal con datos: son correctos por coincidencia, no por diseño.
+
+### 3.1 · Procedimiento idempotente de alta de organizaciones — PENDIENTE
+
+Hoy no existe procedimiento. La organización actual, sus 17 zonas y sus 183 sucursales entraron por migraciones y cargas puntuales.
+
+**Alcance:** una función o script que reciba la definición de una organización y la deje creada —con zonas, sucursales, sectores y `dias_donacion`— y que **correrlo dos veces no produzca duplicados ni error**. La idempotencia no es elegancia: un alta que falla a la mitad tiene que poder reintentarse sin limpieza manual.
+
+**Condición de cierre:** dar de alta una organización de prueba dos veces seguidas en un Supabase descartable y verificar que el segundo intento no cambia nada.
+
+### 3.2 · Reparación de datos tenant-scoped — PENDIENTE
+
+Reemplaza el patrón "una migración por SKU". Hoy, corregir un dato de un producto concreto genera un archivo en `supabase/migrations/`, y eso tiene tres costos que crecen: infla el replay, mezcla corrección de datos con evolución de esquema, y ata una corrección de la organización actual al historial que **toda** organización futura va a reproducir.
+
+Ese último es el que importa. Una migración que arregla un SKU de la 091 se va a aplicar a la base de la organización siguiente, donde ese SKU no existe.
+
+**Alcance:** un mecanismo de reparación acotado por tenant, fuera de la cadena de migraciones, con registro de quién reparó qué y cuándo, y sin capacidad de tocar filas fuera del tenant indicado.
+
+### 3.3 · Benchmark de performance con volumen realista — PENDIENTE
+
+**Antes de decidir cualquier índice.** Hoy hay 713 filas en `producto_sucursal` y 145 vencimientos, todas de la 091. Cualquier plan de consulta medido contra ese volumen es ruido: a esa escala Postgres elige secuencial y acierta.
+
+Agregar índices "por las dudas" antes de medir es la forma habitual de pagar escritura para comprar una lectura que nadie hizo.
+
+**Alcance:** generar volumen sintético representativo —varias organizaciones, decenas de sucursales, órdenes de magnitud más de vencimientos—, medir las consultas del dashboard, del análisis y del scanner, y **recién entonces** decidir índices, con el plan de ejecución como evidencia.
+
+### 3.4 · Reemplazar el literal `091` por capacidad organizacional — PENDIENTE
+
+`ai/decisions.md` registra la excepción transitoria `admin_organizacion + gerente_sucursal 091` con su condición de salida. Este ítem es esa salida.
+
+**Alcance:** sustituir la referencia al código de sucursal por una capacidad declarada explícitamente en el modelo, de modo que el permiso se derive de lo que la organización habilita y no de una sucursal nombrada en el código.
+
+**Condición de disparo:** se ejecuta cuando se cumpla la condición de salida ya registrada, no antes. Adelantarlo agregaría un mecanismo de capacidades sin un segundo caso que lo valide, que es cómo se diseñan abstracciones equivocadas.
+
+## 6. Verificación del estado actual
 
 Qué corre y qué prueba, al 2026-09-02:
 
-- **`scripts/tests/`: 96 archivos `.test.mjs`.** Contratos en Node puro (`node:assert`), sin framework: leen el código fuente o transpilan un módulo TS y afirman invariantes. `scripts/test.mjs` los corre en procesos separados y devuelve exit≠0 si alguno falla. Quince fueron creados por este plan: `admin-rate-limit-contract`, `august-backups-cold-archive-contract`, `auth-directory-scope-contract`, `ci-trigger-contract`, `cuota-analisis-contract`, `desafio5s-cold-archive-contract`, `live-isolation-gates-contract`, `no-browser-business-writes`, `regenerate-workflow-contract`, `replay-log-extractor` y los cinco `migration-replay-*`.
+- **`scripts/tests/`: 100 archivos `.test.mjs`.** Contratos en Node puro (`node:assert`), sin framework: leen el código fuente o transpilan un módulo TS y afirman invariantes. `scripts/test.mjs` los corre en procesos separados y devuelve exit≠0 si alguno falla. Diecinueve fueron creados por este plan: `admin-rate-limit-contract`, `august-backups-cold-archive-contract`, `auth-directory-scope-contract`, `ci-trigger-contract`, `clasificacion-exposicion-contract`, `corpus-evaluacion-contract`, `cuota-analisis-contract`, `desafio5s-cold-archive-contract`, `live-isolation-gates-contract`, `no-browser-business-writes`, `regenerate-workflow-contract`, `regiones-solo-select-contract`, `replay-log-extractor`, `secret-scanning-contract` y los cinco `migration-replay-*`.
 - **`e2e/`: 2 specs, 14 tests** (12 en `critical-flows.spec.mjs`, 2 en `catalog-role-boundary.spec.mjs`), 3 fixtures. **Corren contra un Supabase interceptado por fixture** (`VITE_SUPABASE_URL=http://127.0.0.1:4173/__supabase`), no real: son tests de flujo de UI y **no ejercen RLS**. La verificación con backend real vive exclusivamente en `scripts/live-isolation/`.
 - **`.github/workflows/ci.yml`: un único job `verify`,** en orden — `npm test` → `npm run lint` → `npm run build` → replay de Baseline V1 con fingerprint estructural → export de credenciales efímeras → Gates 1–3 de aislamiento → cuota por actor bajo concurrencia → Playwright/Chromium → parada del Supabase efímero (`if: always()`). Triggers: push a `master` y pull request contra `master`. El trigger dedicado de la rama histórica `feat/multitenant-architecture-v1`, ya fusionada, fue retirado en E1 y quedó cubierto por `ci-trigger-contract.test.mjs`.
 - **`.github/workflows/regenerate-replay-expectation.yml`:** manual, para regenerar la expectativa móvil sin tener el entorno; opcionalmente emite el respaldo verificable en logs, apagado por defecto. Ver 1.4E–1.4F.
@@ -211,7 +325,7 @@ Estado de producción al mismo corte (`meqvjabgyrgwkxpclqxp`, Postgres 17.6, `sa
 - `authenticated` tiene sólo `SELECT` sobre `productos`, `vencimientos` y `producto_sucursal`; **0** policies de `SELECT USING(true)` en `public`;
 - advisors de seguridad: sin ERROR; 22 INFO `rls_enabled_no_policy` (7 del schema archivado, correcto por diseño; 15 de tablas NoVen deliberadamente server-only); 3 WARN — `pg_net` en `public`, protección de contraseñas filtradas desactivada, y `aceptar_invitacion_acceso_v1()` ejecutable por `authenticated` como `SECURITY DEFINER` (intencional: es el canje de invitación).
 
-## 6. Deuda conocida
+## 7. Deuda conocida
 
 Limitaciones aceptadas conscientemente. No son invariantes: son cosas que hay que resolver cuando el contexto lo permita.
 
@@ -235,16 +349,18 @@ Lo que queda de esta deuda son los siete endpoints autenticados que no tienen ni
 
 **D-7 · Extracción de la baseline sin scriptar.** Re-materializar el ancla de producción requiere extraer a mano los 39 fragmentos desde el catálogo productivo. Es el único paso manual del mecanismo de reproducibilidad y, a la vez, el único que mantiene vivo el ancla. Ver `docs/MIGRATION_REPLAY_BASELINE_V1.md` §14.4.
 
-## 7. Fuera del alcance de las sesiones automatizadas
+## 8. Fuera del alcance de las sesiones automatizadas
 
 Requieren intervención manual del responsable:
 
 - verificar y completar las reglas de protección de `master` en la UI de GitHub (ver 0.1);
-- activar leaked-password protection en Supabase Auth;
+- activar leaked-password protection en Supabase Auth (ítem 2.1);
 - mover la extensión `pg_net` fuera del schema `public`;
+- cargar `OPENAI_API_KEY` en Netlify y en los secretos de GitHub Actions: sin esa credencial el corpus de evaluación no puede correrse contra el proveedor y el ítem 1.5 no cierra;
+- reconstruir la línea de base de merma, que no es derivable de los datos cargados;
 - decidir el estado de las 182 sucursales cargadas sin datos operativos;
 - la prueba operativa corta en 091 que `docs/PRODUCTION_CUTOVER_STATUS_20260827.md` define como paso previo a incorporar una segunda sucursal real (Dashboard, Scanner, cierre vendido, Historial, importación por familia y masiva, Admin).
 
-## 8. Mantenimiento de este documento
+## 9. Mantenimiento de este documento
 
 Cada PR de endurecimiento que cambie el estado de un ítem debe actualizar su veredicto acá, en el mismo PR. Un ítem que pasa de PARCIAL a HECHO sin que este archivo lo refleje reintroduce exactamente el problema que motivó §0.

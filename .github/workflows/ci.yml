@@ -35,6 +35,28 @@ jobs:
         with:
           version: 2.116.0
 
+      # Antes de todo lo demás: una credencial filtrada no mejora porque los
+      # tests pasen, y cuanto antes falle menos tiempo de runner se gasta.
+      # Se escanea el árbol de trabajo, no el historial: el riesgo real es el
+      # archivo de diagnóstico pegado en un PR, y escanear el historial completo
+      # en cada corrida marca lo mismo siempre hasta que nadie lee la salida.
+      - name: Secret scanning
+        shell: bash
+        env:
+          GITLEAKS_VERSION: '8.30.1'
+        run: |
+          set -euo pipefail
+          curl -sSfL -o /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks version
+          /tmp/gitleaks dir . \
+            --config .gitleaks.toml \
+            --redact \
+            --report-format sarif \
+            --report-path gitleaks.sarif \
+            --exit-code 1
+
       - name: Install dependencies
         run: npm ci
 
@@ -93,6 +115,7 @@ jobs:
           name: baseline-isolation-diagnostics
           path: |
             baseline-replay.log
+            gitleaks.sarif
             live-isolation.log
             live-cuota.log
             ${{ runner.temp }}/structural-diff.json
