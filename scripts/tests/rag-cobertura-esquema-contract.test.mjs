@@ -1,0 +1,161 @@
+// Contrato del esquema del motor de reacción inmediata (Capa A).
+//
+// Lo que este contrato protege no es que la migración exista, sino tres
+// propiedades que son fáciles de perder en una edición posterior y caras de
+// recuperar:
+//
+//   1. La escala de descuentos es POLÍTICA DE UNA ORGANIZACIÓN, no una
+//      constante del producto. Si alguien la convierte en un array literal en
+//      el código, la organización siguiente no puede tener otra sin un deploy.
+//   2. La instrumentación no puede afirmar nada sobre las intervenciones
+//      históricas, que no la tienen.
+//   3. El juicio del RAG usa la velocidad necesaria de SU ventana, no la de
+//      hoy. Es la diferencia entre un histórico usable y uno sesgado.
+
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+
+const MIGRACION = 'supabase/migrations/20260904120000_rag_cobertura_escala_e_instrumentacion_v1.sql'
+const sql = fs.readFileSync(path.join(process.cwd(), MIGRACION), 'utf8')
+
+// --- 1. La escala vive en la base, por organización -------------------------
+
+assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.rag_escala_descuento/,
+  'la escala de descuentos debe ser una tabla, no una constante')
+assert.match(sql, /organizacion_id\s+uuid\s+NOT NULL[\s\S]*?REFERENCES public\.organizaciones\(id\)/,
+  'la escala se acota por organización: es política de cada una, no del producto')
+assert.match(sql, /PRIMARY KEY \(organizacion_id, escalon\)/,
+  'el escalón ordena la escala dentro de cada organización')
+assert.match(sql, /UNIQUE \(organizacion_id, porcentaje\)/,
+  'un porcentaje repetido en dos escalones haría ambiguo "subir uno"')
+assert.match(sql, /CHECK \(porcentaje > 0 AND porcentaje <= 100\)/,
+  'un porcentaje fuera de (0,100] no es un descuento')
+
+// La semilla es la escala real de la organización existente: 10..70 de a 10.
+const semilla = sql.slice(sql.indexOf('INSERT INTO public.rag_escala_descuento'))
+for (const [escalon, porcentaje] of [[1, 10], [2, 20], [3, 30], [4, 40], [5, 50], [6, 60], [7, 70]]) {
+  assert.ok(
+    new RegExp(`\\(${escalon}(?:::smallint)?,\\s*${porcentaje}`).test(semilla),
+    `falta el escalón ${escalon} (${porcentaje}%) en la semilla`,
+  )
+}
+assert.match(semilla, /ON CONFLICT DO NOTHING/,
+  'la semilla no puede pisar una escala ya configurada por la organización')
+
+// --- 2. RLS y exposición ----------------------------------------------------
+
+assert.match(sql, /ALTER TABLE public\.rag_escala_descuento ENABLE ROW LEVEL SECURITY/,
+  'la escala es dato de organización: va con RLS')
+assert.match(sql, /REVOKE ALL ON TABLE public\.rag_escala_descuento FROM PUBLIC, anon, authenticated/,
+  'los grants se declaran explícitos, no se heredan')
+// La escala se lee desde el cliente y no se escribe nunca. Se mira el conjunto
+// de privilegios otorgado, no la cadena exacta: agregar INSERT a la misma
+// sentencia GRANT es la forma más probable de que esto se rompa.
+const grantEscala = /GRANT ([A-Z, ]+) ON TABLE public\.rag_escala_descuento TO authenticated/.exec(sql)
+assert.ok(grantEscala, 'el cliente necesita leer la escala para presentar la sugerencia')
+assert.deepEqual(grantEscala[1].split(',').map((x) => x.trim()), ['SELECT'],
+  `la escala es de sólo lectura desde el browser; se otorgó: ${grantEscala[1]}`)
+assert.match(sql, /USING \(noven_private\.tiene_acceso_organizacion\(organizacion_id\)\)/,
+  'la política tiene que acotar por organización, no ser permisiva')
+
+// --- 3. La instrumentación no inventa historia ------------------------------
+
+for (const columna of [
+  'cobertura_al_sugerir',
+  'escalones_sugeridos',
+  'escalones_aplicados',
+  'origen_sugerencia',
+]) {
+  assert.ok(sql.includes(`ADD COLUMN IF NOT EXISTS ${columna}`),
+    `falta la columna de instrumentación ${columna}`)
+}
+
+// Ninguna puede traer DEFAULT: las 16 intervenciones históricas no tienen estos
+// datos, y un default afirmaría sobre ellas algo que nadie midió.
+const bloqueColumnas = sql.slice(
+  sql.indexOf('ALTER TABLE public.intervenciones_rag'),
+  sql.indexOf('DO $$'),
+)
+assert.doesNotMatch(bloqueColumnas, /DEFAULT/,
+  'las columnas de instrumentación son nullable sin default: NULL significa "no instrumentada", que es la verdad')
+
+assert.match(sql, /origen_sugerencia IS NULL OR origen_sugerencia IN \(/,
+  'el CHECK debe admitir NULL para la historia previa')
+for (const origen of ['sugerida_aceptada', 'sugerida_rechazada', 'manual']) {
+  assert.ok(sql.includes(`'${origen}'`), `falta el origen ${origen}`)
+}
+
+// --- 4. El juicio usa la necesaria de su propia ventana ---------------------
+
+assert.match(sql, /velocidad_necesaria_al_aplicar/,
+  'hace falta la necesaria que regía al aplicar el RAG')
+assert.match(sql, /cantidad_comprometida_al_aplicar\s*\n?\s*\/ GREATEST\(v\.fecha_vencimiento - \(rag\.aplicado_at AT TIME ZONE/,
+  'la necesaria al aplicar se reconstruye con la ventana comercial de ese día')
+
+// El corazón del cambio: la rama que decide efectivo/insuficiente ya no puede
+// compararse contra la necesaria de hoy.
+//
+// Hay que mirar el LADO DERECHO del >=, no la rama entera:
+// `cantidad_comprometida_al_aplicar` aparece igual en el numerador de la
+// velocidad observada, así que buscarlo en toda la rama pasa aunque el
+// estándar de comparación haya vuelto a ser el de hoy. Lo comprobé: la
+// primera versión de esta aserción no detectaba esa regresión.
+const juicio = sql.slice(sql.indexOf("WHEN obs.observada_at <= rag.aplicado_at THEN 'pendiente_control_operador'"))
+const ramaEfectivo = juicio.slice(0, juicio.indexOf("THEN 'efectivo'::text"))
+const estandar = ramaEfectivo.slice(ramaEfectivo.lastIndexOf('>='))
+
+assert.match(estandar, /rag\.aplicado_at AT TIME ZONE/,
+  'el estándar de comparación debe reconstruirse con la ventana del día en que se aplicó el RAG;\n'
+  + '  usar la de hoy marca como fallidos RAGs que durante su ventana venían cumpliendo')
+assert.doesNotMatch(estandar.replace(/COALESCE\([\s\S]*$/, ''), /op\.hoy/,
+  'la comparación primaria no puede usar la ventana de hoy')
+
+// --- 5. Las magnitudes que el motor necesita --------------------------------
+
+for (const columna of ['cobertura', 'dias_desde_ultimo_rag']) {
+  assert.ok(sql.includes(`AS ${columna}`), `la vista debe exponer ${columna}`)
+}
+
+// La cobertura de decisión se mide contra la necesaria de HOY: la decisión de
+// hoy se toma con la ventana de hoy.
+const bloqueCobertura = sql.slice(sql.indexOf('END AS cobertura') - 1200, sql.indexOf('END AS cobertura'))
+assert.match(bloqueCobertura, /v\.fecha_vencimiento - op\.hoy - s\.dias_donacion/,
+  'la cobertura que decide el salto usa la ventana comercial de hoy')
+
+// --- 6. Nada destructivo, nada fuera de alcance -----------------------------
+
+for (const prohibido of [
+  /\bDROP\s+TABLE\b/i,
+  /\bDROP\s+COLUMN\b/i,
+  /\bTRUNCATE\b/i,
+  /\bDELETE\s+FROM\b/i,
+  /\bUPDATE\s+public\.intervenciones_rag\b/i,
+]) {
+  assert.doesNotMatch(sql, prohibido, 'la historia RAG no se toca: es auditable')
+}
+
+// Los umbrales de riesgo y la política de donación no son de este bloque.
+//
+// Se mira el DDL sin comentarios: el encabezado dice explícitamente qué NO
+// cambia, y nombrar un umbral para prometer no tocarlo no es tocarlo. Una
+// aserción sobre menciones marcaría esa promesa como si fuera la violación.
+const ddl = sql.replace(/--[^\n]*/g, '')
+assert.doesNotMatch(ddl, /\b(45|20)\s*(::|\)|,)?\s*(?:days?|dias)/i,
+  'los umbrales 45/20 no se redefinen en esta migración')
+assert.doesNotMatch(ddl, /\bUPDATE\s+public\.sectores\b/i,
+  'la política 2/10 vive en sectores.dias_donacion y no se toca acá')
+assert.doesNotMatch(ddl, /ALTER TABLE public\.sectores/i,
+  'sectores no es de este bloque')
+
+assert.match(sql, /BEGIN;[\s\S]*COMMIT;/, 'la migración debe ser transaccional')
+
+// --- 7. La tabla nueva está clasificada por exposición ----------------------
+
+const clasificacion = fs.readFileSync(
+  path.join(process.cwd(), 'scripts/live-isolation/clasificacion-tablas.mjs'), 'utf8',
+)
+assert.match(clasificacion, /rag_escala_descuento: 'lectura_tenant'/,
+  'una tabla nueva sin clasificar rompe el gate de exposición, y con razón')
+
+console.log('✓ Escala configurable por organización, instrumentación sin default, juicio contra la ventana propia')
