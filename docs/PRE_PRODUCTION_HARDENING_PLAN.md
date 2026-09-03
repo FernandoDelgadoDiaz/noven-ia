@@ -145,9 +145,11 @@ Al aplicarla a producción, Supabase registró la misma migración bajo la versi
 
 Documentación completa: `docs/MIGRATION_REPLAY_BASELINE_V1.md`.
 
-### 1.5 · Decisión de proveedor de inferencia — PENDIENTE
+### 1.5 · Decisión de proveedor de inferencia — PARCIAL
 
-Nada implementado. `netlify/functions/analisis.ts` sigue enviando a `https://api.deepseek.com/chat/completions` (modelo `deepseek-chat`, `temperature 0.2`, `max_tokens 1500`). No existe entrada en `ai/decisions.md`.
+**Paso 1 del alcance entregado; el resto bloqueado por credencial.**
+
+`netlify/functions/analisis.ts` sigue enviando a `https://api.deepseek.com/chat/completions` (modelo `deepseek-chat`, `temperature 0.2`, `max_tokens 1500`). No existe entrada en `ai/decisions.md`.
 
 Alcance comprometido en el PR #125:
 
@@ -156,6 +158,22 @@ Alcance comprometido en el PR #125:
 3. sumar el análisis documental de jurisdicción y política de retención de cada candidato;
 4. presentar la comparación **antes** de migrar; la decisión es del responsable del producto;
 5. una vez tomada, migración y registro en `ai/decisions.md` van en el mismo PR.
+
+**Estado por paso:**
+
+| Paso | Estado |
+|---|---|
+| 1 · corpus sintético determinístico | **HECHO** — PR #146 |
+| 2 · medir adherencia a guardarraíles | **BLOQUEADO** — falta `OPENAI_API_KEY` |
+| 3 · jurisdicción y retención | PENDIENTE |
+| 4 · presentar la comparación | PENDIENTE |
+| 5 · migración + `ai/decisions.md` | PENDIENTE |
+
+El corpus vive en `scripts/evaluacion-proveedor/`: ocho escenarios deterministas con verdad de base conocida —unidades en riesgo, monto expuesto, existencia de ventana previa comparable, recurrencia—, sin datos comerciales reales. Diez verificadores, de los cuales tres son obligatorios y deciden si un proveedor sirve: `porcentaje-sin-base`, `estacionalidad-inventada` y `trimestre-abierto-como-cerrado`.
+
+**No es sólo para esta migración.** Es la verificación de regresión de cualquier cambio futuro de modelo o de prompt, y `corpus-evaluacion-contract.test.mjs` lo mantiene atado al prompt real: si `analisis.ts` cambia un marcador estructural y el corpus no, CI va rojo.
+
+**El bloqueo es una credencial, no un problema técnico.** Medir adherencia exige llamar al proveedor. `OPENAI_API_KEY` tiene que cargarse en Netlify y en los secretos de GitHub Actions; nadie más que el responsable del proyecto puede hacerlo. El corredor falla con instrucciones explícitas y código de salida 2 en vez de colgarse.
 
 Desde el PR #137 hay **un solo system prompt** que evaluar (`SYSTEM_ADMIN`), no dos: al limitarse el análisis a roles de conducción desapareció la variante de operador. Eso reduce la superficie de la evaluación.
 
@@ -189,7 +207,7 @@ La auditoría original enunciaba cuatro fases (0, 1, 2 y 3), pero el contenido d
 
 Qué corre y qué prueba, al 2026-09-02:
 
-- **`scripts/tests/`: 95 archivos `.test.mjs`.** Contratos en Node puro (`node:assert`), sin framework: leen el código fuente o transpilan un módulo TS y afirman invariantes. `scripts/test.mjs` los corre en procesos separados y devuelve exit≠0 si alguno falla. Catorce fueron creados por este plan: `admin-rate-limit-contract`, `auth-directory-scope-contract`, `ci-trigger-contract`, `cuota-analisis-contract`, `desafio5s-cold-archive-contract`, `live-isolation-gates-contract`, `no-browser-business-writes`, `regenerate-workflow-contract`, `replay-log-extractor` y los cinco `migration-replay-*`.
+- **`scripts/tests/`: 96 archivos `.test.mjs`.** Contratos en Node puro (`node:assert`), sin framework: leen el código fuente o transpilan un módulo TS y afirman invariantes. `scripts/test.mjs` los corre en procesos separados y devuelve exit≠0 si alguno falla. Quince fueron creados por este plan: `corpus-evaluacion-contract`, `admin-rate-limit-contract`, `auth-directory-scope-contract`, `ci-trigger-contract`, `cuota-analisis-contract`, `desafio5s-cold-archive-contract`, `live-isolation-gates-contract`, `no-browser-business-writes`, `regenerate-workflow-contract`, `replay-log-extractor` y los cinco `migration-replay-*`.
 - **`e2e/`: 2 specs, 14 tests** (12 en `critical-flows.spec.mjs`, 2 en `catalog-role-boundary.spec.mjs`), 3 fixtures. **Corren contra un Supabase interceptado por fixture** (`VITE_SUPABASE_URL=http://127.0.0.1:4173/__supabase`), no real: son tests de flujo de UI y **no ejercen RLS**. La verificación con backend real vive exclusivamente en `scripts/live-isolation/`.
 - **`.github/workflows/ci.yml`: un único job `verify`,** en orden — `npm test` → `npm run lint` → `npm run build` → replay de Baseline V1 con fingerprint estructural → export de credenciales efímeras → Gates 1–3 de aislamiento → cuota por actor bajo concurrencia → Playwright/Chromium → parada del Supabase efímero (`if: always()`). Triggers: push a `master` y pull request contra `master`. El trigger dedicado de la rama histórica `feat/multitenant-architecture-v1`, ya fusionada, fue retirado en E1 y quedó cubierto por `ci-trigger-contract.test.mjs`.
 - **`.github/workflows/regenerate-replay-expectation.yml`:** manual, para regenerar la expectativa móvil sin tener el entorno; opcionalmente emite el respaldo verificable en logs, apagado por defecto. Ver 1.4E–1.4F.
