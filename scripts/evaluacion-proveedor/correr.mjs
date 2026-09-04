@@ -79,11 +79,40 @@ async function pedirAnalisis(cfg, apiKey, sistema, usuario) {
  * no adhiere", que es la diferencia entre un problema de despliegue y uno de
  * calidad.
  */
+async function listarModelos(cfg, apiKey) {
+  const base = new URL(cfg.url)
+  base.pathname = '/v1/models'
+  const res = await fetch(base, { headers: { Authorization: `Bearer ${apiKey}` } })
+  if (!res.ok) return { ok: false, detalle: `HTTP ${res.status}: ${(await res.text()).slice(0, 300)}` }
+  const data = await res.json()
+  const ids = (data.data ?? []).map((m) => m.id).filter(Boolean).sort()
+  return { ok: true, ids }
+}
+
 async function preflight(cfg, apiKey) {
   console.log(`Preflight · ${cfg.url}`)
   console.log(`Modelo: ${cfg.modelo}`)
   console.log(`Parámetros: ${JSON.stringify(cfg.extras)}`)
   console.log('')
+
+  // Se consulta la lista real de modelos de la cuenta ANTES de la llamada
+  // mínima. Un modelo inexistente y un modelo que existe pero rechaza los
+  // parámetros dan errores parecidos, y confundirlos hace perder una ronda:
+  // uno se arregla eligiendo otro nombre, el otro cambiando la llamada.
+  //
+  // Si la cuenta no permite listar, se sigue igual: la lista es diagnóstico,
+  // no un permiso adicional que la evaluación deba exigir.
+  const modelos = await listarModelos(cfg, apiKey)
+  if (!modelos.ok) {
+    console.log(`· No se pudo listar modelos (${modelos.detalle}). Se continúa con la llamada mínima.`)
+  } else if (!modelos.ids.includes(cfg.modelo)) {
+    console.error(`✗ El modelo "${cfg.modelo}" no está en la lista de la cuenta.`)
+    console.error(`  Modelos disponibles (${modelos.ids.length}):`)
+    for (const id of modelos.ids) console.error(`    ${id}`)
+    return false
+  } else {
+    console.log(`✓ El modelo "${cfg.modelo}" figura entre los ${modelos.ids.length} de la cuenta.`)
+  }
 
   const res = await fetch(cfg.url, {
     method: 'POST',

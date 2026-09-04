@@ -690,7 +690,7 @@ const handler: Handler = async (event: HandlerEvent) => {
   }
 
   try {
-    const openaiRes = await fetch('https://us.api.openai.com/v1/chat/completions', {
+    const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
       body: JSON.stringify({

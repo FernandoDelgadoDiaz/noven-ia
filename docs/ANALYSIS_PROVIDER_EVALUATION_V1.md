@@ -42,9 +42,11 @@ El contrato del workflow verifica que `scripts/provider-evaluation/` no reaparez
 
 | Proveedor | Modelo | Ruta obligatoria | Configuración inicial |
 |---|---|---|---|
-| OpenAI | `gpt-5.6-terra` | `https://us.api.openai.com/v1/chat/completions` | `reasoning_effort="none"`, `temperature=0.2`, `max_completion_tokens=1500`, `store=false` |
+| OpenAI | `gpt-5.6-terra` | `https://api.openai.com/v1/chat/completions` | `reasoning_effort="none"`, `temperature=0.2`, `max_completion_tokens=1500`, `store=false` |
 
-No hay fallback a una ruta global. Si la cuenta no puede usar el endpoint o el modelo fijados, la validación falla.
+No hay fallback a otro proveedor ni a otro modelo. Si la cuenta no puede usar el endpoint o el modelo fijados, la validación falla.
+
+**Sobre la ruta:** se usa la global. El endpoint regional `us.api.openai.com` exige residencia de datos contratada, que es función de cuentas empresariales; este proyecto figura como «Global» con el campo no editable y no es elegible. Intentarlo devuelve `HTTP 401 · incorrect_hostname`. El fundamento completo está en `ai/decisions.md`.
 
 La comparación originalmente prevista contra Fireworks y Anthropic se canceló por decisión explícita de producto antes de ejecutar llamadas pagas. No se presenta una tabla comparativa ficticia: el objetivo pasa a ser validar que OpenAI respete todos los guardarraíles antes del cutover.
 
@@ -52,7 +54,7 @@ La comparación originalmente prevista contra Fireworks y Anthropic se canceló 
 
 - La ficha oficial describe `gpt-5.6-terra` como el nivel equilibrado entre inteligencia y costo, y confirma soporte para Chat Completions: [modelo](https://developers.openai.com/api/docs/models/gpt-5.6-terra).
 - La [referencia de Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) conserva el contrato `messages → choices[0].message.content`, admite `reasoning_effort`, recomienda `max_completion_tokens` en lugar del `max_tokens` legado y permite desactivar almacenamiento con `store=false`.
-- Los [controles de datos](https://developers.openai.com/api/docs/guides/your-data#data-residency-controls) documentan almacenamiento y procesamiento en Estados Unidos mediante `us.api.openai.com`, incluido `/v1/chat/completions`.
+- Los [controles de datos](https://developers.openai.com/api/docs/guides/your-data#data-residency-controls) describen la residencia regional mediante `us.api.openai.com`. **No aplica acá:** requiere contratarla y la cuenta no es elegible. Lo que sí rige es el procesamiento en Estados Unidos por defecto para las peticiones de la API. Y aun con residencia contratada, el soporte de almacenamiento regional no implica soporte de procesamiento regional: son garantías distintas y conviene no citar una por la otra.
 - La misma política establece que la API no alimenta entrenamiento salvo opt-in y que los logs de abuso se conservan hasta 30 días por defecto; Zero Data Retention requiere aprobación: [retención](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
 
 Este inventario describe controles técnicos publicados; no constituye una conclusión legal sobre transferencias internacionales desde Argentina.
