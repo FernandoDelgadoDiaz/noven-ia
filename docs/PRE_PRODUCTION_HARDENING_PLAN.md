@@ -175,7 +175,9 @@ El corpus vive en `scripts/evaluacion-proveedor/`: ocho escenarios deterministas
 
 **No es sólo para esta migración.** Es la verificación de regresión de cualquier cambio futuro de modelo o de prompt, y `corpus-evaluacion-contract.test.mjs` lo mantiene atado al prompt real: si `analisis.ts` cambia un marcador estructural y el corpus no, CI va rojo.
 
-**Pendiente de cierre operativo:** eliminar `DEEPSEEK_API_KEY` del código y de Netlify, recién después de verificar el análisis en producción contra OpenAI.
+**Cierre operativo — 2026-09-04.** El análisis se verificó en producción contra OpenAI de punta a punta. El código ya no lee `DEEPSEEK_API_KEY` en ningún lado: `analisis.ts` y `.env.example` están limpios desde la migración, `PLAN.md` marca el bloque F6 como registro histórico superado, y el extractor de configuración de la evaluación acepta sólo `OPENAI_API_KEY`.
+
+Se conservan a propósito dos cosas: las aserciones de contrato que **prohíben** que DeepSeek vuelva, y la regla de gitleaks que detecta claves de DeepSeek, que sigue teniendo sentido mientras la variable exista en Netlify. Eliminarla del entorno es la última acción pendiente y corre por fuera del repositorio.
 
 Desde el PR #137 hay **un solo system prompt** que evaluar (`SYSTEM_ADMIN`), no dos: al limitarse el análisis a roles de conducción desapareció la variante de operador. Eso reduce la superficie de la evaluación.
 
