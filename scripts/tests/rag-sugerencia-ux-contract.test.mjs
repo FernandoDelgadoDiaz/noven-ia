@@ -112,6 +112,23 @@ assert.match(bloqueSugerencia, /puede no alcanzar/,
 assert.match(badge, /topeInsuficiente/,
   'la línea del Dashboard también avisa del tope')
 
+// El aviso de que UN escalón puede no alcanzar es distinto del tope de escala:
+// el tope dice "no hay más"; éste dice "hay más, pero este paso probablemente
+// no cierre el déficit". Con la regla de un escalón por vez es lo que reemplaza
+// al salto doble, y sin él el operador no vería la diferencia entre un déficit
+// leve y uno severo.
+assert.match(bloqueSugerencia, /saltoPuedeNoAlcanzar/,
+  'la tarjeta tiene que avisar cuando un escalón probablemente no alcance')
+assert.match(bloqueSugerencia, /probablemente no alcance/,
+  'el aviso va en palabras, y en potencial: Noven no predice cuánto acelera un descuento')
+assert.match(badge, /saltoPuedeNoAlcanzar/,
+  'la línea del Dashboard también lo avisa')
+
+// Y sigue siendo el operador el que decide: el aviso NO puede venir con un
+// botón que aplique un salto mayor por su cuenta.
+assert.doesNotMatch(bloqueSugerencia, /escalones\s*\+\s*1|escalones:\s*2|subirEscalones\(/,
+  'la tarjeta no puede proponer un salto propio: el motor decide cuántos escalones')
+
 // --- 6. El detalle aparece cuando corresponde -------------------------------
 //
 // Velocidad necesaria, cobertura y días comerciales sólo cuando el estado es

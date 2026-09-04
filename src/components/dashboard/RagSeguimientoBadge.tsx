@@ -151,7 +151,9 @@ export default function RagSeguimientoBadge({ vencimientoId, activo }: RagSeguim
           {sugerencia?.hay && (
             <p className="text-[10px] leading-snug mt-1 font-semibold">
               Sugerencia por urgencia: {sugerencia.desde}% → {sugerencia.hasta}%
-              {sugerencia.topeInsuficiente && ' · tope de escala, puede no alcanzar'}
+              {sugerencia.topeInsuficiente
+                ? ' · tope de escala, puede no alcanzar'
+                : sugerencia.saltoPuedeNoAlcanzar && ' · el déficit es grande, este escalón puede no alcanzar'}
             </p>
           )}
         </div>

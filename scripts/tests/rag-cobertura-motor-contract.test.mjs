@@ -51,17 +51,35 @@ assert.equal(calcularCobertura(2, null), null)
 
 // --- 2. Escalones por cobertura ---------------------------------------------
 
+// SIEMPRE UN ESCALÓN POR VEZ.
+//
+// La regla de dos se diseñó para una escala de incrementos parejos de diez,
+// donde saltar dos era subir veinte puntos. Con saltos desiguales —20/30/50/70—
+// subir dos desde 30 es ir a 70: cuarenta puntos de una.
+//
+// No se pierde reacción porque el tiempo ya está en el cálculo: si el producto
+// no se mueve, la ventana se achica, la necesaria sube, la cobertura cae y en el
+// próximo control vuelve a sugerir. Se pasa por cada escalón intermedio, que es
+// lo que un salto doble se saltea.
+
 assert.equal(escalonesPorCobertura(1, 5), 0, 'cobertura 1 es exactamente el ritmo requerido')
 assert.equal(escalonesPorCobertura(1.4, 5), 0, 'por encima del ritmo no se sugiere nada')
 assert.equal(escalonesPorCobertura(0.99, 5), 1)
-assert.equal(escalonesPorCobertura(0.5, 5), 1, '0,5 exacto pertenece al tramo de un escalón')
-assert.equal(escalonesPorCobertura(0.49, 5), 2)
-assert.equal(escalonesPorCobertura(0.1, 5), 2)
+assert.equal(escalonesPorCobertura(0.5, 5), 1)
+assert.equal(escalonesPorCobertura(0.49, 5), 1, 'un déficit severo sigue subiendo UNO')
+assert.equal(escalonesPorCobertura(0.01, 5), 1, 'ni el déficit más severo salta dos')
 
-// Sin movimiento sube dos, como el déficit severo, pero por su propio camino:
-// no depende de la cobertura, que con observada 0 vale 0 igual.
-assert.equal(escalonesPorCobertura(0, 0), 2, 'sin movimiento sube dos escalones')
-assert.equal(escalonesPorCobertura(null, 0), 2,
+// Ningún valor de cobertura puede producir más de un escalón. Es la regresión
+// que importa: es lo que impide volver a 30 → 70 de un paso.
+for (const c of [0.999, 0.75, 0.5, 0.4, 0.25, 0.1, 0.001]) {
+  assert.ok(escalonesPorCobertura(c, 5) <= 1,
+    `cobertura ${c} no puede producir más de un escalón`)
+}
+
+// Sin movimiento también sube uno, pero por su propio camino: no depende de la
+// cobertura, que con observada 0 vale 0 igual.
+assert.equal(escalonesPorCobertura(0, 0), 1, 'sin movimiento sube un escalón')
+assert.equal(escalonesPorCobertura(null, 0), 1,
   'sin movimiento no necesita cobertura para decidir')
 assert.equal(escalonesPorCobertura(null, 5), 0,
   'sin cobertura y con movimiento no se puede decidir: no se sugiere')
@@ -80,6 +98,11 @@ assert.equal(ventanaObservable(null, 1), false)
 assert.equal(ventanaObservable(3, null), false)
 
 // --- 4. Subir escalones dentro de la escala ---------------------------------
+//
+// `subirEscalones` sigue aceptando cualquier cantidad y trabajando POR POSICIÓN,
+// no por aritmética de puntos porcentuales. Que el motor hoy pida siempre uno es
+// una decisión de la REGLA, no un límite de la primitiva: la escala puede tener
+// saltos desiguales y esto se mantiene correcto.
 
 assert.equal(subirEscalones(ESCALA, 20, 1), 30)
 assert.equal(subirEscalones(ESCALA, 20, 2), 40)
@@ -109,7 +132,7 @@ assert.equal(subirEscalones(ESCALA_OTRA, 15, 2), 55)
 const BASE = {
   estado: 'insuficiente',
   velocidadObservada: 1,
-  velocidadNecesaria: 4,      // cobertura 0,25 → dos escalones
+  velocidadNecesaria: 4,      // cobertura 0,25 → déficit severo, UN escalón
   diasComercialesRestantes: 10,
   diasObservados: 3,          // 3 × 4 = 12 ≥ 1
   diasDesdeUltimoRag: 3,
@@ -118,13 +141,15 @@ const BASE = {
 
 const base = evaluarSugerencia(BASE, ESCALA)
 assert.equal(base.hay, true, 'el caso base debe producir sugerencia')
-assert.equal(base.escalones, 2)
+assert.equal(base.escalones, 1, 'siempre un escalón, aun con cobertura 0,25')
 assert.equal(base.desde, 20)
-assert.equal(base.hasta, 40, 'dos escalones desde 20 llegan a 40')
+assert.equal(base.hasta, 30, 'un escalón desde 20 llega a 30, no a 40')
 assert.equal(base.cobertura, 0.25)
 assert.equal(base.sinMovimiento, false)
 assert.equal(base.factorRequerido, 4, 'hace falta cuadruplicar la salida actual')
 assert.equal(base.topeInsuficiente, false)
+assert.equal(base.saltoPuedeNoAlcanzar, true,
+  'con cobertura 0,25 hay que avisar que un escalón probablemente no alcance')
 
 const con = (cambios) => evaluarSugerencia({ ...BASE, ...cambios }, ESCALA)
 
@@ -156,7 +181,7 @@ assert.equal(con({ ...lento, diasObservados: 1, diasDesdeUltimoRag: 1 }).motivo,
   'un día de un SKU que necesita 0,3/día no distingue "no se vende" de granularidad')
 const lentoObservable = con({ ...lento, diasObservados: 4, diasDesdeUltimoRag: 4 })
 assert.equal(lentoObservable.hay, true, 'con cuatro días el mismo SKU lento ya es observable')
-assert.equal(lentoObservable.escalones, 2, 'cobertura 0,33 → dos escalones')
+assert.equal(lentoObservable.escalones, 1, 'cobertura 0,33 → un escalón, como todo déficit')
 
 // El mismo día que era insuficiente para el lento alcanza para uno rápido: la
 // guarda se adapta al ritmo del producto, no fija días iguales para todos.
@@ -185,8 +210,10 @@ assert.equal(sinEscala.motivo, 'sin_escala')
 const quieto = con({ estado: 'sin_movimiento', velocidadObservada: 0 })
 assert.equal(quieto.hay, true)
 assert.equal(quieto.sinMovimiento, true, 'sin movimiento se marca: no es "poco", es nada')
-assert.equal(quieto.escalones, 2)
-assert.equal(quieto.hasta, 40)
+assert.equal(quieto.escalones, 1, 'sin movimiento también sube de a uno')
+assert.equal(quieto.hasta, 30)
+assert.equal(quieto.saltoPuedeNoAlcanzar, true,
+  'sin movimiento hay que avisar que un escalón probablemente no alcance')
 assert.equal(quieto.factorRequerido, null,
   'con salida cero no hay factor por el cual multiplicar: no se muestra un número inventado')
 
@@ -221,7 +248,12 @@ const ventanaCorta = evaluarSugerencia({
 }, ESCALA)
 
 assert.equal(ventanaAmplia.escalones, 1, 'cobertura 0,83 → un escalón')
-assert.equal(ventanaCorta.escalones, 2, 'la misma salida con la ventana achicada → dos escalones')
+assert.equal(ventanaCorta.escalones, 1, 'sigue siendo un escalón: el tamaño del salto no depende del déficit')
+assert.equal(ventanaCorta.hasta > ventanaAmplia.hasta || ventanaCorta.hasta === ventanaAmplia.hasta, true)
+assert.equal(ventanaCorta.saltoPuedeNoAlcanzar, true,
+  'con la ventana achicada el déficit es severo y hay que avisarlo')
+assert.equal(ventanaAmplia.saltoPuedeNoAlcanzar, false,
+  'con cobertura 0,83 un escalón es una propuesta razonable, sin aviso')
 assert.ok(ventanaCorta.cobertura < ventanaAmplia.cobertura,
   'al achicarse la ventana la cobertura cae sin ninguna regla de urgencia adicional')
 
@@ -266,3 +298,51 @@ for (const prohibido of [/\bfetch\s*\(/, /Date\.now/, /new Date\b/, /Math\.rando
 
 console.log('✓ Cobertura, escalones y las tres guardas, con su caso que dispara y su caso que calla')
 console.log('✓ Nunca sugiere un porcentaje fuera de la escala; la escala es de la organización')
+
+// --- 10. La escala corporativa de saltos desiguales -------------------------
+//
+// 20/30/50/70 tiene saltos de 10, 20 y 20 puntos. Con la regla vieja, dos
+// escalones desde 30 llegaban a 70: cuarenta puntos de una, que es regalar el
+// producto en un paso. Esto verifica que eso ya no puede pasar por ninguna
+// combinación de cobertura.
+
+const CORPORATIVA = [
+  { escalon: 1, porcentaje: 20 },
+  { escalon: 2, porcentaje: 30 },
+  { escalon: 3, porcentaje: 50 },
+  { escalon: 4, porcentaje: 70 },
+]
+
+const desde = (ragPorcentaje, velocidadNecesaria) => evaluarSugerencia({
+  ...BASE, ragPorcentaje, velocidadNecesaria, velocidadObservada: 1,
+  diasObservados: 30, diasDesdeUltimoRag: 30,
+}, CORPORATIVA)
+
+// El camino completo pasa por cada escalón, incluso con el déficit más severo.
+assert.equal(desde(20, 100).hasta, 30, '20 → 30, nunca 50')
+assert.equal(desde(30, 100).hasta, 50, '30 → 50, NUNCA 70 de un paso')
+assert.equal(desde(50, 100).hasta, 70, '50 → 70')
+assert.equal(desde(70, 100).hay, false, '70 es el tope')
+
+// Ninguna cobertura, por baja que sea, puede saltear un escalón.
+for (const necesaria of [1.1, 2, 4, 10, 50, 500]) {
+  const r = desde(30, necesaria)
+  if (!r.hay) continue
+  assert.equal(r.hasta, 50,
+    `desde 30 con necesaria ${necesaria} el destino tiene que ser 50, no ${r.hasta}`)
+}
+
+// Sin movimiento tampoco saltea.
+const quietoCorp = evaluarSugerencia({
+  ...BASE, estado: 'sin_movimiento', ragPorcentaje: 30, velocidadObservada: 0,
+}, CORPORATIVA)
+assert.equal(quietoCorp.hasta, 50, 'sin movimiento desde 30 va a 50, no a 70')
+assert.equal(quietoCorp.saltoPuedeNoAlcanzar, true)
+
+// Un porcentaje FUERA de la escala nueva se ancla hacia abajo y sube uno.
+// Es lo que pasaría si alguien cargó 40 a mano antes del cambio de escala.
+assert.equal(desde(40, 100).hasta, 50, '40 fuera de escala se ancla en 30 y sube a 50')
+assert.equal(desde(60, 100).hasta, 70, '60 fuera de escala se ancla en 50 y sube a 70')
+assert.equal(desde(10, 100).hasta, 20, '10 fuera de escala sube al primer escalón')
+
+console.log('✓ Escala 20/30/50/70: un escalón por vez, sin saltear, y los valores fuera de escala se anclan')

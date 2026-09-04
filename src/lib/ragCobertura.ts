@@ -78,6 +78,15 @@ export interface Sugerencia {
    * por debajo de 1. Mostrar el límite es honesto; inventar un salto mayor no.
    */
   topeInsuficiente: boolean
+  /**
+   * El déficit es severo —sin movimiento, o cobertura por debajo de
+   * `DEFICIT_SEVERO`— y un solo escalón probablemente no lo cierre.
+   *
+   * Es un AVISO, no una predicción: Noven no modela cuánto acelera la salida un
+   * punto más de descuento, y no va a fingir que sí. Lo honesto es mostrar el
+   * límite y que decida el operador; saltar dos por cuenta propia no lo sería.
+   */
+  saltoPuedeNoAlcanzar: boolean
 }
 
 /** Estados en los que la ventana comercial ya no admite intervención comercial. */
@@ -104,6 +113,7 @@ function sinSugerencia(motivo: MotivoSinSugerencia, cobertura: number | null = n
     sinMovimiento: false,
     factorRequerido: null,
     topeInsuficiente: false,
+    saltoPuedeNoAlcanzar: false,
   }
 }
 
@@ -124,21 +134,40 @@ export function calcularCobertura(
 }
 
 /**
- * Cuántos escalones subir según la cobertura.
+ * Debajo de esta cobertura el déficit es SEVERO.
  *
- * Sin movimiento (observada ≤ 0) sube dos, igual que un déficit severo, pero se
- * marca aparte: no es "poco", es nada, y la conversación con el operador es
- * distinta.
+ * Era el corte entre subir uno y subir dos. Ya no decide el salto —siempre se
+ * sube de a uno— pero sigue siendo el umbral a partir del cual conviene avisar
+ * que el escalón siguiente probablemente no alcance. El número no se inventó
+ * acá: se hereda de la regla anterior.
+ */
+const DEFICIT_SEVERO = 0.5
+
+/**
+ * Cuántos escalones subir según la cobertura. SIEMPRE UNO.
+ *
+ * La regla de dos escalones se diseñó para una escala de incrementos parejos de
+ * diez, donde saltar dos era subir veinte puntos. Con una escala de saltos
+ * desiguales —20/30/50/70— subir dos desde 30 es ir a 70: cuarenta puntos de
+ * una, que es regalar el producto en un paso.
+ *
+ * Y no se pierde capacidad de reacción, porque EL TIEMPO YA ESTÁ EN EL CÁLCULO:
+ * si el producto sigue sin moverse, en el próximo control la ventana es más
+ * corta, `velocidad_necesaria` sube, la cobertura cae más y vuelve a sugerir.
+ * De 30 se pasa a 50, y si no alcanza, a 70 — pasando por el 50 siempre, que es
+ * justamente lo que un salto doble se saltea.
+ *
+ * Sin movimiento (observada ≤ 0) también sube uno, pero se marca aparte: no es
+ * "poco", es nada, y la conversación con el operador es distinta.
  */
 export function escalonesPorCobertura(
   cobertura: number | null,
   velocidadObservada: number | null,
 ): number {
-  if (finito(velocidadObservada) && velocidadObservada <= 0) return 2
+  if (finito(velocidadObservada) && velocidadObservada <= 0) return 1
   if (!finito(cobertura)) return 0
   if (cobertura >= 1) return 0
-  if (cobertura >= 0.5) return 1
-  return 2
+  return 1
 }
 
 /**
@@ -257,6 +286,7 @@ export function evaluarSugerencia(
     // El salto llega al tope y la cobertura sigue por debajo de 1: aun con el
     // descuento máximo autorizado, el ritmo actual no alcanza la ventana.
     topeInsuficiente: hasta >= tope && finito(cobertura) && cobertura < 1,
+    saltoPuedeNoAlcanzar: sinMovimiento || (finito(cobertura) && cobertura < DEFICIT_SEVERO),
   }
 }
 
