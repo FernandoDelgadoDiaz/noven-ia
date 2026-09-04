@@ -73,6 +73,9 @@ export const CLASIFICACION = Object.freeze({
   producto_codigos: 'lectura_tenant',
   producto_sucursal: 'lectura_tenant',
   productos: 'lectura_tenant',
+  // Escala de porcentajes RAG autorizados. Se lee desde el cliente para
+  // presentar la sugerencia; nunca se escribe desde el browser.
+  rag_escala_descuento: 'lectura_tenant',
   regiones: 'lectura_tenant',
   sectores: 'lectura_tenant',
   sucursales: 'lectura_tenant',
