@@ -5,10 +5,11 @@
     "20260902170000_cuota_por_actor_y_cache_analisis_v1.sql",
     "20260903103749_archive_august_backups_v1.sql",
     "20260903120000_regiones_solo_select_v1.sql",
-    "20260903160000_exposicion_vistas_v1.sql"
+    "20260903160000_exposicion_vistas_v1.sql",
+    "20260904120000_rag_cobertura_escala_e_instrumentacion_v1.sql"
   ],
-  "forward_migrations_sha256": "6d30efbb85b260db62632d6935b671f17f138239c493a021bcd20abdbefcae02",
-  "replay_fingerprint_sha256": "cadcbb6069bddd3febc68c3d775245da43ec9a004f4f0700b69d837663ebb9de",
+  "forward_migrations_sha256": "d78128cce4d975ff0e6d50c1c959420dba00c860f67890a460a4b265750c4cab",
+  "replay_fingerprint_sha256": "17d6ed1e59174e8ce6cbc482ac98b351d975c9d8f0f6afbac4942db34b1e73ee",
   "anchor_fingerprint_sha256": "837771691ffc6e2276c66a26f9ae010c872f12ea33b118406d48b2ad6fca38af",
   "anchor_materialized_at": "2026-09-01",
   "anchor_materialized_from": "catalogo productivo meqvjabgyrgwkxpclqxp (PR #129)",
