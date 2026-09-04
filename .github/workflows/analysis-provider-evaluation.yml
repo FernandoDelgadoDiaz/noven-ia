@@ -1,0 +1,63 @@
+name: Noven OpenAI synthetic guardrails
+
+on:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - .github/workflows/analysis-provider-evaluation.yml
+      - netlify/functions/_analisis_policy.ts
+      - netlify/functions/analisis.ts
+      - scripts/evaluacion-proveedor/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: noven-openai-guardrails-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  synthetic-guardrails:
+    runs-on: ubuntu-latest
+    # 24 llamadas reales a ~10s cada una son ~4 minutos de corpus, y `npm ci`
+    # osciló entre 2 y 7 minutos según el estado de la caché. Con 10 el job
+    # moría a mitad del corpus y no dejaba informe: el guardarraíl no fallaba,
+    # simplemente no llegaba a medirse.
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Node 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify OpenAI credential and fixed configuration
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: npm run eval:analysis-providers -- --preflight
+
+      - name: Evaluate deterministic synthetic corpus
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: npm run eval:analysis-providers -- --repeticiones 3 --output .artifacts/provider-evaluation/openai-us.json
+
+      - name: Emitir informe crudo en el log
+        if: always()
+        run: node scripts/evaluacion-proveedor/volcar-informe.mjs .artifacts/provider-evaluation/openai-us.json
+
+      - name: Upload synthetic evaluation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: openai-synthetic-guardrail-evidence
+          path: .artifacts/provider-evaluation/openai-us.json
+          if-no-files-found: warn
+          retention-days: 30

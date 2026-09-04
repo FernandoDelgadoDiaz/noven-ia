@@ -297,8 +297,8 @@ const handler: Handler = async (event: HandlerEvent) => {
   const supabaseUrl = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL
   const anonKey = process.env.VITE_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const deepseekKey = process.env.DEEPSEEK_API_KEY
-  if (!supabaseUrl || !anonKey || !serviceRoleKey || !deepseekKey) {
+  const openaiKey = process.env.OPENAI_API_KEY
+  if (!supabaseUrl || !anonKey || !serviceRoleKey || !openaiKey) {
     logServerError(event, { endpoint: ENDPOINT, operation: 'server_config', statusCode: 500, error: 'Configuración de servidor incompleta' })
     return json(500, { success: false, error: 'Configuración de servidor incompleta' })
   }
@@ -690,32 +690,34 @@ const handler: Handler = async (event: HandlerEvent) => {
   }
 
   try {
-    const dsRes = await fetch('https://api.deepseek.com/chat/completions', {
+    const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deepseekKey}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: 'gpt-5.6-terra',
         messages: [
           { role: 'system', content: SYSTEM_ADMIN },
           { role: 'user', content: datosFormateados },
         ],
-        max_tokens: 1500,
+        max_completion_tokens: 1500,
+        reasoning_effort: 'none',
         temperature: 0.2,
+        store: false,
       }),
     })
-    if (!dsRes.ok) {
+    if (!openaiRes.ok) {
       logServerError(event, {
         endpoint: ENDPOINT,
-        operation: 'deepseek_http',
+        operation: 'openai_http',
         statusCode: 502,
-        error: { name: 'DeepSeekHttpError', code: String(dsRes.status), message: 'El proveedor devolvió un estado HTTP no exitoso' },
+        error: { name: 'OpenAIHttpError', code: String(openaiRes.status), message: 'El proveedor devolvió un estado HTTP no exitoso' },
       })
       return json(502, { success: false, error: 'No se pudo completar el análisis con el modelo.' })
     }
-    const dsData = await dsRes.json() as { choices?: Array<{ message?: { content?: string } }> }
-    const contenido = dsData.choices?.[0]?.message?.content?.trim() ?? ''
+    const openaiData = await openaiRes.json() as { choices?: Array<{ message?: { content?: string } }> }
+    const contenido = openaiData.choices?.[0]?.message?.content?.trim() ?? ''
     if (!contenido) {
-      logServerError(event, { endpoint: ENDPOINT, operation: 'deepseek_empty', statusCode: 502, error: 'El modelo devolvió contenido vacío' })
+      logServerError(event, { endpoint: ENDPOINT, operation: 'openai_empty', statusCode: 502, error: 'El modelo devolvió contenido vacío' })
       return json(502, { success: false, error: 'El modelo no devolvió contenido.' })
     }
     const generadoEn = new Date().toISOString()
@@ -741,7 +743,7 @@ const handler: Handler = async (event: HandlerEvent) => {
       sucursal_codigo: sucursal.codigo,
     })
   } catch (err) {
-    logServerError(event, { endpoint: ENDPOINT, operation: 'deepseek_request', statusCode: 502, error: err })
+    logServerError(event, { endpoint: ENDPOINT, operation: 'openai_request', statusCode: 502, error: err })
     return json(502, { success: false, error: 'No se pudo contactar el modelo de análisis.' })
   }
 }

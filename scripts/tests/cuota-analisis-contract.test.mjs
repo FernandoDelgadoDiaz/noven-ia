@@ -94,7 +94,7 @@ for (const respuesta of [
 const server = read('netlify/functions/analisis.ts')
 const posCuota = server.indexOf('await consumirCuota(')
 const posConsultas = server.indexOf("from('usuarios')")
-const posProveedor = server.indexOf('api.deepseek.com')
+const posProveedor = server.indexOf('api.openai.com')
 const posCacheLookup = server.indexOf("from('analisis_cache')")
 
 assert.ok(posCuota > 0, 'analisis.ts debe consumir cuota')

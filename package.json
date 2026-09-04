@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node scripts/test.mjs"
+    "test": "node scripts/test.mjs",
+    "eval:analysis-providers": "node scripts/evaluacion-proveedor/correr.mjs"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",

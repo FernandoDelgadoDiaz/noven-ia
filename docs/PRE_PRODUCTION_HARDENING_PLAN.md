@@ -50,14 +50,14 @@ Regla de trabajo vigente: un PR por ítem, rama → PR → CI verde → merge. N
 - Contrato: `scripts/tests/desafio5s-cold-archive-contract.test.mjs` prohíbe operaciones destructivas en esa migración.
 - Documentación: `docs/DESAFIO5S_COLD_ARCHIVE.md` (inventario preservado, mecánica del archivo, dependencia conocida y condición de salida).
 
-### 0.3 · Registrar decisiones pendientes — PARCIAL
+### 0.3 · Registrar decisiones pendientes — HECHO
 
 - PR #125 registró en `ai/decisions.md` dos de las tres decisiones previstas:
   1. excepción transitoria `admin_organizacion + gerente_sucursal 091`, con motivo y condición de salida;
   2. archivo frío de Desafío 5S dentro del proyecto Supabase de NoVen, con condición de salida y la dependencia conocida `desafio5s_es_admin() → public.rol_actual() → public.usuarios`.
-- **Falta la tercera:** la elección de proveedor de inferencia para `analisis.ts`. El propio PR #125 la difirió explícitamente al ítem 1.5, "después de evaluar jurisdicción, retención y calidad contra un corpus sintético determinístico".
+- **La tercera quedó registrada el 2026-09-04:** la elección de proveedor de inferencia para `analisis.ts`. PR #141 registra OpenAI con `gpt-5.6-terra`, credencial server-only, `store=false`, y la jurisdicción que efectivamente se sostiene —procesamiento en EE.UU. por defecto, sin residencia contratada, porque la cuenta no es elegible—. Incluye la corrección del fundamento original, que confundía residencia de almacenamiento con residencia de procesamiento.
 
-**0.3 no se cierra hasta que 1.5 produzca esa decisión y quede registrada en `ai/decisions.md`.**
+**0.3 cerrado.** Las tres decisiones previstas están en `ai/decisions.md` con motivo y condición de salida.
 
 ## 3. Fase 1 — Endurecimiento técnico
 
@@ -147,39 +147,39 @@ Al aplicarla a producción, Supabase registró la misma migración bajo la versi
 
 Documentación completa: `docs/MIGRATION_REPLAY_BASELINE_V1.md`.
 
-### 1.5 · Decisión de proveedor de inferencia — PARCIAL
+### 1.5 · Decisión de proveedor de inferencia — HECHO
 
-**Paso 1 del alcance entregado; el resto bloqueado por credencial.**
-
-`netlify/functions/analisis.ts` sigue enviando a `https://api.deepseek.com/chat/completions` (modelo `deepseek-chat`, `temperature 0.2`, `max_tokens 1500`). No existe entrada en `ai/decisions.md`.
-
-Alcance comprometido en el PR #125:
-
-1. construir un corpus sintético determinístico, con verdad de base conocida y sin datos comerciales reales;
-2. evaluar candidatos por **adherencia a los guardarraíles del system prompt** — no afirmar porcentajes de mejora sin base comparable, no inventar estacionalidad, no confundir trimestre abierto con cerrado — no por estilo;
-3. sumar el análisis documental de jurisdicción y política de retención de cada candidato;
-4. presentar la comparación **antes** de migrar; la decisión es del responsable del producto;
-5. una vez tomada, migración y registro en `ai/decisions.md` van en el mismo PR.
+`netlify/functions/analisis.ts` usa OpenAI (`gpt-5.6-terra`, Chat Completions en `https://api.openai.com/v1/chat/completions`, `store=false`, `reasoning_effort=none`, `temperature=0.2`, `max_completion_tokens=1500`). La decisión está registrada en `ai/decisions.md` con jurisdicción, retención, límites y condición de salida.
 
 **Estado por paso:**
 
 | Paso | Estado |
 |---|---|
 | 1 · corpus sintético determinístico | **HECHO** — PR #146 |
-| 2 · medir adherencia a guardarraíles | **BLOQUEADO** — falta `OPENAI_API_KEY` |
-| 3 · jurisdicción y retención | PENDIENTE |
-| 4 · presentar la comparación | PENDIENTE |
-| 5 · migración + `ai/decisions.md` | PENDIENTE |
+| 2 · medir adherencia a guardarraíles | **HECHO** — corridas 33869459977 y 33903831553 |
+| 3 · jurisdicción y retención | **HECHO** — PR #141, corregido el 04-09 |
+| 4 · presentar la comparación | **N/A por decisión del responsable** |
+| 5 · migración + `ai/decisions.md` | **HECHO** — PR #141 |
 
-El corpus vive en `scripts/evaluacion-proveedor/`: ocho escenarios deterministas con verdad de base conocida —unidades en riesgo, monto expuesto, existencia de ventana previa comparable, recurrencia—, sin datos comerciales reales. Diez verificadores, de los cuales tres son obligatorios y deciden si un proveedor sirve: `porcentaje-sin-base`, `estacionalidad-inventada` y `trimestre-abierto-como-cerrado`.
+El paso 4 se canceló explícitamente: el responsable del producto eligió OpenAI el 2026-09-03 y la comparación contra otros candidatos se descartó antes de ejecutar llamadas pagas. **No se fabricaron resultados comparativos.**
+
+**Resultado del paso 2.** Dos corridas contra la API real, 48 respuestas distintas en total —ninguna repetida entre corridas—, ocho escenarios por tres repeticiones cada una. **El modelo no violó ninguno de los diez guardarraíles en ninguna de las 48.** Los tres obligatorios —`porcentaje-sin-base`, `estacionalidad-inventada`, `trimestre-abierto-como-cerrado`— quedaron en verde 24/24 en la corrida final.
+
+**Lo que costó llegar ahí, y por qué importa.** La primera corrida produjo 17 fallas y las 17 eran artefactos de los detectores: la suite nunca se había ejercido contra salida real y cada verificador estaba calibrado contra el fraseo que imaginó su autor. Se resolvió con una pasada de validación de los diez —59 casos de mutación con el fraseo de abstención extraído de las respuestas reales, más una prueba adversaria que inyecta violaciones dentro de una respuesta textual del modelo— y no parcheando el detector que fallaba en cada vuelta. El detalle está en `docs/ANALYSIS_PROVIDER_EVALUATION_V1.md` §5.
+
+La distinción se mantiene explícita en ese documento: **el modelo se comportó bien** es evidencia de las corridas; **el instrumento lo certifica** sólo vale desde la validación completa. Antes de ella el corpus no estaba en condiciones de autorizar nada.
+
+Dos hallazgos operativos que quedaron corregidos en el camino: el endpoint regional `us.api.openai.com` nunca funcionó —la cuenta no es elegible para residencia de datos y devolvía `HTTP 401 incorrect_hostname`—, y el job del workflow no tenía presupuesto de tiempo para el corpus completo, lo que producía cancelaciones que se leían como fallas.
+
+El corpus vive en `scripts/evaluacion-proveedor/`: ocho escenarios deterministas con verdad de base conocida —unidades en riesgo, monto expuesto, existencia de ventana previa comparable, recurrencia—, sin datos comerciales reales. Diez verificadores, de los cuales tres son obligatorios y deciden si un proveedor sirve.
 
 **No es sólo para esta migración.** Es la verificación de regresión de cualquier cambio futuro de modelo o de prompt, y `corpus-evaluacion-contract.test.mjs` lo mantiene atado al prompt real: si `analisis.ts` cambia un marcador estructural y el corpus no, CI va rojo.
 
-**El bloqueo es una credencial, no un problema técnico.** Medir adherencia exige llamar al proveedor. `OPENAI_API_KEY` tiene que cargarse en Netlify y en los secretos de GitHub Actions; nadie más que el responsable del proyecto puede hacerlo. El corredor falla con instrucciones explícitas y código de salida 2 en vez de colgarse.
+**Pendiente de cierre operativo:** eliminar `DEEPSEEK_API_KEY` del código y de Netlify, recién después de verificar el análisis en producción contra OpenAI.
 
 Desde el PR #137 hay **un solo system prompt** que evaluar (`SYSTEM_ADMIN`), no dos: al limitarse el análisis a roles de conducción desapareció la variante de operador. Eso reduce la superficie de la evaluación.
 
-Este ítem bloquea el cierre de 0.3.
+Este ítem cerró y con él se cerró 0.3.
 
 ### Fuera de numeración · Reloj determinístico para E2E RAG — HECHO
 

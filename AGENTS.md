@@ -43,7 +43,7 @@ Implementación en `src/lib/riesgo.ts`. Reglas completas en `docs/RISK_AND_RAG_R
 
 ## Capa de IA
 
-`netlify/functions/analisis.ts` genera análisis gerencial comparando el trimestre en curso contra la ventana equivalente del trimestre previo. El proveedor de inferencia está **pendiente de decisión** (ítem 1.5 del plan de endurecimiento); hoy usa DeepSeek vía `DEEPSEEK_API_KEY`.
+`netlify/functions/analisis.ts` genera análisis gerencial comparando el trimestre en curso contra la ventana equivalente del trimestre previo. OpenAI es el proveedor elegido en el ítem 1.5 y se invoca desde la Function mediante `OPENAI_API_KEY`; la clave nunca se expone al browser.
 
 ## Comandos
 

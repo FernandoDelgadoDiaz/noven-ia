@@ -124,13 +124,13 @@ for (const operation of [
   'load_rag',
   'load_current_costs',
   'load_economic_history',
-  'deepseek_http',
-  'deepseek_empty',
-  'deepseek_request',
+  'openai_http',
+  'openai_empty',
+  'openai_request',
 ]) {
   assert.match(analisis, new RegExp(`operation: '${operation}'`), `analisis: registra ${operation}`)
 }
-assert.doesNotMatch(analisis, /dsRes\.text\(/, 'analisis: no registra body de error de DeepSeek')
+assert.doesNotMatch(analisis, /openaiRes\.text\(/, 'analisis: no registra body de error de OpenAI')
 assert.doesNotMatch(analisis, /logServerError[^\n]*datosFormateados/, 'analisis: no envía prompt al logger')
 assert.doesNotMatch(analisis, /\$\{(?:perfilError|sucursalError|accesosError|vErr|ragError|costosError|histActualError|histAnteriorError).*?\.message\}/, 'analisis: no devuelve mensajes internos de Supabase')
 assert.match(analisis, /'No se pudo completar el análisis con el modelo\.'/)

@@ -53,3 +53,27 @@ La alternativa obvia, regenerar el ancla desde la base replicada, era peor que e
 No es «aceptamos perder el ancla», es «la perdemos cuando ganamos otra cosa a cambio», y ambas cosas ocurren en el mismo PR y quedan visibles en el mismo diff.
 
 **Condición de salida:** scriptar la extracción de los fragmentos desde el catálogo productivo. Hoy es el único paso manual del procedimiento y es justamente el que sostiene el ancla: cuanto más caro es el camino legítimo, más tentador es mover la fecha del tripwire y seguir. Debería resolverse antes de la primera re-materialización real.
+
+## OpenAI como proveedor del análisis gerencial — 2026-09-03
+
+**Decisión:** `netlify/functions/analisis.ts` usa OpenAI con el modelo `gpt-5.6-terra` mediante Chat Completions en `https://api.openai.com/v1/chat/completions`. La credencial server-only es `OPENAI_API_KEY`; la solicitud fija `store=false`, `reasoning_effort=none`, `temperature=0.2` y `max_completion_tokens=1500`. No existe fallback automático a DeepSeek ni a ningún otro proveedor.
+
+**Responsable de la decisión:** el responsable del producto eligió OpenAI explícitamente el 2026-09-03. La comparación inicialmente prevista contra Fireworks y Anthropic se canceló antes de ejecutar llamadas pagas; no se fabrican resultados comparativos. El corpus sintético determinístico permanece como gate de aceptación del proveedor elegido.
+
+**Motivo:** Chat Completions conserva el contrato que ya consumía la Function —mensajes `system`/`user` y respuesta `choices[0].message.content`—, por lo que el cambio de proveedor no exige reescribir el prompt, la lógica económica, la cuota por actor, el caché ni el frontend. `gpt-5.6-terra` cubre el rol de análisis gerencial con un equilibrio explícito entre capacidad y costo.
+
+**Jurisdicción — corregido el 2026-09-04:** la primera versión de este registro afirmaba que «el endpoint regional fija procesamiento y almacenamiento en Estados Unidos», y se apoyaba en `https://us.api.openai.com`. Era incorrecto por dos motivos distintos, y ambos importan.
+
+El primero es de hecho: **el proyecto no es elegible para residencia regional.** Figura como «Global» en la consola y el campo no es editable — la residencia de datos es una función de cuentas empresariales. La llamada al endpoint regional nunca funcionó: devolvía `HTTP 401 · incorrect_hostname`, y eso se descubrió recién al correr el corpus contra la API real, porque hasta entonces faltaba la credencial. La afirmación estuvo escrita durante un día sin que nada la hubiera ejercido.
+
+El segundo es conceptual, y sobrevive a la corrección del primero: **residencia de almacenamiento no implica residencia de procesamiento.** Aun con el endpoint regional disponible, la garantía habría sido sobre dónde se almacenan los datos en reposo, no sobre dónde corre la inferencia. El registro original confundía las dos cosas.
+
+Lo que efectivamente se sostiene hoy: **OpenAI procesa las peticiones de la API en Estados Unidos por defecto**, y Chat Completions se atiende en centros de datos estadounidenses. Lo que NO se tiene es la garantía contractual de almacenamiento en reposo dentro de la región, que es lo que el endpoint regional habría aportado.
+
+**Por qué esto igual cumple el objetivo de 1.5.** El ítem existe para sacar los datos operativos de una jurisdicción sin control verificable de retención — ese era el riesgo D-6, con DeepSeek. Ese objetivo se cumple: se pasa de un proveedor sobre el que no había decisión registrada, ni política de retención evaluada, ni jurisdicción conocida, a uno con retención publicada, `store=false` explícito y procesamiento en EE.UU. por defecto. La garantía es más débil que la que se creyó tener el 03-09, pero es una garantía real y auditable, y es estrictamente mejor que el punto de partida. Queda registrada como más débil justamente para que nadie la cite después como si fuera residencia contratada.
+
+**Límites:** `store=false` desactiva el almacenamiento voluntario de la respuesta para productos de distillation/evals, pero no equivale por sí solo a Zero Data Retention. Bajo la política estándar pueden existir logs de abuso por hasta 30 días; ZDR requiere aprobación de OpenAI. No hay residencia de datos contratada. Esta es una decisión técnica documentada, no una conclusión legal sobre transferencias internacionales desde Argentina.
+
+**Despliegue:** configurar `OPENAI_API_KEY` en Netlify antes del merge. Sin la variable, `analisis.ts` falla cerrado con error de configuración y la capacidad queda indisponible. Antes del cutover deben pasar los tres casos del corpus sintético contra la API real; después del deploy se realiza un smoke controlado y recién entonces se revoca la credencial anterior de DeepSeek.
+
+**Condición de salida:** reevaluar proveedor o modelo si el corpus detecta una regresión de guardarraíles, si la cuenta pasa a ser elegible para residencia de datos regional —en cuyo caso corresponde contratarla y volver al endpoint regional—, si cambia la retención publicada, el costo/latencia deja de ser compatible con la operación, o aparece un requisito legal que la configuración actual no cubra. Cualquier reemplazo repite evaluación sintética, decisión explícita y despliegue sin fallback silencioso.
