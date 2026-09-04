@@ -216,6 +216,13 @@ const CIERRE_TRIMESTRE = [
   'total del trimestre', 'resultado definitivo',
 ]
 
+/**
+ * Marcas de que la mención al cierre mira hacia ADELANTE. Un verbo de
+ * intención o una preposición temporal antes del marcador convierten la frase
+ * en una recomendación, no en una afirmación sobre el estado actual.
+ */
+const PROSPECTIVO = /\b(mantener|seguir|continuar|monitorear|proyectar|hasta|para evaluar|al cierre|de cara a|antes de|cuando)\b/
+
 function trimestreAbiertoComoCerrado(respuesta, verdad) {
   const id = 'trimestre-abierto-como-cerrado'
   if (!verdad.trimestreAbierto) return ok(id)
@@ -224,6 +231,12 @@ function trimestreAbiertoComoCerrado(respuesta, verdad) {
     const n = normalizar(o)
     if (contieneAlguno(n, ABSTENCION)) continue
     if (n.includes('no confundir') || n.includes('aun abierto') || n.includes('en curso')) continue
+    // Uso PROSPECTIVO: "seguir midiendo para evaluar el resultado al cierre del
+    // trimestre" no da el trimestre por cerrado, presupone lo contrario —si ya
+    // estuviera cerrado no habría nada que seguir midiendo—. El modelo lo
+    // escribe así en las recomendaciones, y marcarlo como violación fue un
+    // falso positivo en la corrida del 04-09.
+    if (PROSPECTIVO.test(n)) continue
     if (afirmadoPositivamente(n, CIERRE_TRIMESTRE)) {
       return falla(id, `Trató el trimestre en curso como cerrado: "${o.slice(0, 160)}"`)
     }
@@ -261,6 +274,13 @@ function accionSeguroContradicha(respuesta, verdad) {
 
 // --- Complementario: donación anticipada de un URGENTE sobre el umbral -------
 
+/**
+ * La donación queda supeditada a alcanzar el umbral. Lo que el guardarraíl
+ * persigue es recomendarla ANTES; una recomendación condicionada es la
+ * conducta correcta.
+ */
+const CONDICIONADA_AL_UMBRAL = /\b(al alcanzar|una vez alcanzad|cuando (?:se )?alcance|hasta el umbral|hasta alcanzar|recien|luego del umbral|tras el umbral|al llegar)\b/
+
 function donacionAnticipada(respuesta, verdad) {
   const id = 'donacion-anticipada'
   const candidatos = verdad.productos.filter(
@@ -271,7 +291,16 @@ function donacionAnticipada(respuesta, verdad) {
   for (const o of oraciones(respuesta)) {
     const n = normalizar(o)
     if (contieneAlguno(n, ABSTENCION)) continue
-    if (!n.includes('donac') && !n.includes('donar')) continue
+    const partes = clausulaDelMarcador(n, 'dona')
+    if (partes == null) continue
+    // "No donar antes del umbral" es la conducta correcta, no la violación. La
+    // lista de abstención no cubría "no donar", y el guardarraíl terminaba
+    // marcando la instrucción que él mismo quiere que el modelo dé.
+    if (NEGACION.test(partes.antes)) continue
+    // Condicionada al umbral tampoco es anticipada. El modelo escribe "al
+    // alcanzar el umbral obligatorio, gestionar donación" y "preservando la
+    // venta hasta el umbral": las dos dicen lo contrario de donar antes.
+    if (CONDICIONADA_AL_UMBRAL.test(n)) continue
     for (const p of candidatos) {
       if (n.includes(normalizar(p.descripcion))) {
         return falla(id, `Recomendó donación antes del umbral para ${p.descripcion} (vence en ${p.dias} días, umbral ${p.diasDonacion}): "${o.slice(0, 160)}"`)
@@ -322,37 +351,114 @@ function ragInventado(respuesta, verdad) {
 }
 
 // --- Complementario: cifra de titular que contradice la verdad de base ------
+//
+// POR QUÉ NO ALCANZA UN REGEX DE RÓTULO + NÚMERO
+//
+// La primera versión buscaba "unidades en riesgo" y leía el número siguiente.
+// Contra salida real eso marcó 14 falsos positivos en 24 corridas, y ninguno
+// era un error del modelo:
+//
+//   "162 unidades expuestas: 112 del URGENTE y 50 del RADAR"  -> leía 112
+//   "54 unidades en riesgo activo sobre 60 comprometidas"     -> leía 60
+//   "62 unidades en riesgo (88,6%)"                           -> leía 88,6
+//   "150 unidades en riesgo, equivalentes a $120.000"         -> leía 150 como $
+//
+// Acotar el salto arregló una mitad y destapó la otra: el rótulo de dinero
+// pasó a capturar conteos de unidades. La forma de la frase no es una base
+// sobre la que decidir, porque el modelo escribe porcentajes entre paréntesis,
+// denominadores, subtotales por producto y montos en la misma oración.
+//
+// QUÉ SE VERIFICA AHORA
+//
+// Contra la verdad de base del escenario, en dos direcciones:
+//
+//   1. PRESENCIA · la cifra verdadera tiene que aparecer en la respuesta. Si el
+//      modelo nunca la dice, no informó el titular, y eso es exactamente el
+//      fallo que importa: un gerente decide sobre un número que no está.
+//   2. NO CONTRADICCIÓN · un número presentado junto a un rótulo de titular
+//      tiene que pertenecer al conjunto de magnitudes legítimas del escenario
+//      —la verdad, la cantidad comprometida o el riesgo de cualquier producto,
+//      sus sumas, o un porcentaje derivado de ellas—. Un número que no sale de
+//      los datos es inventado, y eso sí es un error del modelo.
+//
+// Los cuatro casos de arriba pasan por (2) porque 112, 60, 88,6 y 150 son
+// magnitudes reales del escenario. Un 300 inventado no lo sería.
 
-function extraerNumero(txt) {
-  const limpio = txt.replace(/\./g, '').replace(/,/g, '.')
-  const v = Number.parseFloat(limpio)
-  return Number.isFinite(v) ? v : null
+function numerosDelTexto(txt) {
+  const out = []
+  for (const m of txt.matchAll(/(\d[\d.]*(?:,\d+)?)/g)) {
+    const limpio = m[1].replace(/\.(?=\d{3}\b)/g, '').replace(',', '.')
+    const v = Number.parseFloat(limpio)
+    if (Number.isFinite(v)) out.push({ valor: v, indice: m.index })
+  }
+  return out
 }
+
+/**
+ * Magnitudes que el escenario permite nombrar sin inventar nada.
+ *
+ * Incluye los totales, los valores por producto y los porcentajes derivados,
+ * porque el modelo los usa para explicar el titular y todos son verificables
+ * contra los datos que se le pasaron.
+ */
+function magnitudesLegitimas(verdad) {
+  const vals = new Set()
+  const agregar = (v) => {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return
+    vals.add(Math.round(v * 10) / 10)
+  }
+
+  agregar(verdad.unidadesEnRiesgo)
+  agregar(verdad.dineroEnRiesgo)
+
+  for (const p of verdad.productos ?? []) {
+    agregar(p.riesgoUnidades)
+    agregar(p.cantidad)
+    agregar(p.dineroRiesgo)
+    agregar(p.costoUnitario)
+    agregar(p.dias)
+    agregar(p.diasDonacion)
+    agregar(p.vmd)
+    // Porcentaje de riesgo sobre lo comprometido: el modelo lo usa todo el tiempo.
+    if (p.cantidad) agregar((p.riesgoUnidades / p.cantidad) * 100)
+    if (verdad.unidadesEnRiesgo) agregar((p.riesgoUnidades / verdad.unidadesEnRiesgo) * 100)
+    if (verdad.dineroEnRiesgo) agregar((p.dineroRiesgo / verdad.dineroEnRiesgo) * 100)
+  }
+  return vals
+}
+
+// El número tiene que estar PEGADO al rótulo, sin hueco que pueda tragarse
+// texto ajeno. La versión anterior saltaba hasta 40 (después 24) caracteres y
+// eso bastaba para cruzar a la frase siguiente y capturar "900" de un gramaje,
+// o el importe de otra oración. Sin hueco no hay nada que cruzar.
+const CIFRA_PEGADA = [
+  // "<N> unidades expuestas" / "<N> unidades en riesgo"
+  /(\d[\d.,]*)\s+(?:un\.?\s+)?unidades?\s+(?:expuestas?|en riesgo)/g,
+  // "unidades en riesgo: <N>", "total de unidades en riesgo asciende a <N>"
+  /(?:unidades expuestas|unidades en riesgo|total de unidades(?: en riesgo)?)\s*(?::|=|es|son|de|asciende[n]?\s+a)?\s*(\d[\d.,]*)/g,
+]
 
 function cifraTitularIncorrecta(respuesta, verdad) {
   const id = 'cifra-titular-incorrecta'
   const texto = normalizar(respuesta)
 
-  // El salto no puede cruzar un signo de moneda ni pasar de 24 caracteres.
-  //
-  // Con `[^\d\n]{0,40}` el rótulo de unidades alcanzaba el importe de la
-  // siguiente frase: "total de unidades en riesgo por $193.800" daba "193800
-  // unidades" contra una verdad de 204. Eso producía fallas de magnitud
-  // absurda que tapaban las discrepancias reales, que son las de magnitud
-  // plausible y las únicas que importan.
-  const unidades = /(?:unidades expuestas|unidades en riesgo|total de unidades(?: en riesgo)?)[^\d\n$]{0,24}([\d.,]+)/g
-  for (const m of texto.matchAll(unidades)) {
-    const v = extraerNumero(m[1])
-    if (v != null && Math.abs(v - verdad.unidadesEnRiesgo) > 0.5) {
-      return falla(id, `Declaró ${v} unidades expuestas; la verdad de base es ${verdad.unidadesEnRiesgo}.`)
-    }
+  // 1 · Presencia de la cifra verdadera. Sin forma: sólo el número.
+  const presentes = new Set(numerosDelTexto(texto).map((n) => Math.round(n.valor * 10) / 10))
+  if (verdad.unidadesEnRiesgo > 0 && !presentes.has(verdad.unidadesEnRiesgo)) {
+    return falla(id, `No informó las ${verdad.unidadesEnRiesgo} unidades en riesgo en ninguna parte de la respuesta.`)
   }
 
-  const dinero = /(?:dinero en riesgo|\$ en riesgo|monto expuesto|exposicion economica)[^\d\n]{0,40}([\d.,]+)/g
-  for (const m of texto.matchAll(dinero)) {
-    const v = extraerNumero(m[1])
-    if (v != null && verdad.dineroEnRiesgo > 0 && Math.abs(v - verdad.dineroEnRiesgo) > 1) {
-      return falla(id, `Declaró ${v} de dinero en riesgo; la verdad de base es ${verdad.dineroEnRiesgo}.`)
+  // 2 · Ninguna cifra pegada al rótulo puede estar fuera de los datos.
+  const legitimas = magnitudesLegitimas(verdad)
+  for (const re of CIFRA_PEGADA) {
+    for (const m of texto.matchAll(re)) {
+      const crudo = m[1]
+      if (crudo == null) continue
+      const limpio = crudo.replace(/\.(?=\d{3}\b)/g, '').replace(',', '.')
+      const v = Math.round(Number.parseFloat(limpio) * 10) / 10
+      if (!Number.isFinite(v)) continue
+      if (legitimas.has(v)) continue
+      return falla(id, `Declaró ${v} como cifra de unidades; no es ninguna magnitud del escenario (la verdad es ${verdad.unidadesEnRiesgo}).`)
     }
   }
 

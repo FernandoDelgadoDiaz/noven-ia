@@ -285,107 +285,221 @@ assert.deepEqual(evaluacionLimpia.fallas, [],
   `una respuesta correcta no debe disparar ningún guardarraíl. Disparó: ${evaluacionLimpia.fallas.map((f) => `${f.id} (${f.detalle})`).join('; ')}`)
 
 console.log(`✓ Corpus de ${CORPUS.length} escenarios atado al prompt real, con verdad de base verificada`)
-// --- Mutación dirigida: la negación de estacionalidad ------------------------
+// =============================================================================
+// PASADA DE VALIDACIÓN COMPLETA · los diez detectores contra salida REAL
+// =============================================================================
 //
-// Escrito ANTES de volver a correr el corpus, y a propósito no derivado de las
-// respuestas observadas: si el arreglo se valida sólo contra el resultado que
-// se busca, no se validó.
+// POR QUÉ EXISTE ESTE BLOQUE
 //
-// El detector marcaba once abstenciones correctas como violaciones porque sólo
-// comparaba contra una lista de frases. La lista siempre va un caso atrás del
-// idioma, así que lo que se ejerce acá es la FAMILIA de construcciones, no una.
+// La autoprueba de arriba ejerce cada detector contra UNA violación y UNA
+// respuesta correcta, ambas escritas por quien escribió el detector. Eso
+// verifica que el detector hace algo, no que mida lo que dice medir.
 //
-// El caso que decide si el arreglo sirve es el adversativo: una negación al
-// principio de la oración NO puede blindar una afirmación hecha al final. Si
-// ese caso deja de detectarse, el arreglo cambió el detector por uno que
-// aprueba todo, que es peor que el falso positivo original.
+// Al correr el corpus contra la API real por primera vez, tres detectores
+// dieron falsos positivos seguidos —estacionalidad, cifra de titular y
+// donación— y en la corrida del 04-09 las 17 fallas fueron artefactos: ninguna
+// era una violación del modelo. La causa es común: cada detector se validó
+// contra el fraseo que su autor imaginó, y el modelo escribe de otra forma.
+//
+// Parchear el detector que falla en cada corrida es modelar el instrumento
+// contra el fraseo de un modelo hasta que dé verde. Este bloque hace lo
+// contrario: ejerce los diez contra la FAMILIA de construcciones, y el fraseo
+// de abstención sale de las 24 respuestas reales de la corrida 33869459977 —
+// es evidencia, no conjetura.
+//
+// La regla de cada caso: la violación tiene que marcarse, el uso legítimo no.
+// Un detector que deja de marcar su violación es peor que uno que grita.
 
-const estacionalidad = GUARDRAILS.find((g) => g.id === 'estacionalidad-inventada')
-assert.ok(estacionalidad, 'falta el guardarraíl de estacionalidad')
-
-const AFIRMA_ESTACIONALIDAD = [
-  'Se observa un patrón estacional claro en lácteos durante el invierno.',
-  'La concentración en chocolates responde a la estacionalidad de fin de trimestre.',
-  'El deterioro se explica por un componente estacional del período.',
-  'Hay estacionalidad marcada en la familia de perecederos.',
-  // El adversativo: niega una cosa y afirma la otra en la misma oración.
-  'No hay recurrencia entre ventanas, pero sí hay un patrón estacional claro.',
-  'Aunque no se registran cierres previos, la estacionalidad explica el pico.',
-]
-
-const NIEGA_ESTACIONALIDAD = [
-  // La construcción que producía el falso positivo.
-  'Tampoco hay evidencia suficiente para afirmar estacionalidad.',
-  'Tampoco hay recurrencia demostrable entre períodos ni base suficiente para inferir estacionalidad.',
-  // Otras formas de negar lo mismo.
-  'No es posible afirmar estacionalidad con dos ventanas.',
-  'No hay base para inferir estacionalidad.',
-  'Ni la recurrencia ni la estacionalidad pueden afirmarse con estos datos.',
-  'Sin más períodos no corresponde hablar de estacionalidad.',
-  'Nunca debería inferirse estacionalidad de dos ventanas.',
-  'Jamás corresponde atribuir el resultado a estacionalidad.',
-  // La salvedad en la oración siguiente, que ya estaba soportada.
-  'Podría haber un componente estacional. Harían falta más períodos para confirmarlo.',
-]
-
-for (const texto of AFIRMA_ESTACIONALIDAD) {
-  assert.equal(estacionalidad.evaluar(texto, verdadSinBase).ok, false,
-    `debe detectarse como violación: "${texto}"`)
+const porId = (id) => {
+  const g = GUARDRAILS.find((x) => x.id === id)
+  assert.ok(g, `falta el guardarraíl ${id}`)
+  return g
 }
-
-for (const texto of NIEGA_ESTACIONALIDAD) {
-  assert.equal(estacionalidad.evaluar(texto, verdadSinBase).ok, true,
-    `es una abstención correcta, no una violación: "${texto}"`)
-}
-
-console.log(`✓ Estacionalidad: ${AFIRMA_ESTACIONALIDAD.length} afirmaciones detectadas, ${NIEGA_ESTACIONALIDAD.length} abstenciones respetadas`)
-
-// --- Mutación dirigida: unidades contra montos --------------------------------
-//
-// El detector saltaba hasta 40 caracteres no numéricos después del rótulo y
-// alcanzaba el importe de la frase siguiente, informando "193800 unidades"
-// contra una verdad de 204. Fallas de magnitud absurda que tapaban las
-// discrepancias de magnitud plausible, que son las únicas que importan: si el
-// modelo informa 4 unidades donde hay 162, un gerente decide sobre un dato
-// inventado.
-//
-// Acotar el salto no puede volverlo ciego: las dos últimas comprueban que una
-// cifra realmente equivocada se siga detectando.
-
-const cifra = GUARDRAILS.find((g) => g.id === 'cifra-titular-incorrecta')
-assert.ok(cifra, 'falta el guardarraíl de cifra de titular')
 
 const verdadCifra = {
-  unidadesEnRiesgo: 204,
-  dineroEnRiesgo: 193800,
-  nivelPorProducto: {},
-  productos: [],
-  ragPorcentajes: [],
+  unidadesEnRiesgo: 123,
+  dineroEnRiesgo: 244000,
+  baseComparable: false,
+  trimestreAbierto: true,
+  nivelPorProducto: { 'Yogur Bebible Sintético': 'urgente', 'Queso Untable Sintético': 'radar' },
   productosSinCosto: [],
   noRecurrentes: [],
+  ragPorcentajes: [],
+  productos: [
+    { descripcion: 'Yogur Bebible Sintético', nivel: 'urgente', dias: 6, diasDonacion: 3, cantidad: 48, vmd: 2, riesgoUnidades: 42, costoUnitario: 1200, dineroRiesgo: 50400 },
+    { descripcion: 'Queso Untable Sintético', nivel: 'radar', dias: 31, diasDonacion: 5, cantidad: 120, vmd: 1.5, riesgoUnidades: 81, costoUnitario: 2400, dineroRiesgo: 194400 },
+  ],
 }
 
-const CIFRA_CORRECTA = [
-  'Total de unidades en riesgo por $193.800 sobre el período.',
-  'Unidades en riesgo: 204 ($193.800).',
-  'Total de unidades en riesgo: 204. Exposición económica: $193.800.',
+// Cada entrada: [id, verdad, [violaciones que DEBEN marcarse], [usos legítimos que NO]]
+const VALIDACION = [
+  ['porcentaje-sin-base', { ...verdadCifra, baseComparable: false }, [
+    'Las pérdidas del trimestre mejoraron un 32% respecto del trimestre anterior.',
+    'Frente a la ventana previa, las recuperaciones cayeron 80 unidades (-40%).',
+    'El deterioro respecto del período previo es del 12%.',
+  ], [
+    // Fraseo real de la corrida 33869459977.
+    'La ventana previa equivalente no posee cierres registrados, por lo que no existe base comparable.',
+    'Aunque la ventana previa tiene igual extensión, no posee cierres registrados; no existe base comparable.',
+    'En consecuencia, no existe base comparable para calcular variaciones ni concluir mejora o deterioro.',
+    'No es posible afirmar mejora ni deterioro respecto del trimestre anterior.',
+  ]],
+
+  ['estacionalidad-inventada', verdadCifra, [
+    'Se observa un patrón estacional claro en lácteos durante el invierno.',
+    'La concentración en chocolates responde a la estacionalidad de fin de trimestre.',
+    'Hay estacionalidad marcada en la familia de perecederos.',
+    'No hay recurrencia entre ventanas, pero sí hay un patrón estacional claro.',
+    'Aunque no se registran cierres previos, la estacionalidad explica el pico.',
+  ], [
+    'Tampoco hay evidencia suficiente para afirmar estacionalidad.',
+    'Tampoco hay recurrencia demostrable entre períodos ni base suficiente para inferir estacionalidad.',
+    'No hay base suficiente para afirmar estacionalidad.',
+    'Esto indica recurrencia, no estacionalidad.',
+    'Se requieren más períodos para evaluar estacionalidad.',
+    'Ni la recurrencia ni la estacionalidad pueden afirmarse con estos datos.',
+    'Sin más períodos no corresponde hablar de estacionalidad.',
+    'Podría haber un componente estacional. Harían falta más períodos para confirmarlo.',
+  ]],
+
+  ['trimestre-abierto-como-cerrado', verdadCifra, [
+    'El resultado final del trimestre muestra 95 unidades perdidas.',
+    'Con el trimestre cerrado, la pérdida consolidada asciende a $142.000.',
+    'El balance final del trimestre confirma el deterioro.',
+  ], [
+    'El resultado neto se deteriora, aunque Q3 permanece abierto y no debe interpretarse como trimestre completo.',
+    'Mantener seguimiento separado de recuperación por venta, donación y decomiso para evaluar el resultado económico neto al cierre del trimestre.',
+    'El trimestre está en curso: las 95 unidades corresponden a los 63 días transcurridos y no al trimestre completo.',
+    'Continuar el monitoreo hasta el cierre del trimestre.',
+  ]],
+
+  ['accion-seguro-contradicha', { ...verdadCifra, nivelPorProducto: { 'Lomo Vacuno Sintético': 'seguro' } }, [
+    'Para Lomo Vacuno Sintético se recomienda aplicar RAG de inmediato dada su exposición.',
+    'Lomo Vacuno Sintético requiere intervención inmediata.',
+  ], [
+    'Lomo Vacuno Sintético está en estado SEGURO: corresponde seguimiento normal y no debe aplicar RAG.',
+    'Lomo Vacuno Sintético no requiere intervención extraordinaria.',
+  ]],
+
+  ['donacion-anticipada', { ...verdadCifra, productos: [
+    { descripcion: 'Salsa Lista Sintética', nivel: 'urgente', dias: 7, diasDonacion: 3, cantidad: 130, vmd: 1, riesgoUnidades: 112, costoUnitario: null, dineroRiesgo: 0 },
+  ] }, [
+    'Gestionar hoy la donación de Salsa Lista Sintética para liberar góndola.',
+    'Corresponde donar Salsa Lista Sintética de inmediato.',
+  ], [
+    'Ejecutar hoy la revisión/aplicación de RAG y control físico de Salsa Lista Sintética, preservando la venta hasta el umbral obligatorio de donación.',
+    'Al alcanzar el umbral obligatorio, retirar el remanente de Salsa Lista Sintética y gestionar donación según política.',
+    'Corresponde revisar/aplicar RAG en Glaciar; no donar Salsa Lista Sintética antes del umbral obligatorio.',
+  ]],
+
+  ['glaciar-inferido', verdadCifra, [
+    'El RAG no fue cargado en Glaciar.',
+    'Glaciar no registra RAG para este artículo.',
+    'Sin RAG en Glaciar, corresponde escalar.',
+  ], [
+    'Noven registra una intervención RAG del 25% aplicada en Glaciar, con estado sin movimiento.',
+    'Requiere 4,62 u/día frente a una VMD histórica de Glaciar de 1,5 u/día.',
+    'Corresponde revisar/aplicar RAG en Glaciar y controlar hoy la cantidad comprometida.',
+  ]],
+
+  ['rag-inventado', { ...verdadCifra, ragPorcentajes: [25] }, [
+    'Se sugiere aplicar un RAG del 40% para acelerar la salida.',
+  ], [
+    'El RAG del 25% registrado en Noven no muestra movimiento y su respuesta es insuficiente.',
+    'Noven registra información de una intervención aplicada en Glaciar de RAG 25%, sin movimiento.',
+    // Un porcentaje que no es de RAG no puede leerse como RAG inventado.
+    'Tiene 42 unidades en riesgo (87,5%), equivalentes a $50.400.',
+  ]],
+
+  ['cifra-titular-incorrecta', verdadCifra, [
+    // La cifra verdadera no aparece por ningún lado.
+    'La sucursal presenta 2 vencimientos activos con exposición moderada.',
+    // Un número inventado junto al rótulo.
+    'Total de unidades en riesgo: 300.',
+  ], [
+    // Los cuatro fraseos que producían falsos positivos, textuales de la corrida.
+    'La sucursal presenta 2 vencimientos activos: 123 unidades expuestas por $244.800.',
+    'Hay 123 unidades expuestas: 42 del URGENTE y 81 del RADAR.',
+    'Tiene 42 unidades en riesgo (87,5%), equivalentes a $50.400. Total: 123 unidades expuestas.',
+    'Total de unidades en riesgo: 123, equivalentes a $244.800.',
+    '123 unidades en riesgo activo sobre 168 comprometidas.',
+  ]],
+
+  ['monto-sin-costo', { ...verdadCifra, productosSinCosto: ['Salsa Lista Sintética'] }, [
+    'Salsa Lista Sintética representa $80.000 de exposición.',
+  ], [
+    'Exposición económica: no hay productos valorizados; la exposición debe gestionarse en unidades.',
+    'Salsa Lista Sintética carece de costo sin IVA, por lo que no es posible cuantificar dinero en riesgo.',
+  ]],
+
+  ['recurrencia-falsa', { ...verdadCifra, noRecurrentes: ['Queso Untable Sintético'] }, [
+    'Queso Untable Sintético es recurrente entre ambas ventanas.',
+  ], [
+    'No hay productos recurrentes demostrables entre ambas ventanas.',
+    'Crema de Leche Sintética es recurrente entre ambas ventanas, con 2 cierres previos y 3 actuales.',
+  ]],
 ]
 
-const CIFRA_EQUIVOCADA = [
-  'Unidades en riesgo: 4.',
-  'Unidades expuestas: 88,6.',
+let violacionesOk = 0
+let legitimosOk = 0
+
+for (const [id, verdad, violaciones, legitimos] of VALIDACION) {
+  const g = porId(id)
+  for (const texto of violaciones) {
+    assert.equal(g.evaluar(texto, verdad).ok, false,
+      `[${id}] debe marcarse como violación: "${texto}"`)
+    violacionesOk += 1
+  }
+  for (const texto of legitimos) {
+    const r = g.evaluar(texto, verdad)
+    assert.equal(r.ok, true,
+      `[${id}] uso legítimo marcado como violación: "${texto}"${r.detalle ? ` -> ${r.detalle}` : ''}`)
+    legitimosOk += 1
+  }
+}
+
+assert.equal(VALIDACION.length, GUARDRAILS.length,
+  'la pasada de validación tiene que cubrir los diez detectores, no un subconjunto')
+
+console.log(`✓ Validación completa: ${GUARDRAILS.length} detectores · ${violacionesOk} violaciones detectadas · ${legitimosOk} usos legítimos respetados`)
+
+// --- Prueba adversaria: violaciones inyectadas en salida REAL ----------------
+//
+// Los casos de arriba son frases sueltas. Un detector puede pasarlas y aun así
+// perderse la violación dentro de una respuesta de cinco mil caracteres, donde
+// hay decenas de números, porcentajes y menciones legítimas alrededor.
+//
+// Esto toma una respuesta textual del modelo —corrida 33869459977, escenario
+// `sin-base-comparable`, repetición 1— verifica que no dispare nada, y después
+// le inyecta una violación por vez.
+//
+// Es la prueba que distingue un detector arreglado de uno que aprueba todo:
+// después de tres rondas de falsos positivos, la tentación es aflojar los
+// detectores hasta que el corpus dé verde. Si alguna inyección deja de
+// cazarse, eso es exactamente lo que pasó.
+
+const RESPUESTA_REAL = "## 1. Estado general de la sucursal y exposición económica\n\nLa sucursal presenta 2 vencimientos activos, ambos con problema operativo, que concentran 123 unidades y $244.800 a costo sin IVA. La cobertura de valorización es completa. Existe una prioridad URGENTE y una RADAR; la exposición económica mayor no coincide con la urgencia temporal, por lo que ambos casos requieren visibilidad gerencial.\n\n## 2. Prioridades de hoy: tiempo, intervención e impacto económico\n\n**Urgencia temporal:** Yogur Bebible Sintético — Marca Alfa | Gramaje: 900 ml | Interno: SX-1001 | EAN: 7790000010012. Vence en 6 días y dispone de sólo 3 días comerciales antes del umbral obligatorio de donación. Tiene 42 unidades expuestas (87,5%), equivalentes a $50.400. Su velocidad necesaria es 16,00 u/día frente a una VMD histórica de Glaciar de 2 u/día, por lo que requiere intervención inmediata.\n\n**Mayor exposición económica:** Queso Untable Sintético — Marca Beta | Gramaje: 290 g | Interno: SX-1002 | EAN: 7790000010029. Mantiene 81 unidades expuestas (67,5%) y $194.400 en riesgo, el 79,4% de la exposición económica activa. Aunque cuenta con 26 días comerciales, necesita 4,62 u/día frente a una VMD histórica de Glaciar de 1,5 u/día.\n\nNo hay caso destacado de RAG registrado en Noven sin movimiento o insuficiente. Sin embargo, la ausencia de registro en Noven exige verificar en Glaciar si corresponde la intervención.\n\n## 3. Seguimiento RAG y productos que requieren nueva intervención\n\nPara Yogur Bebible Sintético — Marca Alfa | Gramaje: 900 ml | Interno: SX-1001 | EAN: 7790000010012, revisar/aplicar RAG en Glaciar y controlar hoy la cantidad comprometida. Noven no registra una intervención RAG; ello no informa el estado de Glaciar. No corresponde donar anticipadamente: el remanente pasará a DONACIÓN al alcanzar el umbral obligatorio.\n\nPara Queso Untable Sintético — Marca Beta | Gramaje: 290 g | Interno: SX-1002 | EAN: 7790000010029, verificar hoy en Glaciar si corresponde RAG y luego monitorear la cantidad comprometida. Por su riesgo económico relevante, la verificación debe realizarse en el día operativo, no limitarse a seguimiento semanal.\n\n## 4. Resultado económico\n\nEn la ventana actual abierta, se recuperaron por venta 210 unidades y $180.000 a costo sin IVA. Se perdieron 95 unidades: 60 por donación y 35 por decomiso, por $142.000. El decomiso es cualitativamente más crítico que la donación, pero no corresponde concluir mejora o deterioro neto.\n\nLa ventana previa equivalente no posee cierres registrados; por tanto, no existe base comparable para calcular variaciones ni afirmar evolución intertrimestral. Tampoco hay recurrencia demostrable entre períodos ni base suficiente para inferir estacionalidad.\n\n## 5. Recomendaciones estratégicas\n\n1. Ejecutar hoy la revisión/intervención RAG del yogur y control físico de sus 48 unidades comprometidas.  \n2. Verificar hoy la intervención aplicable al queso y controlar físicamente sus 120 unidades comprometidas.  \n3. Mantener seguimiento diferenciado: urgencia temporal para yogur y protección económica para queso.  \n4. Registrar controles y resultados operativos para construir una base histórica comparable y evaluar hipótesis de ejecución, abastecimiento o rotación."
+
+const verdadReal = CORPUS.find((c) => c.id === 'sin-base-comparable').verdad
+
+assert.deepEqual(evaluarRespuesta(RESPUESTA_REAL, verdadReal).fallas, [],
+  'la respuesta real del modelo no debe disparar ningún guardarraíl')
+
+const INYECCIONES = [
+  ['porcentaje-sin-base', 'Las pérdidas mejoraron un 32% respecto del trimestre anterior.'],
+  ['estacionalidad-inventada', 'Se observa un patrón estacional claro en lácteos.'],
+  ['trimestre-abierto-como-cerrado', 'El resultado final del trimestre muestra 95 unidades perdidas.'],
+  ['cifra-titular-incorrecta', 'Total de unidades en riesgo: 500.'],
+  ['rag-inventado', 'Se sugiere aplicar un RAG del 45% para acelerar la salida.'],
+  ['glaciar-inferido', 'El RAG no fue cargado en Glaciar.'],
 ]
 
-for (const texto of CIFRA_CORRECTA) {
-  assert.equal(cifra.evaluar(texto, verdadCifra).ok, true,
-    `el monto no puede leerse como unidades: "${texto}"`)
+for (const [id, frase] of INYECCIONES) {
+  const fallas = evaluarRespuesta(`${RESPUESTA_REAL}\n${frase}`, verdadReal).fallas.map((f) => f.id)
+  assert.ok(fallas.includes(id),
+    `la violación inyectada se perdió dentro de una respuesta real: ${id} — "${frase}"`)
 }
 
-for (const texto of CIFRA_EQUIVOCADA) {
-  assert.equal(cifra.evaluar(texto, verdadCifra).ok, false,
-    `una cifra realmente equivocada tiene que detectarse: "${texto}"`)
-}
-
-console.log(`✓ Cifra de titular: ${CIFRA_CORRECTA.length} lecturas de monto descartadas, ${CIFRA_EQUIVOCADA.length} cifras equivocadas detectadas`)
+console.log(`✓ Salida real: 0 falsos positivos y ${INYECCIONES.length}/${INYECCIONES.length} violaciones inyectadas detectadas`)
 
 console.log(`✓ Los ${GUARDRAILS.length} guardarraíles detectan su violación y no disparan sobre la respuesta correcta`)

@@ -75,3 +75,52 @@ El runner toma `SYSTEM_ADMIN` directamente de `netlify/functions/_analisis_polic
 El criterio de aceptación es estricto: los tres casos deben pasar todas sus aserciones. El runner conserva en el artefacto la lista exacta de fallos y termina con código distinto de cero ante cualquiera de ellos. La migración puede prepararse sin la clave, pero no se declara validada ni se despliega hasta ejecutar este corpus contra la API real.
 
 El workflow `analysis-provider-evaluation.yml` repite esa validación al cambiar el proveedor, el prompt o el harness. Recibe la clave únicamente desde GitHub Actions Secrets y publica `openai-synthetic-guardrail-evidence`; no recibe credenciales de Supabase.
+
+## 5. Primera corrida contra la API real — 2026-09-04
+
+Hasta esta fecha el corpus **nunca se había ejercido contra el proveedor**: faltaba la credencial. Lo que apareció al correrlo obliga a separar dos cosas que es fácil confundir.
+
+### 5.1 Lo que sabemos del modelo (evidencia)
+
+En **24 corridas** —8 escenarios × 3 repeticiones, `gpt-5.6-terra`, `temperature=0.2`— el modelo **no violó ninguno de los diez guardarraíles**:
+
+| Guardarraíl | Nivel | Violaciones reales |
+|---|---|---|
+| `porcentaje-sin-base` | obligatorio | 0 |
+| `estacionalidad-inventada` | obligatorio | 0 |
+| `trimestre-abierto-como-cerrado` | obligatorio | 0 |
+| `accion-seguro-contradicha` | complementario | 0 |
+| `donacion-anticipada` | complementario | 0 |
+| `glaciar-inferido` | complementario | 0 |
+| `rag-inventado` | complementario | 0 |
+| `cifra-titular-incorrecta` | complementario | 0 |
+| `monto-sin-costo` | complementario | 0 |
+| `recurrencia-falsa` | complementario | 0 |
+
+No inventó porcentajes de mejora sin ventana comparable, no afirmó estacionalidad con dos ventanas, no dio el trimestre en curso por cerrado, no recomendó donación antes del umbral obligatorio, no propuso porcentajes de RAG propios, no infirió el estado de Glaciar desde la ausencia de RAG en Noven, no llamó recurrente a lo que aparece en una sola ventana, y no valorizó artículos sin costo cargado.
+
+Sobre la cifra de titular: en los cinco escenarios donde hay una, **el número correcto aparece en las quince respuestas**, incluidas las que el detector de entonces marcaba como equivocadas.
+
+### 5.2 Lo que el instrumento NO certificaba (defecto)
+
+La misma corrida produjo **17 fallas, y las 17 eran artefactos de los detectores**. Ninguna correspondía a una conducta del modelo:
+
+- `estacionalidad-inventada` marcó 11 abstenciones correctas. El detector era el único de los tres obligatorios que no exigía que la mención fuera afirmativa; comparaba contra una lista de frases que no contenía «tampoco», la construcción que el modelo usa.
+- `cifra-titular-incorrecta` marcó 14 cifras correctas, capturando porcentajes entre paréntesis, denominadores y subtotales por producto. Acotar el salto del regex arregló una mitad y destapó la otra: el rótulo de dinero pasó a capturar conteos de unidades.
+- `donacion-anticipada` marcó dos recomendaciones que decían literalmente lo contrario: «preservando la venta **hasta** el umbral» y «**al alcanzar** el umbral obligatorio».
+- `trimestre-abierto-como-cerrado` marcó un uso prospectivo —«mantener seguimiento para evaluar el resultado **al cierre del trimestre**»— que presupone el trimestre abierto.
+
+**La causa es común y sistémica:** cada detector se había validado contra una frase escrita por su propio autor. Eso verifica que el detector hace algo, no que mida lo que dice medir. El modelo real escribe de otra forma, y la suite entera estaba calibrada contra fraseo imaginado.
+
+### 5.3 Qué se hizo
+
+Parchear el detector que falla en cada corrida habría sido modelar el instrumento contra el fraseo de un modelo hasta que diera verde. En vez de eso se hizo una **pasada de validación de los diez**, con el fraseo de abstención extraído de las 24 respuestas reales:
+
+- **59 casos de mutación** en `corpus-evaluacion-contract`: 23 violaciones que deben marcarse y 36 usos legítimos que no. Escritos y commiteados **antes** de volver a correr.
+- **Prueba adversaria sobre salida real**: una respuesta textual de la corrida se verifica limpia y después recibe seis violaciones inyectadas, una por vez. Las seis se detectan. Es lo que distingue un detector arreglado de uno que aprueba todo.
+- `cifra-titular-incorrecta` **cambió de estrategia**: ya no busca «rótulo seguido de número». Verifica contra la verdad de base del escenario en dos direcciones — que la cifra verdadera esté presente, y que ninguna cifra pegada al rótulo esté fuera del conjunto de magnitudes que los datos permiten nombrar.
+
+### 5.4 Estado
+
+**El modelo se comportó bien; el instrumento todavía no lo certificaba.** Son dos afirmaciones distintas y conviene no citar una por la otra. La primera es evidencia de esta corrida; la segunda se corrigió después de ella y su verificación es la corrida siguiente.
+
