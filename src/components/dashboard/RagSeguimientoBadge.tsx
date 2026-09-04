@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Activity, AlertTriangle, CheckCircle2, Clock3 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useEscalaRag } from '@/hooks/useEscalaRag'
+import { coberturaComoPorcentaje, evaluarSugerencia } from '@/lib/ragCobertura'
 
 interface SeguimientoRagRow {
   vencimiento_id: string
@@ -11,6 +13,8 @@ interface SeguimientoRagRow {
   dias_observados: number | null
   velocidad_observada: number | null
   velocidad_necesaria: number | null
+  dias_comerciales_restantes: number | null
+  dias_desde_ultimo_rag: number | null
   estado_seguimiento_rag: string | null
 }
 
@@ -89,6 +93,7 @@ function presentacion(row: SeguimientoRagRow): Presentacion {
 
 export default function RagSeguimientoBadge({ vencimientoId, activo }: RagSeguimientoBadgeProps) {
   const [row, setRow] = useState<SeguimientoRagRow | null>(null)
+  const { escala } = useEscalaRag()
 
   useEffect(() => {
     let cancelado = false
@@ -100,7 +105,7 @@ export default function RagSeguimientoBadge({ vencimientoId, activo }: RagSeguim
 
     void supabase
       .from('v_seguimiento_rag_actual')
-      .select('vencimiento_id, rag_porcentaje, cantidad_base_rag, cantidad_observada, unidades_vendidas_observadas, dias_observados, velocidad_observada, velocidad_necesaria, estado_seguimiento_rag')
+      .select('vencimiento_id, rag_porcentaje, cantidad_base_rag, cantidad_observada, unidades_vendidas_observadas, dias_observados, velocidad_observada, velocidad_necesaria, dias_comerciales_restantes, dias_desde_ultimo_rag, estado_seguimiento_rag')
       .eq('vencimiento_id', vencimientoId)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -112,9 +117,26 @@ export default function RagSeguimientoBadge({ vencimientoId, activo }: RagSeguim
   }, [activo, vencimientoId])
 
   const info = useMemo(() => row ? presentacion(row) : null, [row])
+
+  // La sugerencia se calcula con el mismo motor determinístico que usa la
+  // pantalla de Control: una sola fuente para el número que ve el operador.
+  const sugerencia = useMemo(() => {
+    if (!row) return null
+    return evaluarSugerencia({
+      estado: row.estado_seguimiento_rag,
+      velocidadObservada: row.velocidad_observada,
+      velocidadNecesaria: row.velocidad_necesaria,
+      diasComercialesRestantes: row.dias_comerciales_restantes,
+      diasObservados: row.dias_observados,
+      diasDesdeUltimoRag: row.dias_desde_ultimo_rag,
+      ragPorcentaje: row.rag_porcentaje,
+    }, escala)
+  }, [row, escala])
+
   if (!activo || !info) return null
 
   const { Icono } = info
+  const muestraCobertura = sugerencia?.cobertura != null
 
   return (
     <div className={`mx-3.5 md:mx-4 mb-2 rounded-xl border px-2.5 py-2 ${info.className}`}>
@@ -122,7 +144,16 @@ export default function RagSeguimientoBadge({ vencimientoId, activo }: RagSeguim
         <Icono className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
         <div className="min-w-0">
           <p className="text-[11px] font-bold leading-tight">{info.titulo}</p>
-          <p className="text-[10px] leading-snug mt-0.5 opacity-90">{info.detalle}</p>
+          <p className="text-[10px] leading-snug mt-0.5 opacity-90">
+            {info.detalle}
+            {muestraCobertura && ` · cobertura ${coberturaComoPorcentaje(sugerencia.cobertura)}`}
+          </p>
+          {sugerencia?.hay && (
+            <p className="text-[10px] leading-snug mt-1 font-semibold">
+              Sugerencia por urgencia: {sugerencia.desde}% → {sugerencia.hasta}%
+              {sugerencia.topeInsuficiente && ' · tope de escala, puede no alcanzar'}
+            </p>
+          )}
         </div>
       </div>
     </div>
