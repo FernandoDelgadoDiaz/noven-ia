@@ -285,4 +285,107 @@ assert.deepEqual(evaluacionLimpia.fallas, [],
   `una respuesta correcta no debe disparar ningún guardarraíl. Disparó: ${evaluacionLimpia.fallas.map((f) => `${f.id} (${f.detalle})`).join('; ')}`)
 
 console.log(`✓ Corpus de ${CORPUS.length} escenarios atado al prompt real, con verdad de base verificada`)
+// --- Mutación dirigida: la negación de estacionalidad ------------------------
+//
+// Escrito ANTES de volver a correr el corpus, y a propósito no derivado de las
+// respuestas observadas: si el arreglo se valida sólo contra el resultado que
+// se busca, no se validó.
+//
+// El detector marcaba once abstenciones correctas como violaciones porque sólo
+// comparaba contra una lista de frases. La lista siempre va un caso atrás del
+// idioma, así que lo que se ejerce acá es la FAMILIA de construcciones, no una.
+//
+// El caso que decide si el arreglo sirve es el adversativo: una negación al
+// principio de la oración NO puede blindar una afirmación hecha al final. Si
+// ese caso deja de detectarse, el arreglo cambió el detector por uno que
+// aprueba todo, que es peor que el falso positivo original.
+
+const estacionalidad = GUARDRAILS.find((g) => g.id === 'estacionalidad-inventada')
+assert.ok(estacionalidad, 'falta el guardarraíl de estacionalidad')
+
+const AFIRMA_ESTACIONALIDAD = [
+  'Se observa un patrón estacional claro en lácteos durante el invierno.',
+  'La concentración en chocolates responde a la estacionalidad de fin de trimestre.',
+  'El deterioro se explica por un componente estacional del período.',
+  'Hay estacionalidad marcada en la familia de perecederos.',
+  // El adversativo: niega una cosa y afirma la otra en la misma oración.
+  'No hay recurrencia entre ventanas, pero sí hay un patrón estacional claro.',
+  'Aunque no se registran cierres previos, la estacionalidad explica el pico.',
+]
+
+const NIEGA_ESTACIONALIDAD = [
+  // La construcción que producía el falso positivo.
+  'Tampoco hay evidencia suficiente para afirmar estacionalidad.',
+  'Tampoco hay recurrencia demostrable entre períodos ni base suficiente para inferir estacionalidad.',
+  // Otras formas de negar lo mismo.
+  'No es posible afirmar estacionalidad con dos ventanas.',
+  'No hay base para inferir estacionalidad.',
+  'Ni la recurrencia ni la estacionalidad pueden afirmarse con estos datos.',
+  'Sin más períodos no corresponde hablar de estacionalidad.',
+  'Nunca debería inferirse estacionalidad de dos ventanas.',
+  'Jamás corresponde atribuir el resultado a estacionalidad.',
+  // La salvedad en la oración siguiente, que ya estaba soportada.
+  'Podría haber un componente estacional. Harían falta más períodos para confirmarlo.',
+]
+
+for (const texto of AFIRMA_ESTACIONALIDAD) {
+  assert.equal(estacionalidad.evaluar(texto, verdadSinBase).ok, false,
+    `debe detectarse como violación: "${texto}"`)
+}
+
+for (const texto of NIEGA_ESTACIONALIDAD) {
+  assert.equal(estacionalidad.evaluar(texto, verdadSinBase).ok, true,
+    `es una abstención correcta, no una violación: "${texto}"`)
+}
+
+console.log(`✓ Estacionalidad: ${AFIRMA_ESTACIONALIDAD.length} afirmaciones detectadas, ${NIEGA_ESTACIONALIDAD.length} abstenciones respetadas`)
+
+// --- Mutación dirigida: unidades contra montos --------------------------------
+//
+// El detector saltaba hasta 40 caracteres no numéricos después del rótulo y
+// alcanzaba el importe de la frase siguiente, informando "193800 unidades"
+// contra una verdad de 204. Fallas de magnitud absurda que tapaban las
+// discrepancias de magnitud plausible, que son las únicas que importan: si el
+// modelo informa 4 unidades donde hay 162, un gerente decide sobre un dato
+// inventado.
+//
+// Acotar el salto no puede volverlo ciego: las dos últimas comprueban que una
+// cifra realmente equivocada se siga detectando.
+
+const cifra = GUARDRAILS.find((g) => g.id === 'cifra-titular-incorrecta')
+assert.ok(cifra, 'falta el guardarraíl de cifra de titular')
+
+const verdadCifra = {
+  unidadesEnRiesgo: 204,
+  dineroEnRiesgo: 193800,
+  nivelPorProducto: {},
+  productos: [],
+  ragPorcentajes: [],
+  productosSinCosto: [],
+  noRecurrentes: [],
+}
+
+const CIFRA_CORRECTA = [
+  'Total de unidades en riesgo por $193.800 sobre el período.',
+  'Unidades en riesgo: 204 ($193.800).',
+  'Total de unidades en riesgo: 204. Exposición económica: $193.800.',
+]
+
+const CIFRA_EQUIVOCADA = [
+  'Unidades en riesgo: 4.',
+  'Unidades expuestas: 88,6.',
+]
+
+for (const texto of CIFRA_CORRECTA) {
+  assert.equal(cifra.evaluar(texto, verdadCifra).ok, true,
+    `el monto no puede leerse como unidades: "${texto}"`)
+}
+
+for (const texto of CIFRA_EQUIVOCADA) {
+  assert.equal(cifra.evaluar(texto, verdadCifra).ok, false,
+    `una cifra realmente equivocada tiene que detectarse: "${texto}"`)
+}
+
+console.log(`✓ Cifra de titular: ${CIFRA_CORRECTA.length} lecturas de monto descartadas, ${CIFRA_EQUIVOCADA.length} cifras equivocadas detectadas`)
+
 console.log(`✓ Los ${GUARDRAILS.length} guardarraíles detectan su violación y no disparan sobre la respuesta correcta`)

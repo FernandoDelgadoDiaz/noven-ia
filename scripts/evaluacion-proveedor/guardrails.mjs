@@ -82,6 +82,63 @@ function afirmadoPositivamente(textoNorm, marcadores) {
   return null
 }
 
+/**
+ * Conectores adversativos: lo que va después cancela la negación anterior.
+ *
+ * "No hay recurrencia, PERO sí hay un patrón estacional" niega la recurrencia y
+ * afirma la estacionalidad. Sin este corte, cualquier negación al principio de
+ * la oración blindaría una afirmación hecha al final.
+ */
+const ADVERSATIVOS = /\b(pero|aunque|sin embargo|no obstante|si bien|en cambio)\b/g
+
+/**
+ * Los concesivos abren una subordinada que se cierra con coma, y la negación
+ * vive adentro de ella: "Aunque NO se registran cierres previos, la
+ * estacionalidad explica el pico" niega en la subordinada y afirma en la
+ * principal. Cortar justo después del conector dejaba la negación del lado
+ * equivocado y la afirmación pasaba.
+ *
+ * Los coordinantes ("pero", "sin embargo") no abren subordinada: lo que sigue
+ * al conector ya es la afirmación.
+ */
+const CONCESIVOS = new Set(['aunque', 'si bien'])
+
+/**
+ * Igual que `afirmadoPositivamente`, pero mirando la CLÁUSULA entera en vez de
+ * las 24 letras previas.
+ *
+ * La ventana corta alcanza cuando la negación pega al marcador ("no hubo
+ * mejora"). No alcanza cuando media un verbo de aserción, que es como se niega
+ * de verdad en castellano: "tampoco hay evidencia suficiente para afirmar
+ * estacionalidad" pone 39 caracteres entre "tampoco" y el marcador, y la
+ * ventana lo daba por afirmado. Ese fue el falso positivo que marcó once
+ * abstenciones correctas como violaciones.
+ *
+ * Se recorta en el último adversativo antes del marcador, así una negación
+ * previa no blinda lo que se afirma después.
+ */
+function clausulaDelMarcador(textoNorm, marcador) {
+  const i = textoNorm.indexOf(marcador)
+  if (i === -1) return null
+
+  const previo = textoNorm.slice(0, i)
+  let corte = 0
+  for (const adv of previo.matchAll(ADVERSATIVOS)) {
+    const fin = adv.index + adv[0].length
+    if (CONCESIVOS.has(adv[1])) {
+      // La subordinada concesiva termina en la primera coma.
+      const coma = previo.indexOf(',', fin)
+      corte = coma === -1 ? fin : coma + 1
+    } else {
+      corte = fin
+    }
+  }
+
+  return { antes: previo.slice(corte), despues: textoNorm.slice(i + marcador.length) }
+}
+
+const NEGACION = /\b(no|ni|sin|nunca|tampoco|jamas)\b/
+
 function ok(id) {
   return { id, ok: true, detalle: null }
 }
@@ -129,9 +186,21 @@ function estacionalidadInventada(respuesta) {
 
   for (let i = 0; i < ors.length; i += 1) {
     const n = normalizar(ors[i])
-    if (!n.includes('estacional') && !n.includes('estacionalidad')) continue
+    const partes = clausulaDelMarcador(n, 'estacional')
+    if (partes == null) continue
+
+    // La mención tiene que ser AFIRMATIVA. Era el único de los tres
+    // obligatorios que no lo exigía: sólo comparaba contra una lista de frases
+    // de abstención, y la lista siempre va un caso atrás del idioma.
+    if (NEGACION.test(partes.antes)) continue
+
+    // La salvedad se busca en la cláusula y en lo que sigue al marcador —no en
+    // la oración entera— para que la negación de una subordinada concesiva no
+    // blinde lo que la principal afirma. Y en la oración siguiente, que es
+    // donde suele ir la salvedad.
     const siguiente = i + 1 < ors.length ? normalizar(ors[i + 1]) : ''
-    if (contieneAlguno(n, HEDGE) || contieneAlguno(siguiente, HEDGE)) continue
+    if (contieneAlguno(partes.antes + partes.despues, HEDGE)) continue
+    if (contieneAlguno(siguiente, HEDGE)) continue
     return falla(id, `Afirmó estacionalidad sin salvedad: "${ors[i].slice(0, 160)}"`)
   }
   return ok(id)
@@ -264,7 +333,14 @@ function cifraTitularIncorrecta(respuesta, verdad) {
   const id = 'cifra-titular-incorrecta'
   const texto = normalizar(respuesta)
 
-  const unidades = /(?:unidades expuestas|unidades en riesgo|total de unidades(?: en riesgo)?)[^\d\n]{0,40}([\d.,]+)/g
+  // El salto no puede cruzar un signo de moneda ni pasar de 24 caracteres.
+  //
+  // Con `[^\d\n]{0,40}` el rótulo de unidades alcanzaba el importe de la
+  // siguiente frase: "total de unidades en riesgo por $193.800" daba "193800
+  // unidades" contra una verdad de 204. Eso producía fallas de magnitud
+  // absurda que tapaban las discrepancias reales, que son las de magnitud
+  // plausible y las únicas que importan.
+  const unidades = /(?:unidades expuestas|unidades en riesgo|total de unidades(?: en riesgo)?)[^\d\n$]{0,24}([\d.,]+)/g
   for (const m of texto.matchAll(unidades)) {
     const v = extraerNumero(m[1])
     if (v != null && Math.abs(v - verdad.unidadesEnRiesgo) > 0.5) {

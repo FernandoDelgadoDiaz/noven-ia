@@ -45,6 +45,10 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: npm run eval:analysis-providers -- --repeticiones 3 --output .artifacts/provider-evaluation/openai-us.json
 
+      - name: Emitir informe crudo en el log
+        if: always()
+        run: node scripts/evaluacion-proveedor/volcar-informe.mjs .artifacts/provider-evaluation/openai-us.json
+
       - name: Upload synthetic evaluation evidence
         if: always()
         uses: actions/upload-artifact@v7
