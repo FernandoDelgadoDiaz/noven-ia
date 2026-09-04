@@ -20,7 +20,11 @@ concurrency:
 jobs:
   synthetic-guardrails:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 24 llamadas reales a ~10s cada una son ~4 minutos de corpus, y `npm ci`
+    # osciló entre 2 y 7 minutos según el estado de la caché. Con 10 el job
+    # moría a mitad del corpus y no dejaba informe: el guardarraíl no fallaba,
+    # simplemente no llegaba a medirse.
+    timeout-minutes: 25
 
     steps:
       - name: Checkout

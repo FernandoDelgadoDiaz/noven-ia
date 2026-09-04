@@ -88,4 +88,14 @@ assert.doesNotMatch(workflow, /continue-on-error/,
 assert.doesNotMatch(workflow, /\|\|\s*true/,
   '`|| true` convierte la evaluación en decorativa')
 
+// El presupuesto de tiempo tiene que cubrir el corpus completo.
+//
+// Con `timeout-minutes: 10` el job murió a los 10m17s, a mitad del corpus, sin
+// escribir informe. Un guardarraíl que no llega a medirse no es un guardarraíl
+// verde ni uno rojo: es una corrida perdida que se lee como falla.
+const timeout = /timeout-minutes:\s*(\d+)/.exec(workflow)
+assert.ok(timeout, 'el job debe declarar un timeout explícito')
+assert.ok(Number(timeout[1]) >= 20,
+  `${timeout?.[1]} minutos no alcanzan: el corpus son ~4 y npm ci llegó a 7`)
+
 console.log('✓ La evaluación contra el proveedor real usa el corpus consolidado, hace preflight y repite')
