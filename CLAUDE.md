@@ -53,6 +53,10 @@ Implementación en `src/lib/riesgo.ts`. Reglas completas en `docs/RISK_AND_RAG_R
 - `npm test` — suite de contratos (`scripts/tests/*.test.mjs`)
 - `npx playwright test` — E2E de navegador (contra Supabase interceptado por fixture)
 
+## Reportes
+
+Todo cierre de tarea o avance parcial se entrega como **reporte listo para copiar y pegar**: un bloque autocontenido, con el estado, lo que se hizo, lo que falta y lo que quedó pendiente de decisión. Sin depender del hilo de la conversación para entenderse.
+
 ## Referencias
 
 - `PRODUCT_VISION.md` — visión de producto (normativa)
