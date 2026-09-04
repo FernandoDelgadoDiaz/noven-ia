@@ -2,13 +2,17 @@
   "version": 1,
   "proposito": "Expectativa movil del replay: huella esperada de baseline + migraciones posteriores al cutoff.",
   "forward_migrations": [
-    "20260902170000_cuota_por_actor_y_cache_analisis_v1.sql"
+    "20260902170000_cuota_por_actor_y_cache_analisis_v1.sql",
+    "20260903103749_archive_august_backups_v1.sql",
+    "20260903120000_regiones_solo_select_v1.sql",
+    "20260903160000_exposicion_vistas_v1.sql",
+    "20260904120000_rag_cobertura_escala_e_instrumentacion_v1.sql"
   ],
-  "forward_migrations_sha256": "458d3e9067dafa1944f3a257d8692265accdf994539d87b098cc37847f4a5809",
-  "replay_fingerprint_sha256": "fa2fbc9872dde476e97fbd1353629c740c19a6781b76c76e09682395d4b25f5c",
+  "forward_migrations_sha256": "07857d8f5446a1f209c4888a0c91fbfbdc93627703fd99cf127304d0e70be2bc",
+  "replay_fingerprint_sha256": "17d6ed1e59174e8ce6cbc482ac98b351d975c9d8f0f6afbac4942db34b1e73ee",
   "anchor_fingerprint_sha256": "837771691ffc6e2276c66a26f9ae010c872f12ea33b118406d48b2ad6fca38af",
   "anchor_materialized_at": "2026-09-01",
   "anchor_materialized_from": "catalogo productivo meqvjabgyrgwkxpclqxp (PR #129)",
   "anchor_revalidacion_maxima_dias": 180,
-  "regenerado_at": "2026-09-02"
+  "regenerado_at": "2026-09-04"
 }

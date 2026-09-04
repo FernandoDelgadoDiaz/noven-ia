@@ -1,7 +1,7 @@
 # NOVEN · Plan de endurecimiento pre-producción
 
 **Estado del documento:** reconstruido desde evidencia del repositorio el 2026-09-02; Fases 2 y 3 definidas el 2026-09-03.
-**Punto de verificación:** `master` = `3ea53da`.
+**Punto de verificación:** `master` = `c7adbd3` (2.2 y 2.3 mergeados).
 
 ## 0. Por qué existe este documento
 
@@ -201,6 +201,14 @@ Contrato: `no-browser-business-writes.test.mjs` recorre el AST de `src/` con el 
 
 PR #137. `analisis.ts` sólo se concede a `gerente_zonal` de la zona y a `gerente_sucursal` o `supervisor` de esa sucursal exacta. El operador recibe 403. Al quedar un único ámbito posible se eliminaron —no desactivaron— el filtrado por `usuario_familias_sucursal`, la variante `SYSTEM_OPERADOR` del prompt y la bifurcación `scopeCompleto`. Decisión registrada en `ai/decisions.md` con motivo y condición de salida.
 
+### Fuera de numeración · Archivo frío de respaldos de agosto — EN EJECUCIÓN
+
+El inventario físico productivo contiene 36 tablas: 33 core y tres respaldos históricos de agosto que la baseline excluye deliberadamente. Los respaldos conservan 113 filas: 19 en `dedup_turrocklets_backup_20260805`, 6 en `productos_descripcion_backup_20260805` y 88 en `productos_familia_backup_20260806`.
+
+La revisión previa confirmó que no tienen foreign keys, vistas, funciones, triggers, publicaciones ni referencias desde el código activo. La migración nueva `20260903103749_archive_august_backups_v1.sql` propone moverlos de `public` a `noven_archive`, preservar filas, RLS, policies e índices, y revocar acceso a `PUBLIC`, `anon`, `authenticated` y `service_role`. No usa `DROP`, `DELETE` ni `TRUNCATE`; aborta ante cualquier inventario o dependencia inesperados. En un replay limpio funciona como no-op de datos porque la baseline no fabrica estos respaldos.
+
+La decisión, evidencia de catálogo, mecanismo reversible y condición de restauración están en `docs/NOVEN_AUGUST_BACKUPS_COLD_ARCHIVE.md`. El contrato `august-backups-cold-archive-contract.test.mjs` verifica las guardas no destructivas, el inventario exacto, el comportamiento del replay y las exclusiones del fingerprint. El ítem permanece **EN EJECUCIÓN** hasta merge, aplicación y verificación productiva.
+
 ## 4. Fase 2 — Superficie de exposición
 
 Fase 2 cierra la superficie que Fase 1 dejó verificada pero no acotada. Fase 1 probó que el aislamiento multitenant funciona; Fase 2 reduce lo que habría que atravesar si dejara de funcionar.
@@ -215,7 +223,7 @@ El advisor de seguridad devuelve `auth_leaked_password_protection` en nivel WARN
 
 Sin verificación posterior el ítem no se cierra: una vez activado, el advisor deja de emitir ese lint y eso es la evidencia.
 
-### 2.2 · Reducir el grant de `public.regiones` a SELECT — PENDIENTE
+### 2.2 · Reducir el grant de `public.regiones` a SELECT — HECHO
 
 `authenticated` tiene sobre `public.regiones`: `DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE`.
 
@@ -223,21 +231,29 @@ Es la **única** tabla de negocio con DML abierto a `authenticated`. La otra tab
 
 Hoy no es explotable en la práctica —la política `regiones_select_scope` sólo cubre `SELECT`, así que un `INSERT` de un cliente sería rechazado por RLS al no encontrar política permisiva de escritura— pero el grant sobra y la protección depende de una ausencia, no de una negativa. Cualquier política de escritura que alguien agregue después la vuelve explotable sin que el grant vuelva a discutirse.
 
-Va como migración nueva con `REVOKE`, dejando `SELECT`.
+**PR #148**, migración `20260903120000_regiones_solo_select_v1.sql`. Revoca `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `REFERENCES` y `TRIGGER`, y deja `GRANT SELECT` explícito. No toca `service_role`, ni la política, ni datos.
 
-### 2.3 · Secret scanning en CI — PENDIENTE
+La evidencia la da el gate de replay: el diff de la huella estructural es exactamente seis grants quitados sobre `public.regiones` y ninguno agregado. Contrato: `regiones-solo-select-contract.test.mjs`, verificado contra cuatro regresiones.
+
+### 2.3 · Secret scanning en CI — HECHO
 
 No existe. Verificado: ninguno de los cinco workflows (`ci.yml`, `deploy-smoke.yml`, `netlify-diagnostic.yml`, `regenerate-replay-expectation.yml`, `site-http-diagnostic.yml`) contiene un paso de escaneo de secretos.
 
 El repositorio maneja `SUPABASE_SERVICE_ROLE_KEY`, claves de proveedor de inferencia y claves VAPID de web-push. El riesgo concreto no es el commit deliberado sino el archivo de diagnóstico pegado en un PR.
 
-### 2.4 · Aserción anti-`USING(true)` sobre todas las tablas de negocio — PENDIENTE
+**PR #149.** gitleaks 8.30.1 con versión fija, `.gitleaks.toml` propio, corriendo **antes** de tests, lint y build. Escanea el árbol de trabajo, no el historial: escanear el historial completo en cada corrida marca lo mismo siempre hasta que nadie lee la salida.
+
+Las reglas propias distinguen la `anon` key —pública por diseño— de la `service_role`. Marcar la anon generaría un hallazgo en cada build y enseñaría a ignorar la alerta.
+
+**Detalle que sólo apareció al verificar:** la primera versión de la regla de `service_role` no disparaba. `service_role` viaja en base64 dentro del payload del JWT, y base64 codifica de a tres bytes, así que produce tres cadenas distintas según el offset; con un solo literal se escapaban dos de cada tres casos. Lo cazaba la regla genérica `jwt`, así que el escaneo "funcionaba" y la regla propia era decorativa. Ahora cubre las tres alineaciones y el contrato las exige por nombre.
+
+### 2.4 · Aserción anti-`USING(true)` sobre todas las tablas de negocio — HECHO (subsumido en 2.5)
 
 **Verificado hoy: cero políticas con `USING(true)` o `WITH CHECK(true)` en `public`.** Las trece políticas de `authenticated` pasan sin excepción por `noven_private.tiene_acceso_organizacion/zona/sucursal(...)` o por `auth.uid()`.
 
 Es decir: **este ítem no arregla nada, preserva algo.** Ese es exactamente el motivo por el que va como test de CI y no como aserción dentro de una migración histórica. Una aserción en una migración se evalúa una vez, el día que se aplica, y después es texto muerto; el invariante que hay que sostener es "de acá en adelante ninguna política nueva es permisiva", y eso sólo lo sostiene algo que corra en cada PR.
 
-### 2.5 · Clasificación explícita de tablas por exposición — PENDIENTE
+### 2.5 · Clasificación explícita de tablas por exposición — HECHO
 
 Un test que falle ante una tabla nueva sin clasificar. La clasificación que sale del relevamiento de producción tiene cinco clases:
 
@@ -249,7 +265,13 @@ Un test que falle ante una tabla nueva sin clasificar. La clasificación que sal
 | `solo_servidor` | Sin grants a `authenticated`; se escribe por Netlify Function con `service_role` | `alertas_zonales`, `alertas_zonales_destinos`, `analisis_cache`, `importacion_0258_detalle`, `importaciones`, `invitaciones_acceso`, `problemas_economicos_ciclos`, `producto_costo_observaciones`, `producto_costo_ultima_observacion`, `producto_imagen_cambios`, `producto_pendiente_detecciones`, `producto_snapshots`, `productos_pendientes_catalogo`, `rag_escalamientos`, `rate_limit_consumo`, `usuario_familias` |
 | `respaldo_historico` | Tablas de respaldo de agosto, sin rol en el circuito | `dedup_turrocklets_backup_20260805`, `productos_descripcion_backup_20260805`, `productos_familia_backup_20260806` |
 
-**Este ítem subsume a 2.4 y conviene implementarlos juntos**: si cada tabla declara su clase y el test verifica que sus grants y políticas reales coinciden con la clase declarada, entonces una política `USING(true)` sobre una tabla `lectura_tenant` falla por definición. Dos tests separados dirían dos veces lo mismo con una costura entre ellos.
+**PR #150**, que implementa 2.4 y 2.5 juntos. La verificación corre en CI contra el Supabase descartable del replay, así que evalúa el resultado acumulado de todas las migraciones: un grant es un hecho del catálogo, leerlo del texto de las migraciones es adivinar.
+
+**Se cubrieron también las vistas, que el ítem no contemplaba.** El primer diseño miraba sólo `relkind = 'r'`, y las vistas son la puerta trasera de RLS: por defecto se evalúan con los permisos de su dueño. Aparecieron dos cosas — diez vistas con DML completo para `authenticated` (mismo patrón que 2.2), y que `security_invoker = true` estaba correctamente puesto en las doce pero **nada lo verificaba**. Una vista nueva sin la opción habría expuesto todas las organizaciones sin que el gate de replay lo notara. La migración `20260903160000_exposicion_vistas_v1.sql` revoca los DML y deja `security_invoker` escrito.
+
+El contrato prueba quince formas de exposición indebida sobre catálogos armados a mano, sin levantar Postgres.
+
+**Este ítem subsume a 2.4**: si cada tabla declara su clase y el test verifica que sus grants y políticas reales coinciden con la clase declarada, entonces una política `USING(true)` sobre una tabla `lectura_tenant` falla por definición. Dos tests separados dirían dos veces lo mismo con una costura entre ellos.
 
 Los veinticuatro lints `rls_enabled_no_policy` del advisor —dieciséis en `public`, siete en `desafio5s_archive`— **no son un defecto**: son tablas `solo_servidor` con RLS habilitada y sin grants, es decir, negación total para `authenticated`. La clasificación tiene que registrar eso como intencional, o el advisor va a seguir pareciendo una lista de pendientes que nadie atiende.
 
@@ -307,7 +329,7 @@ Agregar índices "por las dudas" antes de medir es la forma habitual de pagar es
 
 Qué corre y qué prueba, al 2026-09-02:
 
-- **`scripts/tests/`: 96 archivos `.test.mjs`.** Contratos en Node puro (`node:assert`), sin framework: leen el código fuente o transpilan un módulo TS y afirman invariantes. `scripts/test.mjs` los corre en procesos separados y devuelve exit≠0 si alguno falla. Quince fueron creados por este plan: `corpus-evaluacion-contract`, `admin-rate-limit-contract`, `auth-directory-scope-contract`, `ci-trigger-contract`, `cuota-analisis-contract`, `desafio5s-cold-archive-contract`, `live-isolation-gates-contract`, `no-browser-business-writes`, `regenerate-workflow-contract`, `replay-log-extractor` y los cinco `migration-replay-*`.
+- **`scripts/tests/`: 100 archivos `.test.mjs`.** Contratos en Node puro (`node:assert`), sin framework: leen el código fuente o transpilan un módulo TS y afirman invariantes. `scripts/test.mjs` los corre en procesos separados y devuelve exit≠0 si alguno falla. Veinte fueron creados por este plan: `admin-rate-limit-contract`, `august-backups-cold-archive-contract`, `auth-directory-scope-contract`, `ci-trigger-contract`, `clasificacion-exposicion-contract`, `corpus-evaluacion-contract`, `cuota-analisis-contract`, `desafio5s-cold-archive-contract`, `live-isolation-gates-contract`, `no-browser-business-writes`, `regenerate-workflow-contract`, `regiones-solo-select-contract`, `replay-log-extractor`, `secret-scanning-contract` y los cinco `migration-replay-*`.
 - **`e2e/`: 2 specs, 14 tests** (12 en `critical-flows.spec.mjs`, 2 en `catalog-role-boundary.spec.mjs`), 3 fixtures. **Corren contra un Supabase interceptado por fixture** (`VITE_SUPABASE_URL=http://127.0.0.1:4173/__supabase`), no real: son tests de flujo de UI y **no ejercen RLS**. La verificación con backend real vive exclusivamente en `scripts/live-isolation/`.
 - **`.github/workflows/ci.yml`: un único job `verify`,** en orden — `npm test` → `npm run lint` → `npm run build` → replay de Baseline V1 con fingerprint estructural → export de credenciales efímeras → Gates 1–3 de aislamiento → cuota por actor bajo concurrencia → Playwright/Chromium → parada del Supabase efímero (`if: always()`). Triggers: push a `master` y pull request contra `master`. El trigger dedicado de la rama histórica `feat/multitenant-architecture-v1`, ya fusionada, fue retirado en E1 y quedó cubierto por `ci-trigger-contract.test.mjs`.
 - **`.github/workflows/regenerate-replay-expectation.yml`:** manual, para regenerar la expectativa móvil sin tener el entorno; opcionalmente emite el respaldo verificable en logs, apagado por defecto. Ver 1.4E–1.4F.

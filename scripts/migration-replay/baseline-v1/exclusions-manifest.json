@@ -9,18 +9,19 @@
     {
       "kind": "relations",
       "objects": [
-        "public.dedup_turrocklets_backup_20260805",
-        "public.productos_descripcion_backup_20260805",
-        "public.productos_familia_backup_20260806"
+        "noven_archive.dedup_turrocklets_backup_20260805",
+        "noven_archive.productos_descripcion_backup_20260805",
+        "noven_archive.productos_familia_backup_20260806"
       ],
-      "reason": "historical_backup_state"
+      "reason": "cold_archived_historical_backup_state"
     },
     {
       "kind": "schema",
       "objects": [
-        "desafio5s_archive"
+        "desafio5s_archive",
+        "noven_archive"
       ],
-      "reason": "cold_archived_legacy_application"
+      "reason": "cold_archived_non_core_schemas"
     },
     {
       "kind": "data",

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   AlertTriangle,
@@ -26,6 +26,8 @@ import {
 } from '@/lib/product-image'
 import ProductIdentity from '@/components/product/ProductIdentity'
 import type { EstadoSeguimientoRag } from '@/types/index'
+import { useEscalaRag } from '@/hooks/useEscalaRag'
+import { coberturaComoPorcentaje, evaluarSugerencia } from '@/lib/ragCobertura'
 
 interface VencimientoParaEditar {
   id: string
@@ -57,6 +59,8 @@ interface SeguimientoRagRow {
   unidades_vendidas_observadas: number | null
   velocidad_observada: number | null
   velocidad_necesaria: number | null
+  dias_observados: number | null
+  dias_desde_ultimo_rag: number | null
   dias_comerciales_restantes: number
   estado_seguimiento_rag: EstadoSeguimientoRag
 }
@@ -110,6 +114,7 @@ export default function EditarVencimientoModalSeguro({
   const [cargandoRag, setCargandoRag] = useState(true)
   const [finalizandoRag, setFinalizandoRag] = useState(false)
   const [confirmarFinalizarRag, setConfirmarFinalizarRag] = useState(false)
+  const { escala: escalaRag } = useEscalaRag()
   const [motivoFinalizacionRag, setMotivoFinalizacionRag] = useState<MotivoFinalizacionRag>('oferta_centralizada')
   const [notaFinalizacionRag, setNotaFinalizacionRag] = useState('')
 
@@ -136,7 +141,7 @@ export default function EditarVencimientoModalSeguro({
       setCargandoRag(true)
       const { data, error: ragError } = await supabase
         .from('v_seguimiento_rag_actual')
-        .select('dias_donacion, rag_porcentaje, rag_aplicado_at, cantidad_base_rag, cantidad_observada, unidades_vendidas_observadas, velocidad_observada, velocidad_necesaria, dias_comerciales_restantes, estado_seguimiento_rag')
+        .select('dias_donacion, rag_porcentaje, rag_aplicado_at, cantidad_base_rag, cantidad_observada, unidades_vendidas_observadas, velocidad_observada, velocidad_necesaria, dias_observados, dias_desde_ultimo_rag, dias_comerciales_restantes, estado_seguimiento_rag')
         .eq('vencimiento_id', vencimiento.id)
         .maybeSingle()
 
@@ -245,6 +250,27 @@ export default function EditarVencimientoModalSeguro({
   }
 
   const puedeGestionarRag = nivelCalculado === 'radar' || nivelCalculado === 'urgente'
+
+  // Sugerencia por urgencia. Mismo motor determinístico que la línea del
+  // Dashboard: el operador no puede ver dos números distintos para lo mismo.
+  const sugerencia = useMemo(() => {
+    if (!seguimientoRag) return null
+    return evaluarSugerencia({
+      estado: seguimientoRag.estado_seguimiento_rag,
+      velocidadObservada: seguimientoRag.velocidad_observada,
+      velocidadNecesaria: seguimientoRag.velocidad_necesaria,
+      diasComercialesRestantes: seguimientoRag.dias_comerciales_restantes,
+      diasObservados: seguimientoRag.dias_observados,
+      diasDesdeUltimoRag: seguimientoRag.dias_desde_ultimo_rag,
+      ragPorcentaje: seguimientoRag.rag_porcentaje,
+    }, escalaRag)
+  }, [seguimientoRag, escalaRag])
+
+  // El estado insuficiente / sin movimiento es el que amerita mostrar el
+  // detalle del déficit. En los demás, la tarjeta queda como estaba.
+  const muestraDetalleCobertura = seguimientoRag != null
+    && (seguimientoRag.estado_seguimiento_rag === 'insuficiente'
+      || seguimientoRag.estado_seguimiento_rag === 'sin_movimiento')
   const diasRestantes = calcularDiasRestantes(fechaVencimiento)
   const metricas = calcularMetricasRiesgo(
     diasRestantes,
@@ -296,12 +322,38 @@ export default function EditarVencimientoModalSeguro({
       p_porcentaje_rag: ragNuevo,
       p_nota: null,
     })
-    setGuardando(false)
 
     if (rpcError) {
+      setGuardando(false)
       setError(`No se pudo registrar el control: ${rpcError.message}`)
       return
     }
+
+    // Instrumentación: qué sugirió el motor y qué hizo la persona.
+    //
+    // Sin esto, en seis meses no se puede confrontar la regla contra lo que
+    // realmente pasó, que es todo el insumo del motor histórico. Se registra
+    // sólo cuando hubo cambio de RAG, que es cuando hay una decisión que medir.
+    //
+    // Un fallo acá NO puede voltear el control ya registrado: la instrumentación
+    // es evidencia, no parte de la operación. Se loguea y se sigue.
+    if (ragNuevo != null) {
+      const origen = sugerencia?.hay
+        ? (Math.abs(ragNuevo - (sugerencia.hasta ?? -1)) <= 0.0001 ? 'sugerida_aceptada' : 'sugerida_rechazada')
+        : 'manual'
+
+      const { error: instrError } = await supabase.rpc('instrumentar_sugerencia_rag', {
+        p_vencimiento_id: vencimiento.id,
+        p_cobertura: sugerencia?.cobertura ?? null,
+        p_escalones_sugeridos: sugerencia?.hay ? sugerencia.escalones : null,
+        p_origen: origen,
+      })
+      if (instrError) {
+        console.error('[EditarVencimientoModalSeguro] instrumentación RAG:', instrError)
+      }
+    }
+
+    setGuardando(false)
     onGuardado()
     onClose()
   }
@@ -444,7 +496,43 @@ export default function EditarVencimientoModalSeguro({
               {cargandoRag ? <p className="text-[11px] text-muted-foreground">Cargando seguimiento…</p> : seguimientoRag?.rag_porcentaje != null ? (
                 <div className="rounded-lg bg-white/80 border border-amber-100 p-3 text-[11px]">
                   <div className="flex items-center gap-1.5 font-semibold"><Activity className="h-3.5 w-3.5 text-amber-700" />{RAG_ESTADO_LABEL[seguimientoRag.estado_seguimiento_rag]}</div>
-                  <div className="grid grid-cols-2 gap-1 mt-2 text-muted-foreground"><span>RAG vigente</span><span className="text-right font-medium text-foreground">{seguimientoRag.rag_porcentaje}%</span><span>Vel. observada</span><span className="text-right font-medium text-foreground">{fmtVelocidad(seguimientoRag.velocidad_observada)}</span></div>
+                  <div className="grid grid-cols-2 gap-1 mt-2 text-muted-foreground"><span>RAG vigente</span><span className="text-right font-medium text-foreground">{seguimientoRag.rag_porcentaje}%</span><span>Vel. observada</span><span className="text-right font-medium text-foreground">{fmtVelocidad(seguimientoRag.velocidad_observada)}</span>
+                    {muestraDetalleCobertura && (<>
+                      <span>Vel. necesaria</span><span className="text-right font-medium text-foreground">{fmtVelocidad(seguimientoRag.velocidad_necesaria)}</span>
+                      <span>Cobertura</span><span className="text-right font-medium text-foreground">{coberturaComoPorcentaje(sugerencia?.cobertura ?? null)}</span>
+                      <span>Días comerciales</span><span className="text-right font-medium text-foreground">{seguimientoRag.dias_comerciales_restantes}</span>
+                    </>)}
+                  </div>
+                  {sugerencia?.hay && (
+                    <div className="mt-2.5 rounded-lg border border-amber-300 bg-amber-100/70 p-2.5">
+                      <p className="font-bold text-[11px]">Sugerencia por urgencia</p>
+                      <p className="text-[11px] mt-0.5">
+                        <span className="font-semibold">{sugerencia.desde}% → {sugerencia.hasta}%</span>
+                        {sugerencia.sinMovimiento
+                          ? ' · sin movimiento observado'
+                          : sugerencia.factorRequerido != null && ` · hace falta multiplicar la salida por ${sugerencia.factorRequerido.toLocaleString('es-AR', { maximumFractionDigits: 1 })}`}
+                      </p>
+                      {sugerencia.topeInsuficiente && (
+                        <p className="text-[10px] mt-1 text-amber-900/90">
+                          Es el tope de la escala autorizada y aun así puede no alcanzar en los días que quedan.
+                        </p>
+                      )}
+                      {puedeGestionarRag && (
+                        <button
+                          type="button"
+                          onClick={() => setRagPorcentaje(String(sugerencia.hasta))}
+                          disabled={ocupado}
+                          className="mt-2 w-full h-8 rounded-lg border border-amber-400 bg-white text-amber-900 font-semibold text-[11px] disabled:opacity-50"
+                        >
+                          Usar {sugerencia.hasta}%
+                        </button>
+                      )}
+                      <p className="text-[10px] mt-1.5 text-amber-900/80">
+                        Es una sugerencia por urgencia, no un porcentaje óptimo. Podés aplicarla,
+                        elegir otro porcentaje o ignorarla; nada se aplica solo.
+                      </p>
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={() => setConfirmarFinalizarRag(true)}

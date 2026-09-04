@@ -19,6 +19,11 @@ const ALLOWED_BROWSER_RPCS = new Set([
   'completar_cod_art_producto_scanner',
   'crear_producto_scanner',
   'guardar_vencimiento_y_stock_scanner_v1',
+  // Registra qué sugirió el motor de urgencia y qué hizo la persona. Escribe
+  // sólo columnas de instrumentación sobre la intervención RAG vigente del
+  // vencimiento, verifica permiso sobre el producto en el DEFINER, y no pisa
+  // una intervención ya instrumentada.
+  'instrumentar_sugerencia_rag',
   'listar_familias_scanner',
   'listar_mis_alertas_zonales_v1',
   'modo_imagen_producto_operador',
@@ -65,7 +70,7 @@ assert.deepEqual(
   `RPC aprobadas pero sin caller browser: ${aprobadasSinCaller.join(', ')}. Revisar si corresponde revocar EXECUTE.`,
 )
 
-assert.equal(usados.size, 15, 'La superficie browser esperada debe permanecer en 15 RPC explícitas')
+assert.equal(usados.size, 16, 'La superficie browser esperada debe permanecer en 16 RPC explícitas')
 assert.equal(usados.has('listar_resumen_radar_zonal_v1'), false, 'El resumen Radar huérfano no debe volver al navegador')
 
 console.log(`✓ Allowlist browser RPC: ${usados.size} entradas explícitas y sin superficie huérfana`)
