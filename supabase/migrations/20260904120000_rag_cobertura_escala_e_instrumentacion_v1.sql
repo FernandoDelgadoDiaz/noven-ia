@@ -84,24 +84,15 @@ CREATE POLICY rag_escala_descuento_select_scope
   TO authenticated
   USING (noven_private.tiene_acceso_organizacion(organizacion_id));
 
--- Semilla: la escala vigente de la organización existente.
+-- La escala NO se siembra desde esta migración, a propósito.
 --
--- Es configuración de política comercial, no dato de negocio ficticio: son los
--- porcentajes que la operación ya usa (producción registra 20, 30, 50 y 60,
--- todos sobre esta escala). Idempotente y sin pisar una escala ya cargada.
-INSERT INTO public.rag_escala_descuento (organizacion_id, escalon, porcentaje)
-SELECT o.id, e.escalon, e.porcentaje
-FROM public.organizaciones o
-CROSS JOIN (VALUES
-  (1::smallint, 10::numeric),
-  (2, 20),
-  (3, 30),
-  (4, 40),
-  (5, 50),
-  (6, 60),
-  (7, 70)
-) AS e(escalon, porcentaje)
-ON CONFLICT DO NOTHING;
+-- Un INSERT acá metería la política comercial de un retailer concreto dentro
+-- del producto: todo deployment futuro lo correría e impondría la escala de La
+-- Anónima a organizaciones que nunca la eligieron. Y una vez aplicada la
+-- migración ya no se puede sacar sin borrar datos.
+--
+-- La escala de cada organización se carga como OPERACIÓN DE DATOS, acotada a
+-- esa organización. Procedimiento en `docs/RISK_AND_RAG_RULES_V1.md`.
 
 -- --- 2. Instrumentación por intervención ------------------------------------
 --

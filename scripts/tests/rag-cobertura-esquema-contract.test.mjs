@@ -32,16 +32,33 @@ assert.match(sql, /UNIQUE \(organizacion_id, porcentaje\)/,
 assert.match(sql, /CHECK \(porcentaje > 0 AND porcentaje <= 100\)/,
   'un porcentaje fuera de (0,100] no es un descuento')
 
-// La semilla es la escala real de la organización existente: 10..70 de a 10.
-const semilla = sql.slice(sql.indexOf('INSERT INTO public.rag_escala_descuento'))
-for (const [escalon, porcentaje] of [[1, 10], [2, 20], [3, 30], [4, 40], [5, 50], [6, 60], [7, 70]]) {
-  assert.ok(
-    new RegExp(`\\(${escalon}(?:::smallint)?,\\s*${porcentaje}`).test(semilla),
-    `falta el escalón ${escalon} (${porcentaje}%) en la semilla`,
-  )
-}
-assert.match(semilla, /ON CONFLICT DO NOTHING/,
-  'la semilla no puede pisar una escala ya configurada por la organización')
+// --- 1b. La migración NO carga ninguna escala -------------------------------
+//
+// Esta migración creó la TABLA; el contenido de la escala es política comercial
+// de cada organización y se carga como operación de datos. Un INSERT acá
+// impondría la escala de un retailer a todo deployment futuro del producto, y
+// una vez aplicada la migración no se puede sacar sin borrar datos.
+//
+// Se mira el SQL efectivo, no el archivo entero: los comentarios explican
+// justamente por qué no hay semilla, y buscar sobre ellos daría un falso
+// positivo.
+const sqlEfectivo = sql
+  .replace(/^\s*--.*$/gm, '')
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+
+assert.doesNotMatch(sqlEfectivo, /INSERT\s+INTO\s+public\.rag_escala_descuento/i,
+  'la escala es política de cada organización: no se siembra desde una migración')
+
+// La forma concreta que hay que evitar es el abanico sobre organizaciones: un
+// INSERT que las recorra todas le impone la escala a organizaciones que nunca
+// la eligieron, incluso en una base que todavía no existe.
+assert.doesNotMatch(sqlEfectivo, /FROM\s+public\.organizaciones[\s\S]{0,400}?CROSS\s+JOIN\s*\(\s*VALUES/i,
+  'ninguna migración puede abanicar valores de política sobre todas las organizaciones')
+
+// Y tampoco por la puerta de atrás: los porcentajes de La Anónima no son
+// constantes del producto y no deben aparecer como literales en el SQL.
+assert.doesNotMatch(sqlEfectivo, /\(\s*7\s*(?:::smallint)?\s*,\s*70\b/,
+  'el escalón 7 = 70% es política de La Anónima, no del producto')
 
 // --- 2. RLS y exposición ----------------------------------------------------
 
