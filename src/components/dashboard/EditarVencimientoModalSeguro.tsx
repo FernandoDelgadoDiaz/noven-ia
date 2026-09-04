@@ -512,9 +512,14 @@ export default function EditarVencimientoModalSeguro({
                           ? ' · sin movimiento observado'
                           : sugerencia.factorRequerido != null && ` · hace falta multiplicar la salida por ${sugerencia.factorRequerido.toLocaleString('es-AR', { maximumFractionDigits: 1 })}`}
                       </p>
-                      {sugerencia.topeInsuficiente && (
+                      {sugerencia.topeInsuficiente ? (
                         <p className="text-[10px] mt-1 text-amber-900/90">
                           Es el tope de la escala autorizada y aun así puede no alcanzar en los días que quedan.
+                        </p>
+                      ) : sugerencia.saltoPuedeNoAlcanzar && (
+                        <p className="text-[10px] mt-1 text-amber-900/90">
+                          El déficit es grande: este escalón probablemente no alcance en los días que quedan.
+                          Si no responde, el próximo control vuelve a sugerir.
                         </p>
                       )}
                       {puedeGestionarRag && (

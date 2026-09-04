@@ -124,21 +124,32 @@ Esto ya pasó: la migración `20260904120000_rag_cobertura_escala_e_instrumentac
 3. Cargar la escala acotada a esa organización. El `WHERE` es lo que impide que toque a las demás, y el `ON CONFLICT DO NOTHING` la hace repetible sin pisar una escala ya configurada:
 
    ```sql
+   BEGIN;
+
+   -- La escala se REEMPLAZA entera, no se completa. Los escalones tienen que
+   -- quedar numerados 1..N sin huecos: la RPC de instrumentación calcula
+   -- `escalones_aplicados` restando números de escalón, y un hueco haría que un
+   -- movimiento de un escalón se registre como dos.
+   DELETE FROM public.rag_escala_descuento
+   WHERE organizacion_id = (SELECT id FROM public.organizaciones WHERE codigo = 'ORG001');
+
    INSERT INTO public.rag_escala_descuento (organizacion_id, escalon, porcentaje)
    SELECT o.id, e.escalon, e.porcentaje
    FROM public.organizaciones o
    CROSS JOIN (VALUES
-     (1::smallint, 10::numeric),
-     (2, 20),
-     (3, 30),
-     (4, 40),
-     (5, 50),
-     (6, 60),
-     (7, 70)
+     (1::smallint, 20::numeric),
+     (2, 30),
+     (3, 50),
+     (4, 70)
    ) AS e(escalon, porcentaje)
-   WHERE o.codigo = 'ORG001'   -- ← el código de la organización, siempre presente
-   ON CONFLICT DO NOTHING;
+   WHERE o.codigo = 'ORG001';   -- ← el código de la organización, siempre presente
+
+   COMMIT;
    ```
+
+   Correrlo dos veces deja las mismas cuatro filas: es idempotente por
+   construcción. El `DELETE` está acotado por `organizacion_id`; sin esa
+   cláusula borraría la escala de todas.
 
 4. Verificar que quedó cargada sólo donde corresponde:
 
@@ -151,7 +162,10 @@ Esto ya pasó: la migración `20260904120000_rag_cobertura_escala_e_instrumentac
 
 ### Reglas de la escala
 
-- `escalon` es un entero ≥ 1 y ordena la escala. «Subir un escalón» significa moverse al `escalon` siguiente, no sumar un porcentaje fijo.
+- `escalon` es un entero ≥ 1 y ordena la escala. «Subir un escalón» significa moverse al `escalon` siguiente, no sumar un porcentaje fijo. **Los escalones van numerados 1..N sin huecos**, porque la RPC de instrumentación deriva `escalones_aplicados` restando números de escalón.
+- **El motor sugiere siempre UN escalón por vez.** La regla anterior subía dos ante un déficit severo, y se diseñó para una escala de incrementos parejos de diez, donde saltar dos era subir veinte puntos. Con saltos desiguales, subir dos desde 30 sería ir a 70: cuarenta puntos de una. No se pierde reacción porque el tiempo ya está dentro del cálculo de cobertura — si el producto no se mueve, la ventana se achica, la necesaria sube, la cobertura cae y en el próximo control vuelve a sugerir. Se pasa por cada escalón intermedio, que es exactamente lo que un salto doble se saltea.
+- Cuando el déficit es severo —sin movimiento, o cobertura por debajo de 0,5— la tarjeta **avisa que ese escalón probablemente no alcance**. Es un aviso, no una predicción: Noven no modela cuánto acelera la salida un punto más de descuento. Mostrar el límite es honesto; saltar dos por cuenta propia no lo sería.
+- Un porcentaje que quedó **fuera de la escala** —cargado a mano, o sobreviviente de una escala anterior— no rompe nada: el motor se ancla en el escalón más alto que no lo supere y sube uno desde ahí. Un RAG en 40 con la escala 20/30/50/70 sugiere 50.
 - Los porcentajes deben ser crecientes con el escalón, sin repetirse: un mismo porcentaje en dos escalones haría ambiguo «subir uno», y la constraint `UNIQUE (organizacion_id, porcentaje)` lo rechaza.
 - `porcentaje` debe estar en (0, 100].
 - **Nunca ejecutar la carga sin `WHERE`.** Sin esa cláusula el `INSERT` abanica sobre todas las organizaciones.
@@ -159,4 +173,6 @@ Esto ya pasó: la migración `20260904120000_rag_cobertura_escala_e_instrumentac
 
 ### Escala vigente de La Anónima
 
-`ORG001` — S.A. IMP. Y EXP. DE LA PATAGONIA: 10, 20, 30, 40, 50, 60, 70. Cargada el 2026-09-04 como operación de datos, con el SQL de arriba.
+`ORG001` — S.A. IMP. Y EXP. DE LA PATAGONIA: **20, 30, 50, 70**. Escala corporativa, con saltos desiguales de 10, 20 y 20 puntos.
+
+La primera carga (10/20/30/40/50/60/70) se reemplazó el 2026-09-04 al confirmarse la escala corporativa real. No había ninguna intervención RAG activa en 10, 40 ni 60, ni instrumentación histórica que reinterpretar.
