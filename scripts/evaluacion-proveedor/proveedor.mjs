@@ -44,7 +44,11 @@ export function configuracionDeProduccion() {
 
   const url = exigir(/fetch\('(https:\/\/[^']+)'/.exec(src)?.[1], 'la URL del proveedor')
   const modelo = exigir(/model:\s*'([^']+)'/.exec(src)?.[1], 'el modelo')
-  const envKey = exigir(/process\.env\.(OPENAI_API_KEY|DEEPSEEK_API_KEY)/.exec(src)?.[1], 'la variable de credencial')
+  // Sólo `OPENAI_API_KEY`. Aceptar cualquier credencial dejaba que la evaluación
+  // siguiera funcionando si alguien reintroduce otro proveedor por la puerta de
+  // atrás; que falle es lo correcto, porque el corpus está calibrado contra el
+  // proveedor decidido en el ítem 1.5 y no contra cualquiera.
+  const envKey = exigir(/process\.env\.(OPENAI_API_KEY)/.exec(src)?.[1], 'la variable de credencial')
 
   // Los parámetros de inferencia se copian tal cual: evaluar con otros mide
   // otra cosa. `temperature` sobre todo — con 0.2 la respuesta no es

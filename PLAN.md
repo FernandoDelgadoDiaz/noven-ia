@@ -433,11 +433,13 @@ Trabajo de producto sobre la base auditada. No forma parte de los 28 ítems orig
 - **~~Limitación PASO 7 client-triggered~~ RESUELTO (commit `f3fc04d`):** se agregó la función `recalcular_niveles_vencimientos()` + job `pg_cron` `recalcular-niveles-vencimientos` (diario `0 12 * * *` UTC = 09:00 ART, `pg_net`/trigger ya existentes) que recalcula `nivel_actual` server-side; las transiciones a `'urgente'` disparan el push aunque nadie abra la app. La lógica de riesgo queda **duplicada** (frontend `src/lib/riesgo.ts` + SQL) — actualizar ambos si cambian umbrales.
 - **Pendiente de verificación manual:** recepción real en dispositivo con app cerrada, registro de SW, banner y guardado de suscripción (requieren teléfono real con permiso concedido).
 
-### F6 — Análisis inteligente con DeepSeek [x] (deployado, commit `4182c7d`)
+### F6 — Análisis inteligente [x] (deployado, commit `4182c7d`)
+
+> **Registro histórico.** Este bloque describe lo que se construyó en su momento, con DeepSeek como proveedor. El proveedor se migró a OpenAI en el ítem 1.5 del plan de endurecimiento (PR #141). La decisión vigente está en `ai/decisions.md`; el estado del ítem, en `docs/PRE_PRODUCTION_HARDENING_PLAN.md`.
 - Reemplaza la página `/maestro` (stub) por `/analisis`. Nav: "Análisis" + icono `BrainCircuit` (sidebar + mobile). Se eliminó `src/pages/Maestro.tsx` (huérfano).
-- `netlify/functions/analisis.ts`: valida JWT → uid; **deriva rol/sucursal/familias server-side desde la DB e IGNORA el body del cliente** (aislamiento por rol más estricto que la spec). Arma prompt con vencimientos reales (producto/nivel/días/cantidad/venta/familia) + totales donación/decomiso del trimestre + fecha. Llama DeepSeek (`deepseek-chat`, temp 0.3, system prompt distinto operador/admin). 502 ante fallo del modelo.
+- `netlify/functions/analisis.ts`: valida JWT → uid; **deriva rol/sucursal/familias server-side desde la DB e IGNORA el body del cliente** (aislamiento por rol más estricto que la spec). Arma prompt con vencimientos reales (producto/nivel/días/cantidad/venta/familia) + totales donación/decomiso del trimestre + fecha. Llamaba a DeepSeek (`deepseek-chat`, temp 0.3, system prompt distinto operador/admin). 502 ante fallo del modelo. **Superado:** el proveedor se migró a OpenAI en el ítem 1.5 — ver `ai/decisions.md`.
 - `useAnalisis` (token JWT, POST, estados, cache en localStorage) · `Analisis.tsx` (header, subtítulo por rol, generar/loading "Analizando tus datos…"/resultado/actualizar).
-- **Secreto** `DEEPSEEK_API_KEY` solo en Netlify env; nunca en el repo. Smoke prod: gate 401 sin/con JWT inválido; key DeepSeek validada (200).
+- **Secreto** solo en Netlify env; nunca en el repo. Smoke prod: gate 401 sin/con JWT inválido; key validada (200). **Superado:** hoy la credencial es `OPENAI_API_KEY`; `DEEPSEEK_API_KEY` ya no se lee en ningún lado del código.
 - **Pendiente de verificación manual:** path 200 end-to-end con login real (operador vs admin) — comparar el reporte devuelto contra los vencimientos reales.
 - **Limitación:** el motor de riesgo está duplicado inline en la function (espejo de `src/lib/riesgo.ts`) porque la function no comparte el bundle del frontend. Si cambian los umbrales, actualizar ambos lugares.
 
