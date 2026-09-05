@@ -441,6 +441,40 @@ Lo que queda de esta deuda son los siete endpoints autenticados que no tienen ni
 
 Lo que **no** desaparece con el cierre, y por eso la deuda se salda sin borrarse: siguen saliendo datos operativos hacia un tercero en otra jurisdicción. Lo que cambió es que ahora hay una decisión explícita sobre a quién, bajo qué retención y con qué condición de reevaluación, en lugar de un proveedor heredado sin evaluar. La garantía es más débil que residencia contratada, y 1.5 lo deja escrito para que nadie la cite después como si fuera otra cosa.
 
+**D-7 · La instrumentación del RAG no tiene evidencia anterior al 2026-09-05.** `public.instrumentar_sugerencia_rag` se aplicó el 2026-09-04 con un permiso mal puesto: el wrapper es `SECURITY INVOKER` y a `authenticated` se le había revocado `EXECUTE` sobre la implementación, así que **cada llamada falló con `permission denied` desde el primer día**.
+
+La evidencia del defecto, tomada de producción antes de repararlo: 17 intervenciones registradas, **cero** con `cobertura_al_sugerir`, `escalones_sugeridos` u `origen_sugerencia` —incluida la única creada después de aplicar la migración—. El ACL de la implementación era `{postgres=X/postgres}`.
+
+No se notó porque `EditarVencimientoModalSeguro.tsx` manda el error a `console.error`: el RAG se registraba bien y lo que se perdía en silencio era la instrumentación.
+
+**Qué significa para el motor histórico.** Las 17 intervenciones previas quedan con esas columnas en `NULL` y así se quedan: el dato no se generó y no se inventa. La instrumentación **arranca en la fecha de la reparación**, y cualquier análisis que compare reglas contra realidad tiene que tratar lo anterior como "sin evidencia" y no como "sin sugerencia" — son cosas distintas y confundirlas sesgaría la conclusión hacia "la regla no sugería nada".
+
+**Lo que la reparación no cubre** es el patrón que lo hizo invisible: ver la deuda D-8.
+
+**D-8 · Fallos de escritura y de lectura que desaparecen en `console.error`.** Es el patrón que dejó vivir a D-7 un día y medio sin que nadie lo notara, y sigue presente. Hay 16 `console.error` en `src/`; relevados uno por uno, se agrupan en tres clases muy distintas.
+
+| Clase | Dónde | Qué pasa cuando falla |
+|---|---|---|
+| **Escritura que se pierde** | `EditarVencimientoModalSeguro` · instrumentación RAG | El RAG se registra, la evidencia no. Es D-7. |
+| **Lectura que se vuelve una ausencia plausible** | `useEscalaRag`, `useVencimientos` · intervenciones, `EditarVencimientoModalSeguro` · seguimiento, `useRadarZonal` | El peor caso, y es el mismo mecanismo que D-7 del lado de la lectura. |
+| **Ya resuelto: el error llega al usuario** | `RadarZonalModal` (setAccionError), imágenes, push, cierre de sesión | El `console.error` es información extra, no el único canal. No hay nada que arreglar. |
+
+**`useEscalaRag` es peor que D-7, y hay que entender por qué antes de tratarlo como un `console.error` más.**
+
+Si la lectura de la escala falla, el hook hace `setEscala([])`. El motor, con escala vacía, devuelve `sin_escala`. La tarjeta deja de sugerir **y se ve exactamente igual que cuando no corresponde sugerir**.
+
+La diferencia con D-7 es la que importa. Con D-7 se perdía evidencia futura: grave, pero silencioso hacia adelante. Con éste, **el operador no recibe una sugerencia que sí correspondía**, y la pantalla es idéntica a la de un caso donde no había nada que sugerir. Un fallo de red se disfraza de configuración ausente. No hay forma de que nadie se entere: ni el operador, que no ve nada raro, ni nosotros, que no tenemos señal.
+
+La intención del código es correcta —el comentario dice "no es un error que deba romper la pantalla"— y la consecuencia es que la degradación es indetectable.
+
+**Criterio para resolverlo, anotado ahora para no reinventarlo.** El problema de fondo no es que se loguee mal: es que **un fallo y una ausencia legítima producen el mismo estado**. La solución no es sólo reportar mejor el error, es que "no pude leer la escala" sea un estado DISTINTO de "esta organización no tiene escala configurada". Con dos estados distintos, la UI puede decir algo y el motor puede decidir distinto.
+
+**Distinguir el estado, no sólo reportar el error.**
+
+Y lo que ya está bien y no se toca: que una escritura de instrumentación falle no debe romper el registro del RAG. Eso está correctamente resuelto; lo que falta es que además no desaparezca.
+
+**`netlify/functions/_observability.ts` no sirve para esto.** Recibe un `HandlerEvent` y loguea del lado del servidor: es de las Functions y no es alcanzable desde el browser. Hace falta decidir el canal —una Function que reciba el evento, o hacer visible la degradación en la propia UI— y esa decisión está pendiente.
+
 **D-7 · Extracción de la baseline sin scriptar.** Re-materializar el ancla de producción requiere extraer a mano los 39 fragmentos desde el catálogo productivo. Es el único paso manual del mecanismo de reproducibilidad y, a la vez, el único que mantiene vivo el ancla. Ver `docs/MIGRATION_REPLAY_BASELINE_V1.md` §14.4.
 
 ## 8. Fuera del alcance de las sesiones automatizadas
