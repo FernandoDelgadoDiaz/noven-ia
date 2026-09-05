@@ -490,6 +490,14 @@ y se registra con signo (−2), no se descarta ni se toma en valor absoluto: una
 intervención que redujo el descuento es información, y promediarla como si
 hubiera subido invertiría la conclusión.
 
+**Consecuencia para el motor histórico, anotada acá para no redescubrirla.**
+Guardar el signo es necesario y no alcanza: **si alguna vez se promedian
+escalones aplicados, hay que separar ascensos de descensos ANTES de promediar.**
+Un promedio que los mezcla no significa nada aunque cada número esté bien
+guardado — dos intervenciones que subieron 2 y dos que bajaron 2 promedian cero,
+y cero es exactamente lo que no pasó. Son dos poblaciones distintas: subir un
+escalón es apurar la salida, bajarlo es corregir un descuento que sobraba.
+
 **Condición de cierre:** una primera intervención al 50 % registra 3 escalones
 aplicados y una al 20 % registra 1; una posterior de 50 a 20 registra −2; el
 60 % queda marcado `fuera_de_escala` —distinguible de "no medido"— y fuera del

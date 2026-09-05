@@ -8,10 +8,11 @@
     "20260903160000_exposicion_vistas_v1.sql",
     "20260904120000_rag_cobertura_escala_e_instrumentacion_v1.sql",
     "20260905182910_salidas_no_venta_v1.sql",
-    "20260905190500_reparar_grant_instrumentacion_rag_v1.sql"
+    "20260905190500_reparar_grant_instrumentacion_rag_v1.sql",
+    "20260905223000_escalon_cero_implicito_v1.sql"
   ],
-  "forward_migrations_sha256": "ef44e6ae1cad4142fd1b8b0c4b5ac3bebbfb44b12c51fcb4398f84eeff0e473d",
-  "replay_fingerprint_sha256": "be6e2362ba00cd66a0314fb24c8a2d6a156c11c1de95f698ef61caeb356d67f8",
+  "forward_migrations_sha256": "c04ff76577e29cdc0ced4bbccbb40805bb1dd5767f443289b09a97cf4ac7d5a3",
+  "replay_fingerprint_sha256": "f1bd03bda8ed0c598fb4d18eda5c1d5ff9bab0ced3b26f47711e3421869788fa",
   "anchor_fingerprint_sha256": "837771691ffc6e2276c66a26f9ae010c872f12ea33b118406d48b2ad6fca38af",
   "anchor_materialized_at": "2026-09-01",
   "anchor_materialized_from": "catalogo productivo meqvjabgyrgwkxpclqxp (PR #129)",
