@@ -397,6 +397,82 @@ y después, y el conteo de filas visibles idéntico al actual para cada rol.
 el rediseño. Empujar un 45× tentador sin haber resuelto el patrón completo
 habría dado una mejora que el usuario no ve.
 
+### Fuera de numeración · El escalón cero implícito — PENDIENTE
+
+**Pertenece a la secuencia de intervenciones medibles (5 → A → B → C), no a la
+capacidad multitenant. Va después del bloque 5a, con su propia migración y su
+propio contrato.** Se registra acá para que no se pierda entre bloques.
+
+**El defecto.** `noven_private.instrumentar_sugerencia_rag_impl` calcula
+`escalones_aplicados` como la diferencia entre el escalón del descuento anterior
+y el del nuevo, y devuelve `NULL` cuando no hay intervención anterior:
+
+```sql
+escalones_aplicados = CASE
+  WHEN v_esc_desde IS NULL OR v_esc_hasta IS NULL THEN NULL
+  ELSE (v_esc_hasta - v_esc_desde)::smallint
+END
+```
+
+**Que no haya intervención anterior no es ausencia de escalón: es un escalón cero
+implícito.** El producto estaba sin descuento. Pasar de ahí al primer escalón de
+la escala es un escalón aplicado, exactamente igual que pasar de 20 a 30.
+
+**Cuánto se pierde, medido en producción el 2026-09-05.** No es un caso de borde:
+
+| | |
+|---|---:|
+| intervenciones que son la primera de su vencimiento | **14 de 17** |
+| intervenciones posteriores a otra | 3 |
+
+Con la fórmula actual, el 82% de las intervenciones queda con
+`escalones_aplicados` en `NULL`. Un promedio de escalones aplicados no estaría
+promediando las intervenciones: estaría promediando las tres que tuvieron una
+antes.
+
+**El primer descuento casi nunca es el primer escalón.** Distribución real de
+esas 14 primeras intervenciones, contra la escala de ORG001 (1→20, 2→30, 3→50,
+4→70):
+
+| Descuento inicial | Casos | Escalones desde cero |
+|---|---:|---:|
+| 20 % | 2 | 1 |
+| 30 % | 6 | 2 |
+| 50 % | 5 | **3** |
+| 60 % | 1 | **no está en la escala** |
+
+Arrancar directo en 50 son **tres** escalones desde cero, no uno. Y no es
+hipotético: es el segundo caso más frecuente. El cálculo tiene que reflejarlo —
+`escalones_aplicados` es el escalón de llegada menos cero, no siempre 1.
+
+**El caso que hay que definir explícitamente y no estaba previsto: un porcentaje
+que no pertenece a la escala.** Una intervención está registrada al 60 %, que no
+es ninguno de los cuatro escalones de ORG001. Hoy `v_esc_hasta` queda `NULL` y el
+resultado es `NULL` — y seguiría siéndolo con el escalón cero, porque el problema
+está del otro lado de la resta.
+
+**Decidido el 2026-09-05: estado propio `fuera_de_escala`, excluido del
+promedio.** No se interpola al escalón más cercano ni se toma el inmediato
+inferior: las dos cosas serían inventar un número, y un número inventado después
+no se distingue de una medición real. El motor histórico lo excluye del agregado
+**sabiendo por qué lo excluye**, que es distinto de no haberlo medido.
+
+**"Fuera de escala" no puede seguir siendo el mismo `NULL` que "no medido".** Es
+la misma confusión que D-7 y D-8, y por eso el criterio general quedó escrito en
+`ai/rules.md` en lugar de repetirse por tercera vez acá.
+
+**Alcance:** migración nueva que reemplace el cálculo en el impl, contrato que
+fije los cuatro casos —primera intervención en el primer escalón, primera
+intervención en un escalón superior, intervención posterior, porcentaje fuera de
+escala—. La decisión del último caso ya está tomada arriba: `fuera_de_escala`.
+No re-instrumenta nada hacia atrás:
+las 17 filas previas siguen sin evidencia por D-7.
+
+**Condición de cierre:** una primera intervención al 50 % registra 3 escalones
+aplicados, una al 20 % registra 1, una posterior de 20 a 30 sigue registrando 1,
+y el 60 % queda marcado `fuera_de_escala` —distinguible de "no medido"— y fuera
+del promedio.
+
 ## 6. Verificación del estado actual
 
 Qué corre y qué prueba, al 2026-09-02:
@@ -475,7 +551,7 @@ Y lo que ya está bien y no se toca: que una escritura de instrumentación falle
 
 **`netlify/functions/_observability.ts` no sirve para esto.** Recibe un `HandlerEvent` y loguea del lado del servidor: es de las Functions y no es alcanzable desde el browser. Hace falta decidir el canal —una Function que reciba el evento, o hacer visible la degradación en la propia UI— y esa decisión está pendiente.
 
-**D-7 · Extracción de la baseline sin scriptar.** Re-materializar el ancla de producción requiere extraer a mano los 39 fragmentos desde el catálogo productivo. Es el único paso manual del mecanismo de reproducibilidad y, a la vez, el único que mantiene vivo el ancla. Ver `docs/MIGRATION_REPLAY_BASELINE_V1.md` §14.4.
+**D-9 · Extracción de la baseline sin scriptar.** *(Era D-7 hasta el 2026-09-05: al registrarse la deuda de instrumentación quedaron dos D-7 y se renumeró ésta, porque la otra ya estaba citada en una migración aplicada y en un PR mergeado.)* Re-materializar el ancla de producción requiere extraer a mano los 39 fragmentos desde el catálogo productivo. Es el único paso manual del mecanismo de reproducibilidad y, a la vez, el único que mantiene vivo el ancla. Ver `docs/MIGRATION_REPLAY_BASELINE_V1.md` §14.4.
 
 ## 8. Fuera del alcance de las sesiones automatizadas
 

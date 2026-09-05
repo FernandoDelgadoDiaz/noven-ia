@@ -1,5 +1,40 @@
 # Reglas de codigo
 
+## Estados: dos situaciones distintas no pueden producir el mismo valor
+
+Este patron aparecio tres veces en dos dias —D-7, D-8 y el escalon cero del
+item de intervenciones— y las tres veces costo lo mismo: nadie se entero.
+
+**Cuando un fallo, o un caso raro, produce el mismo valor que una ausencia
+legitima, hay que separarlos ANTES de que alguien los promedie juntos.**
+
+Los tres casos que ya pasaron, para reconocer la forma:
+
+- `instrumentar_sugerencia_rag` fallaba con `permission denied` y las columnas
+  quedaban en `NULL`. Ese mismo `NULL` es el de una intervencion que
+  legitimamente no fue instrumentada. "No pude escribir" y "no habia nada que
+  escribir" quedaron indistinguibles (D-7).
+- `useEscalaRag` hace `setEscala([])` cuando la lectura falla. Escala vacia
+  significa "esta organizacion no tiene escala configurada", asi que un fallo de
+  red se disfraza de configuracion ausente y la tarjeta se ve identica (D-8).
+- Un descuento fuera de la escala deja `escalones_aplicados` en `NULL`, el mismo
+  valor que una intervencion que nunca se midio.
+
+**La regla.** Antes de devolver un valor neutro —`NULL`, `[]`, `0`, `false`—
+preguntarse que otras situaciones producen ese mismo valor. Si alguna de ellas
+es un fallo y la otra es normal, el valor neutro esta escondiendo informacion y
+hace falta un estado propio.
+
+**No alcanza con loguear mejor.** Un `console.error` deja registro para quien
+mire la consola; no cambia lo que el motor calcula ni lo que la pantalla
+muestra. La correccion es que el estado sea distinto, no que el error se
+reporte mejor.
+
+**No inventar un valor para tapar el hueco.** Interpolar, redondear al vecino
+mas cercano o asumir un default convierte "no se" en un numero que despues nadie
+puede distinguir de una medicion real. Estado propio y exclusion explicita del
+agregado, con el motivo a la vista.
+
 ## TypeScript
 
 - Strict activo (`tsconfig.app.json`): no `any`, no type assertions sin justificacion.
