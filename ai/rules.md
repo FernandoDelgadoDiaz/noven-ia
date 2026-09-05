@@ -31,3 +31,15 @@
 
 - Cada invariante que no debe volver atras se protege con un contrato en `scripts/tests/*.test.mjs`.
 - Los tests no dependen de la fecha real: si el caso involucra ventanas de riesgo, fijar el reloj.
+
+## Politicas RLS y costo por fila
+
+Medido en el item 3.3 (`docs/BENCHMARK_VOLUMEN_V1.md`). Leer esto ANTES de
+escribir una politica nueva.
+
+- **Una politica cuyo predicado llama a una funcion con argumentos DE LA FILA se ejecuta UNA VEZ POR FILA.** Sobre 4.883 filas visibles, el indice resolvio en 0,066 ms y el predicado consumio 3.045 ms. El cuello no era el acceso a datos: era el predicado.
+- **`STABLE` no lo evita.** Garantiza el mismo resultado con LOS MISMOS argumentos dentro de una sentencia; no memoiza entre valores distintos. Si el argumento es una columna de la fila, cambia siempre y no hay nada que reusar.
+- **Lo que haria falta es inlining, y `SECURITY DEFINER` con `SET search_path` lo impide por diseno.** Postgres solo funde una funcion SQL en la consulta si no es `SECURITY DEFINER` y no tiene clausula `SET`. Es una tension estructural, no un bug: lo que hace segura a la funcion es lo que impide optimizarla. La salida NO es sacar `SECURITY DEFINER`.
+- Por eso, al escribir una politica: preferir la forma **"cual es mi alcance", evaluada una vez** —una funcion SIN argumentos de fila, que dependa solo de `auth.uid()`, mas una prueba de pertenencia— antes que **"es visible esta fila"**, evaluada por fila. La primera se materializa una vez; la segunda escala con el numero de filas.
+- **No perseguir esto con indices.** Ningun indice sobre la tabla arregla un predicado que corre una vez por fila. Agregar uno aca trata el sintoma.
+- Un efecto secundario que confunde al diagnosticar: los indices que usa el CUERPO de una funcion `SECURITY DEFINER` no aparecen en el `EXPLAIN` de la consulta externa. Van a mostrar contador alto y cero presencia en los planes sin que falte ningun camino por medir.
