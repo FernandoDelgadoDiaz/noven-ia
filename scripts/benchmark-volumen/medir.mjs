@@ -142,9 +142,76 @@ function inventarioIndices(url) {
     })
 }
 
+/** Nombres de índice que aparecen en un árbol de plan. */
+function indicesDelPlan(nodo, acc = new Set()) {
+  if (nodo['Index Name']) acc.add(nodo['Index Name'])
+  for (const hijo of nodo.Plans ?? []) indicesDelPlan(hijo, acc)
+  return acc
+}
+
+/**
+ * Cruza el inventario de índices contra los índices que aparecen en los planes
+ * medidos. Los tres casos NO significan lo mismo y confundirlos llevaría a
+ * retirar un índice que hace falta:
+ *
+ * - `en_plan`: el planificador lo eligió en algún camino medido. Se queda.
+ * - `contador_sin_plan`: tiene accesos pero no aparece en ningún plan. Eso NO
+ *   es evidencia contra el índice, es información sobre la medición. Hay dos
+ *   causas posibles y hay que distinguirlas antes de concluir nada: o lo usa un
+ *   camino que el benchmark no mide, o lo usa el cuerpo de una función
+ *   `SECURITY DEFINER` —las políticas RLS llaman a `tiene_acceso_*`— y el plan
+ *   interno de esa función NO aparece en el EXPLAIN de la consulta externa.
+ * - `sin_uso`: ni contador ni plan. Es el único caso limpio para proponer
+ *   retiro, y aun así hay que mostrar el costo de escritura que se recupera.
+ */
+function correlacionar(indices, resultados) {
+  const enPlanes = new Set()
+  for (const r of resultados) for (const n of indicesDelPlan(r.plan.Plan)) enPlanes.add(n)
+
+  const porCamino = {}
+  for (const r of resultados) porCamino[r.id] = [...indicesDelPlan(r.plan.Plan)].sort()
+
+  return {
+    indices_por_camino: porCamino,
+    inventario: indices.map((i) => ({
+      ...i,
+      en_plan: enPlanes.has(i.indice),
+      clase: enPlanes.has(i.indice) ? 'en_plan' : i.scans > 0 ? 'contador_sin_plan' : 'sin_uso',
+    })),
+  }
+}
+
+/**
+ * Verifica que el usuario medido REALMENTE VE FILAS. Sin esta guardia, un
+ * usuario mal sembrado —un rol que viola un check, un acceso inactivo— deja
+ * todas las consultas devolviendo cero filas, y el benchmark reporta tiempos
+ * excelentes de no hacer nada. Es el modo de fallo más traicionero que tiene
+ * esta clase de medición: no da error, da números buenos.
+ */
+function verificarQueVeDatos(url) {
+  const salida = psql(
+    url,
+    `${PROLOGO}
+     SELECT (SELECT count(*) FROM public.vencimientos WHERE sucursal_id = '${SUCURSAL_MEDIDA}')::text
+       || '|' || (SELECT count(*) FROM public.producto_sucursal WHERE sucursal_id = '${SUCURSAL_MEDIDA}')::text;`,
+  )
+  const linea = salida.trim().split('\n').filter(Boolean).pop() ?? ''
+  const [venc, ps] = linea.split('|').map(Number)
+  if (!(venc > 0) || !(ps > 0)) {
+    throw new Error(
+      `El usuario medido ve ${venc} vencimientos y ${ps} filas de producto_sucursal ` +
+        'en su sucursal. Con cero filas visibles el benchmark mediría el costo de no ' +
+        'devolver nada y reportaría tiempos excelentes. Se aborta: revisar la siembra ' +
+        'del usuario y de usuario_accesos.',
+    )
+  }
+  return { vencimientos_visibles: venc, producto_sucursal_visibles: ps }
+}
+
 export function medir({ url, escala }) {
   exigirEntornoDescartable(url)
   const guardia = verificarIdentidad(url)
+  const visibilidad = verificarQueVeDatos(url)
 
   // Los contadores arrancan de cero para que `idx_scan` cuente sólo lo que
   // hicieron los caminos medidos. Sin esto, un índice parecería usado por la
@@ -159,10 +226,11 @@ export function medir({ url, escala }) {
     escala,
     generado_at: new Date().toISOString(),
     guardia,
+    visibilidad,
     contexto: ctx,
     postgres: psql(url, 'RESET ROLE; SELECT version();').trim(),
     resultados,
-    indices: inventarioIndices(url),
+    ...correlacionar(inventarioIndices(url), resultados),
   }
 }
 

@@ -217,6 +217,11 @@ export function generarSql(escala) {
   // ------------------------------------------------------------- usuarios
   w('-- ============ usuarios y accesos ====================================')
   w(`-- El usuario que mide: gerente de la sucursal más cargada de la org grande.`)
+  w(`--`)
+  w(`-- Ojo con los dos "rol", que no son el mismo: \`usuarios.rol\` es el legado`)
+  w(`-- y sólo admite admin/operador/supervisor; el rol multitenant, el que leen`)
+  w(`-- las políticas, vive en \`usuario_accesos.rol\`. Sembrar el multitenant en`)
+  w(`-- la tabla equivocada viola el check y deja al usuario sin acceso.`)
   w(
     `INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,\n` +
       `                        email_confirmed_at, created_at, updated_at)\n` +
@@ -226,7 +231,7 @@ export function generarSql(escala) {
   )
   w(
     `INSERT INTO public.usuarios (id, nombre, rol, sucursal_id, activo)\n` +
-      `VALUES (${lit(USUARIO_MEDIDO)}, 'Bench Gerente', 'gerente_sucursal', ${lit(SUCURSAL_MEDIDA)}, true);`,
+      `VALUES (${lit(USUARIO_MEDIDO)}, 'Bench Gerente', 'supervisor', ${lit(SUCURSAL_MEDIDA)}, true);`,
   )
   w(
     `INSERT INTO public.usuario_accesos (id, usuario_id, organizacion_id, rol, zona_id, sucursal_id, activo)\n` +
