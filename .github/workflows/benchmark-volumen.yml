@@ -1,0 +1,104 @@
+name: Noven benchmark de volumen (item 3.3)
+
+# Manual. No corre en cada PR: levanta un Supabase efimero, siembra cientos de
+# miles de filas y mide tres escalas. Es caro y su resultado es un documento,
+# no un gate.
+#
+# NUNCA toca produccion. Todo ocurre contra la base descartable del replay, que
+# se construye desde baseline + migraciones y muere con el job.
+
+on:
+  workflow_dispatch:
+    inputs:
+      escalas:
+        description: 'Escalas a medir, separadas por espacio'
+        required: false
+        default: '1 100 1000'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: noven-benchmark-volumen-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    # La siembra de 1000x mas siete corridas por camino en tres escalas no entra
+    # en el presupuesto por defecto. Se dimensiona con holgura a proposito: un
+    # job cancelado a mitad no deja informe y se lee como falla.
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Levantar la base descartable con el esquema real
+        env:
+          NOVEN_EPHEMERAL_REPLAY: '1'
+          NOVEN_REPLAY_WORKSPACE: ${{ runner.temp }}/replay
+          NOVEN_REPLAY_KEEP_RUNNING: '1'
+        run: |
+          mkdir -p "${NOVEN_REPLAY_WORKSPACE}"
+          bash scripts/migration-replay/run-baseline-replay.sh
+
+      - name: Sembrar y medir cada escala
+        env:
+          NOVEN_EPHEMERAL_REPLAY: '1'
+          NOVEN_REPLAY_WORKSPACE: ${{ runner.temp }}/replay
+        run: |
+          set -euo pipefail
+          set -a
+          source "${NOVEN_REPLAY_WORKSPACE}/supabase-local.env"
+          set +a
+          export NOVEN_REPLAY_DB_URL="${DB_URL}"
+
+          mkdir -p informes
+          for escala in ${{ github.event.inputs.escalas || '1 100 1000' }}; do
+            echo "::group::escala ${escala}x"
+            node scripts/benchmark-volumen/dataset.mjs --limpieza \
+              | psql "${NOVEN_REPLAY_DB_URL}" -v ON_ERROR_STOP=1 -q
+            node scripts/benchmark-volumen/dataset.mjs --escala="${escala}" \
+              | psql "${NOVEN_REPLAY_DB_URL}" -v ON_ERROR_STOP=1 -q
+            node scripts/benchmark-volumen/medir.mjs \
+              --escala="${escala}" --salida="informes/informe-${escala}.json"
+            echo "::endgroup::"
+          done
+
+      # El egreso de este entorno bloquea la descarga de artifacts, asi que el
+      # informe viaja por el log, comprimido y con su SHA-256 para verificar que
+      # llego entero. Mismo mecanismo que el respaldo de la expectativa movil.
+      - name: Emitir el informe en el log
+        run: |
+          set -euo pipefail
+          tar -czf informes.tar.gz informes
+          echo "sha256: $(sha256sum informes.tar.gz | cut -d' ' -f1)"
+          echo "bytes: $(stat -c%s informes.tar.gz)"
+          echo "----- BEGIN NOVEN_BENCHMARK_PAYLOAD -----"
+          base64 -w 200 informes.tar.gz
+          echo "----- END NOVEN_BENCHMARK_PAYLOAD -----"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-volumen
+          path: informes/
+          retention-days: 7
+
+      - name: Apagar la base descartable
+        if: always()
+        env:
+          NOVEN_REPLAY_WORKSPACE: ${{ runner.temp }}/replay
+        run: |
+          cd "${NOVEN_REPLAY_WORKSPACE}" && supabase stop --no-backup || true
