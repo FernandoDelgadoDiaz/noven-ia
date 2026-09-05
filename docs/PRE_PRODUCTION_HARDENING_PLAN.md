@@ -209,13 +209,27 @@ Contrato: `no-browser-business-writes.test.mjs` recorre el AST de `src/` con el 
 
 PR #137. `analisis.ts` sólo se concede a `gerente_zonal` de la zona y a `gerente_sucursal` o `supervisor` de esa sucursal exacta. El operador recibe 403. Al quedar un único ámbito posible se eliminaron —no desactivaron— el filtrado por `usuario_familias_sucursal`, la variante `SYSTEM_OPERADOR` del prompt y la bifurcación `scopeCompleto`. Decisión registrada en `ai/decisions.md` con motivo y condición de salida.
 
-### Fuera de numeración · Archivo frío de respaldos de agosto — EN EJECUCIÓN
+### Fuera de numeración · Archivo frío de respaldos de agosto — HECHO
 
 El inventario físico productivo contiene 36 tablas: 33 core y tres respaldos históricos de agosto que la baseline excluye deliberadamente. Los respaldos conservan 113 filas: 19 en `dedup_turrocklets_backup_20260805`, 6 en `productos_descripcion_backup_20260805` y 88 en `productos_familia_backup_20260806`.
 
 La revisión previa confirmó que no tienen foreign keys, vistas, funciones, triggers, publicaciones ni referencias desde el código activo. La migración nueva `20260903103749_archive_august_backups_v1.sql` propone moverlos de `public` a `noven_archive`, preservar filas, RLS, policies e índices, y revocar acceso a `PUBLIC`, `anon`, `authenticated` y `service_role`. No usa `DROP`, `DELETE` ni `TRUNCATE`; aborta ante cualquier inventario o dependencia inesperados. En un replay limpio funciona como no-op de datos porque la baseline no fabrica estos respaldos.
 
-La decisión, evidencia de catálogo, mecanismo reversible y condición de restauración están en `docs/NOVEN_AUGUST_BACKUPS_COLD_ARCHIVE.md`. El contrato `august-backups-cold-archive-contract.test.mjs` verifica las guardas no destructivas, el inventario exacto, el comportamiento del replay y las exclusiones del fingerprint. El ítem permanece **EN EJECUCIÓN** hasta merge, aplicación y verificación productiva.
+La decisión, evidencia de catálogo, mecanismo reversible y condición de restauración están en `docs/NOVEN_AUGUST_BACKUPS_COLD_ARCHIVE.md`. El contrato `august-backups-cold-archive-contract.test.mjs` verifica las guardas no destructivas, el inventario exacto, el comportamiento del replay y las exclusiones del fingerprint.
+
+**Aplicada a producción el 2026-09-05**, ledger `20260905005336`. Las cinco guardas se ejercieron primero como consulta de sólo lectura, para saber antes de tocar la base si la migración iba a abortar: inventario exacto en `public`, `noven_archive` inexistente, las dos policies esperadas, cero grants de cliente, cero foreign keys. Pasaron las cinco.
+
+Verificado después de aplicar:
+
+| Qué | Resultado |
+|---|---|
+| respaldos en `public` | 0 |
+| archivados con RLS | los tres, `relrowsecurity = true` |
+| filas | 19 + 6 + 88 = **113, sin pérdida** |
+| policies preservadas | 2 |
+| grants de cliente sobre el schema y las tablas | 0 |
+
+El ítem cierra: **HECHO**.
 
 ## 4. Fase 2 — Superficie de exposición
 
@@ -233,7 +247,7 @@ Sin verificación posterior el ítem no se cierra: una vez activado, el advisor 
 
 ### 2.2 · Reducir el grant de `public.regiones` a SELECT — HECHO
 
-`authenticated` tiene sobre `public.regiones`: `DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE`.
+`authenticated` tenía sobre `public.regiones`: `DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE`. **Desde el 2026-09-05 tiene sólo `SELECT`.**
 
 Es la **única** tabla de negocio con DML abierto a `authenticated`. La otra tabla con grants de escritura es `push_subscriptions`, que es legítima: el browser registra su propia suscripción push y `no-browser-business-writes.test.mjs` la exceptúa explícitamente por eso.
 
@@ -242,6 +256,15 @@ Hoy no es explotable en la práctica —la política `regiones_select_scope` só
 **PR #148**, migración `20260903120000_regiones_solo_select_v1.sql`. Revoca `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `REFERENCES` y `TRIGGER`, y deja `GRANT SELECT` explícito. No toca `service_role`, ni la política, ni datos.
 
 La evidencia la da el gate de replay: el diff de la huella estructural es exactamente seis grants quitados sobre `public.regiones` y ninguno agregado. Contrato: `regiones-solo-select-contract.test.mjs`, verificado contra cuatro regresiones.
+
+**Aplicado a producción el 2026-09-05**, ledger `20260905011323`. Verificado contra la base después de aplicar:
+
+| Qué | Resultado |
+|---|---|
+| `authenticated` | `SELECT` |
+| `service_role` | DML completo, intacto — las Netlify Functions siguen escribiendo |
+| política `regiones_select_scope` | `[SELECT]`, sin tocar |
+| filas | 5, sin cambio |
 
 ### 2.3 · Secret scanning en CI — HECHO
 
@@ -278,6 +301,12 @@ Un test que falle ante una tabla nueva sin clasificar. La clasificación que sal
 **Se cubrieron también las vistas, que el ítem no contemplaba.** El primer diseño miraba sólo `relkind = 'r'`, y las vistas son la puerta trasera de RLS: por defecto se evalúan con los permisos de su dueño. Aparecieron dos cosas — diez vistas con DML completo para `authenticated` (mismo patrón que 2.2), y que `security_invoker = true` estaba correctamente puesto en las doce pero **nada lo verificaba**. Una vista nueva sin la opción habría expuesto todas las organizaciones sin que el gate de replay lo notara. La migración `20260903160000_exposicion_vistas_v1.sql` revoca los DML y deja `security_invoker` escrito.
 
 El contrato prueba quince formas de exposición indebida sobre catálogos armados a mano, sin levantar Postgres.
+
+**`20260903160000_exposicion_vistas_v1.sql` aplicada a producción el 2026-09-05**, ledger `20260905011455`. Verificado contra la base: las doce vistas quedan con `security_invoker=true`; las diez que tenían DML completo quedan con `SELECT` solo, y `v_problemas_economicos_historial` y `vw_usuarios_completos` siguen sin grants para `authenticated`.
+
+**Quedó demostrado en producción algo que el ítem no había anticipado.** `20260904120000_rag_cobertura_...` se aplicó **antes** que esta migración y rehízo `v_seguimiento_rag_actual` con `CREATE OR REPLACE VIEW`. La vista conservó intactos los siete grants viejos: **`CREATE OR REPLACE VIEW` preserva el ACL.**
+
+Eso tiene dos consecuencias. La primera es que el replay converge: allí el orden es el inverso —`exposicion_vistas` primero, `rag_cobertura` después— y como el `CREATE OR REPLACE` preserva lo que encuentra, el estado final es el mismo por los dos caminos. La segunda es más importante y es una advertencia permanente: **recrear una vista no la re-expone, pero tampoco la limpia.** Una vista que nazca con grants de más los va a conservar a través de cada `CREATE OR REPLACE` posterior, en silencio, para siempre. El contrato de clasificación es lo único que lo detecta.
 
 **Este ítem subsume a 2.4**: si cada tabla declara su clase y el test verifica que sus grants y políticas reales coinciden con la clase declarada, entonces una política `USING(true)` sobre una tabla `lectura_tenant` falla por definición. Dos tests separados dirían dos veces lo mismo con una costura entre ellos.
 
@@ -411,9 +440,11 @@ Estado de producción al mismo corte (`meqvjabgyrgwkxpclqxp`, Postgres 17.6, `sa
 - 1 organización, 17 zonas, 183 sucursales cargadas y activas — **datos operativos únicamente en la 091**: 713 filas de `producto_sucursal` y 145 vencimientos, todas de 091;
 - 713 productos de catálogo, 3 importaciones;
 - 3 usuarios y 4 accesos activos;
-- ledger de migraciones: 143 versiones aplicadas, última `20260902211635` (`cuota_por_actor_y_cache_analisis_v1`); el archivo equivalente en Git usa `20260902170000`. La brecha histórica y este desfase conocido están inventariados en `history-manifest.json`;
+- ledger de migraciones: última `20260905011455` (`exposicion_vistas_v1`). **El ledger sella la hora real de aplicación, no el nombre del archivo del repositorio**, y las dos numeraciones divergen: `20260902170000_cuota_por_actor...` figura como `20260902211635`, y `20260904120000_rag_cobertura...` como `20260904042342`. Es la razón por la que aplicar una migración con nombre de archivo "anterior" nunca desordena el ledger: el sello es siempre el instante de aplicación y por lo tanto siempre mayor que todo lo anterior. La brecha histórica y este desfase están inventariados en `history-manifest.json`;
 - `authenticated` tiene sólo `SELECT` sobre `productos`, `vencimientos` y `producto_sucursal`; **0** policies de `SELECT USING(true)` en `public`;
-- advisors de seguridad: sin ERROR; 22 INFO `rls_enabled_no_policy` (7 del schema archivado, correcto por diseño; 15 de tablas NoVen deliberadamente server-only); 3 WARN — `pg_net` en `public`, protección de contraseñas filtradas desactivada, y `aceptar_invitacion_acceso_v1()` ejecutable por `authenticated` como `SECURITY DEFINER` (intencional: es el canje de invitación).
+- advisors de seguridad al 2026-09-05, después de aplicar las tres migraciones de Fase 2: **sin ERROR**; 24 INFO `rls_enabled_no_policy` — 7 de `desafio5s_archive`, 16 de tablas NoVen deliberadamente server-only, y **1 nuevo de `noven_archive`** (`productos_familia_backup_20260806`, el único de los tres respaldos que no tenía policy propia); 3 WARN, los mismos de siempre — `pg_net` en `public`, protección de contraseñas filtradas desactivada, y `aceptar_invitacion_acceso_v1()` ejecutable por `authenticated` como `SECURITY DEFINER` (intencional: es el canje de invitación).
+
+  El INFO nuevo es consecuencia directa y prevista del archivo en frío, no un defecto: una tabla archivada, con RLS habilitada, sin grants y sin policy, es negación total. Queda anotado para que no se re-investigue.
 
 ## 7. Deuda conocida
 
