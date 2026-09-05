@@ -449,22 +449,29 @@ hipotético: es el segundo caso más frecuente. El cálculo tiene que reflejarlo
 que no pertenece a la escala.** Una intervención está registrada al 60 %, que no
 es ninguno de los cuatro escalones de ORG001. Hoy `v_esc_hasta` queda `NULL` y el
 resultado es `NULL` — y seguiría siéndolo con el escalón cero, porque el problema
-está del otro lado de la resta. Hay que decidir y dejar escrito qué significa:
-si se interpola al escalón más cercano, si se toma el inmediato inferior, o si se
-registra como fuera de escala y se excluye del promedio. **Lo que no puede pasar
-es que "fuera de escala" y "no medido" sigan siendo el mismo `NULL`** — es la
-misma confusión que D-7 y D-8, un fallo y una ausencia legítima produciendo el
-mismo estado.
+está del otro lado de la resta.
+
+**Decidido el 2026-09-05: estado propio `fuera_de_escala`, excluido del
+promedio.** No se interpola al escalón más cercano ni se toma el inmediato
+inferior: las dos cosas serían inventar un número, y un número inventado después
+no se distingue de una medición real. El motor histórico lo excluye del agregado
+**sabiendo por qué lo excluye**, que es distinto de no haberlo medido.
+
+**"Fuera de escala" no puede seguir siendo el mismo `NULL` que "no medido".** Es
+la misma confusión que D-7 y D-8, y por eso el criterio general quedó escrito en
+`ai/rules.md` en lugar de repetirse por tercera vez acá.
 
 **Alcance:** migración nueva que reemplace el cálculo en el impl, contrato que
 fije los cuatro casos —primera intervención en el primer escalón, primera
 intervención en un escalón superior, intervención posterior, porcentaje fuera de
-escala— y decisión registrada para el último. No re-instrumenta nada hacia atrás:
+escala—. La decisión del último caso ya está tomada arriba: `fuera_de_escala`.
+No re-instrumenta nada hacia atrás:
 las 17 filas previas siguen sin evidencia por D-7.
 
 **Condición de cierre:** una primera intervención al 50 % registra 3 escalones
 aplicados, una al 20 % registra 1, una posterior de 20 a 30 sigue registrando 1,
-y el porcentaje fuera de escala produce un estado distinguible de "no medido".
+y el 60 % queda marcado `fuera_de_escala` —distinguible de "no medido"— y fuera
+del promedio.
 
 ## 6. Verificación del estado actual
 
