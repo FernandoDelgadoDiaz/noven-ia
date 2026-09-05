@@ -459,9 +459,19 @@ No se notó porque `EditarVencimientoModalSeguro.tsx` manda el error a `console.
 | **Lectura que se vuelve una ausencia plausible** | `useEscalaRag`, `useVencimientos` · intervenciones, `EditarVencimientoModalSeguro` · seguimiento, `useRadarZonal` | El peor caso, y es el mismo mecanismo que D-7 del lado de la lectura. |
 | **Ya resuelto: el error llega al usuario** | `RadarZonalModal` (setAccionError), imágenes, push, cierre de sesión | El `console.error` es información extra, no el único canal. No hay nada que arreglar. |
 
-**El caso que más preocupa no es una escritura sino una lectura.** Si `useEscalaRag` falla, hace `setEscala([])`, y el motor con escala vacía devuelve `sin_escala`: **un fallo de red se vuelve indistinguible de "esta organización no tiene escala configurada"**. La tarjeta deja de sugerir y se ve exactamente igual que cuando no corresponde sugerir. La intención del código es correcta —que no se rompa la pantalla— y la consecuencia es que nadie se entera.
+**`useEscalaRag` es peor que D-7, y hay que entender por qué antes de tratarlo como un `console.error` más.**
 
-**Criterio para resolverlo:** que una escritura de instrumentación falle no debe romper el registro del RAG —eso ya está bien resuelto y no se toca— pero tampoco puede desaparecer. Y una lectura degradada tiene que ser distinguible de un resultado vacío legítimo.
+Si la lectura de la escala falla, el hook hace `setEscala([])`. El motor, con escala vacía, devuelve `sin_escala`. La tarjeta deja de sugerir **y se ve exactamente igual que cuando no corresponde sugerir**.
+
+La diferencia con D-7 es la que importa. Con D-7 se perdía evidencia futura: grave, pero silencioso hacia adelante. Con éste, **el operador no recibe una sugerencia que sí correspondía**, y la pantalla es idéntica a la de un caso donde no había nada que sugerir. Un fallo de red se disfraza de configuración ausente. No hay forma de que nadie se entere: ni el operador, que no ve nada raro, ni nosotros, que no tenemos señal.
+
+La intención del código es correcta —el comentario dice "no es un error que deba romper la pantalla"— y la consecuencia es que la degradación es indetectable.
+
+**Criterio para resolverlo, anotado ahora para no reinventarlo.** El problema de fondo no es que se loguee mal: es que **un fallo y una ausencia legítima producen el mismo estado**. La solución no es sólo reportar mejor el error, es que "no pude leer la escala" sea un estado DISTINTO de "esta organización no tiene escala configurada". Con dos estados distintos, la UI puede decir algo y el motor puede decidir distinto.
+
+**Distinguir el estado, no sólo reportar el error.**
+
+Y lo que ya está bien y no se toca: que una escritura de instrumentación falle no debe romper el registro del RAG. Eso está correctamente resuelto; lo que falta es que además no desaparezca.
 
 **`netlify/functions/_observability.ts` no sirve para esto.** Recibe un `HandlerEvent` y loguea del lado del servidor: es de las Functions y no es alcanzable desde el browser. Hace falta decidir el canal —una Function que reciba el evento, o hacer visible la degradación en la propia UI— y esa decisión está pendiente.
 
