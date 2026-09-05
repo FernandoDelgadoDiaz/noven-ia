@@ -77,3 +77,21 @@ Lo que efectivamente se sostiene hoy: **OpenAI procesa las peticiones de la API 
 **Despliegue:** configurar `OPENAI_API_KEY` en Netlify antes del merge. Sin la variable, `analisis.ts` falla cerrado con error de configuración y la capacidad queda indisponible. Antes del cutover deben pasar los tres casos del corpus sintético contra la API real; después del deploy se realiza un smoke controlado y recién entonces se revoca la credencial anterior de DeepSeek.
 
 **Condición de salida:** reevaluar proveedor o modelo si el corpus detecta una regresión de guardarraíles, si la cuenta pasa a ser elegible para residencia de datos regional —en cuyo caso corresponde contratarla y volver al endpoint regional—, si cambia la retención publicada, el costo/latencia deja de ser compatible con la operación, o aparece un requisito legal que la configuración actual no cubra. Cualquier reemplazo repite evaluación sintética, decisión explícita y despliegue sin fallback silencioso.
+
+## Migración de `desafio5s_*` a proyecto propio diferida — 2026-09-04
+
+**Decisión:** el ítem 2.6 del plan de endurecimiento —mover las nueve relaciones de `desafio5s_archive` y el bucket `desafio5s-imagenes` a un proyecto Supabase independiente— **no se ejecuta por ahora.** El archivo frío del 2026-09-01 se conserva como estado estable, no como paso intermedio con fecha.
+
+**Motivo:** el archivo en frío ya absorbió el riesgo principal. Las RPC `desafio5s_*` dejaron de ser ejecutables por `anon`, el schema quedó fuera de `public` y el bucket dejó de ser público. Lo que resta es riesgo de convivencia —instancia, backups y cuota compartidos con NoVen—, no superficie alcanzable desde afuera.
+
+Contra eso, mover datos productivos a un proyecto nuevo tiene costo real: un proyecto pago adicional, la migración de estructura, datos y Storage, el corte de la dependencia hacia `public.usuarios` y una ventana de verificación sobre un módulo que hoy nadie usa. Es el único ítem de Fase 2 con riesgo sobre datos, y el riesgo residual que elimina no lo justifica hoy.
+
+**Dependencia conocida que queda viva:** `desafio5s_es_admin()` depende de `public.rol_actual()` y, por esa vía, de `public.usuarios`. Mientras 2.6 siga diferido, esa dependencia atraviesa la frontera entre un módulo archivado y el núcleo activo de NoVen. **Un refactor de `public.rol_actual()` o de `public.usuarios` rompe en silencio a `desafio5s_es_admin()`:** nada la ejecuta, ningún test la cubre y ningún flujo falla, así que la rotura no se descubre hasta el día de la restauración. Quien toque cualquiera de las dos tiene que verificar `desafio5s_archive` explícitamente, o cortar la dependencia en ese mismo cambio.
+
+**Condición de salida:** ejecutar 2.6 ante **cualquiera** de estos tres hechos, sin esperar a los otros dos.
+
+1. **Entra una segunda organización comercial.** Deja de ser aceptable que datos de un producto discontinuado compartan instancia y backups con los datos operativos de un cliente que no los eligió.
+2. **Alguien de sistemas de un cliente audita la base.** `desafio5s_archive` es defendible pero exige explicación; un auditor externo encuentra primero el schema ajeno y después el motivo.
+3. **Desafío 5S vuelve a estar activo.** Es la condición ya registrada el 2026-09-01, y se conserva sin cambios: reactivar sobre el proyecto de NoVen no es una opción.
+
+Hasta que ocurra alguno, esto es una decisión tomada y no un pendiente. Si se revisa, se revisa por uno de esos tres hechos, no por acumulación de tiempo.

@@ -29,6 +29,7 @@ Los veredictos de abajo se apoyan en esa evidencia, no en el enunciado original 
 | **HECHO** | Implementado, mergeado a `master` y respaldado por evidencia verificable. |
 | **PARCIAL** | Mergeado pero con alcance menor al que el ítem requiere. Se detalla qué falta. |
 | **PENDIENTE** | Sin empezar. |
+| **DIFERIDO** | Evaluado y decidido: no se hace ahora. Lleva condición de salida explícita registrada en `ai/decisions.md`. No es lo mismo que PENDIENTE. |
 | **NO DEFINIDO** | El ítem no existe en el repositorio en ninguna forma. |
 
 Regla de trabajo vigente: un PR por ítem, rama → PR → CI verde → merge. Ningún cambio directo a `master`.
@@ -175,9 +176,18 @@ El corpus vive en `scripts/evaluacion-proveedor/`: ocho escenarios deterministas
 
 **No es sólo para esta migración.** Es la verificación de regresión de cualquier cambio futuro de modelo o de prompt, y `corpus-evaluacion-contract.test.mjs` lo mantiene atado al prompt real: si `analisis.ts` cambia un marcador estructural y el corpus no, CI va rojo.
 
-**Cierre operativo — 2026-09-04.** El análisis se verificó en producción contra OpenAI de punta a punta. El código ya no lee `DEEPSEEK_API_KEY` en ningún lado: `analisis.ts` y `.env.example` están limpios desde la migración, `PLAN.md` marca el bloque F6 como registro histórico superado, y el extractor de configuración de la evaluación acepta sólo `OPENAI_API_KEY`.
+**Cierre operativo — 2026-09-04. La migración de proveedor está cerrada de punta a punta y no queda ninguna acción pendiente, ni dentro ni fuera del repositorio.**
 
-Se conservan a propósito dos cosas: las aserciones de contrato que **prohíben** que DeepSeek vuelva, y la regla de gitleaks que detecta claves de DeepSeek, que sigue teniendo sentido mientras la variable exista en Netlify. Eliminarla del entorno es la última acción pendiente y corre por fuera del repositorio.
+El análisis se verificó en producción contra OpenAI. El código ya no lee `DEEPSEEK_API_KEY` en ningún lado: `analisis.ts` y `.env.example` están limpios desde la migración, `PLAN.md` marca el bloque F6 como registro histórico superado, y el extractor de configuración de la evaluación acepta sólo `OPENAI_API_KEY`. **`DEEPSEEK_API_KEY` fue eliminada del entorno de Netlify**, confirmado por el responsable del producto el 2026-09-04.
+
+Dos cosas se conservan a propósito, y ahora **sin condición**:
+
+| Qué | Por qué se queda |
+|---|---|
+| `analysis-openai-provider-contract` — 2 aserciones | Prohíben que DeepSeek vuelva a `analisis.ts` y a `.env.example`. Sin ellas, el proveedor decidido en 1.5 sería una convención y no un invariante. |
+| `.gitleaks.toml` + `secret-scanning-contract` | Detectan claves de DeepSeek **en el código**, no en el entorno. Que la variable ya no exista en Netlify no las vuelve inútiles: las deja como la única defensa contra que alguien pegue una clave en un commit. |
+
+La distinción importa porque el razonamiento inverso era tentador: «ya no usamos DeepSeek, la regla sobra». La regla nunca protegió el entorno; protege el historial de Git, que es el lugar del que una clave filtrada no se saca.
 
 Desde el PR #137 hay **un solo system prompt** que evaluar (`SYSTEM_ADMIN`), no dos: al limitarse el análisis a roles de conducción desapareció la variante de operador. Eso reduce la superficie de la evaluación.
 
@@ -275,7 +285,7 @@ Los veinticuatro lints `rls_enabled_no_policy` del advisor —dieciséis en `pub
 
 **Salvedad registrada:** el advisor marca `public.aceptar_invitacion_acceso_v1()` como `SECURITY DEFINER` ejecutable por `authenticated` vía REST. Se revisó el cuerpo de la función: **no es un defecto.** No toma argumentos, deriva la identidad de `auth.uid()`, cruza contra el email del propio `auth.users` y sólo activa filas de `usuario_accesos` de ese mismo `usuario_id`, con `SET search_path`. Es `SECURITY DEFINER` porque tiene que escribir en tablas que `authenticated` no puede tocar, que es el patrón correcto. Queda anotado para que no se re-investigue.
 
-### 2.6 · Migrar `desafio5s_*` a su propio proyecto Supabase — PENDIENTE
+### 2.6 · Migrar `desafio5s_*` a su propio proyecto Supabase — DIFERIDO
 
 El PR #124 (ítem 0.2) movió las nueve relaciones de Desafío 5S a `desafio5s_archive` dentro del **mismo** proyecto. Era el paso correcto y no es el destino: el archivo frío sigue compartiendo instancia, backups, cuota y superficie de Auth con NoVen.
 
@@ -284,6 +294,12 @@ La dependencia registrada en 0.2 es la que ata el nudo: `desafio5s_es_admin() �
 **Alcance:** proyecto Supabase propio, migración de las nueve relaciones y del bucket `desafio5s-imagenes`, corte de la dependencia hacia `public.usuarios`, y baja de `desafio5s_archive` de este proyecto una vez verificado el destino.
 
 **Es el ítem más grande de Fase 2 y el único con riesgo sobre datos.** No se hace en la misma tanda que los otros cinco.
+
+**Diferido el 2026-09-04, con condición de salida.** El archivo frío del ítem 0.2 ya absorbió el riesgo principal: las RPC `desafio5s_*` no son ejecutables por `anon` y el schema está fuera de `public`. Lo que queda es riesgo de convivencia —instancia, backups y cuota compartidos—, no superficie alcanzable desde afuera. Mover datos productivos a un proyecto nuevo tiene costo real y no lo justifica el riesgo residual de hoy.
+
+Se ejecuta ante **cualquiera** de estos tres hechos: entra una segunda organización comercial, alguien de sistemas de un cliente audita la base, o Desafío 5S vuelve a estar activo. La decisión completa, con motivo y con el detalle de la dependencia `desafio5s_es_admin() → public.rol_actual() → public.usuarios` que queda viva mientras tanto, está en `ai/decisions.md`.
+
+**Riesgo que el diferimiento deja abierto y hay que vigilar:** un refactor de `public.rol_actual()` o de `public.usuarios` rompe `desafio5s_es_admin()` **en silencio**. Nada la ejecuta, ningún test la cubre y ningún flujo falla; la rotura aparecería recién el día de la restauración. Quien toque cualquiera de esas dos verifica `desafio5s_archive` en el mismo cambio, o corta la dependencia ahí.
 
 ## 5. Fase 3 — Capacidad multitenant real
 
@@ -355,13 +371,17 @@ Lo que queda de esta deuda son los siete endpoints autenticados que no tienen ni
 
 **D-2 · Dependencia viva del schema archivado.** `desafio5s_es_admin()` consulta `public.rol_actual()` y por esa vía `public.usuarios` de NoVen. Se conserva a propósito para permitir restauración en el proyecto actual, pero significa que un refactor de `rol_actual()` o de `usuarios` rompe silenciosamente un módulo que nadie está mirando. Condición de salida en `ai/decisions.md`.
 
+**Actualizado el 2026-09-04:** al diferirse 2.6 esta deuda deja de tener horizonte de cierre propio. Ya no vence cuando se ejecute el ítem: vence cuando se dispare alguna de las tres condiciones de salida registradas, y hasta entonces convive con el código activo. Es la deuda que más barato se paga hoy y más caro se descubre tarde, porque su único síntoma aparece el día de la restauración.
+
 **D-3 · Concentración de privilegios.** La única cuenta administradora combina `admin_organizacion` con `gerente_sucursal` de 091. Documentada como transitoria, con condición de salida — que se dispara justo en el momento de mayor carga: incorporar una organización o delegar la administración jerárquica.
 
 **D-4 · Superficie de tenancy 60× mayor que la operada.** 183 sucursales activas contra 1 con datos. El aislamiento está probado sobre entidades sintéticas; el primer usuario de una segunda sucursal real será la primera vez que se ejerza sobre datos productivos.
 
 **D-5 · Fixtures con fechas absolutas.** Ver el ítem fuera de numeración de §3.
 
-**D-6 · Datos operativos hacia un proveedor sin decisión registrada.** Ver 1.5. La cuota y el caché de 1.2 reducen el volumen que sale —cada acierto de caché es una llamada que no ocurre— pero no cambian la jurisdicción.
+**D-6 · Datos operativos hacia un proveedor sin decisión registrada — SALDADA el 2026-09-04.** Ver 1.5. El proveedor está decidido, registrado con jurisdicción, retención y límites, verificado en producción, y la credencial anterior ya no existe ni en el código ni en el entorno. La cuota y el caché de 1.2 siguen reduciendo el volumen que sale —cada acierto de caché es una llamada que no ocurre—.
+
+Lo que **no** desaparece con el cierre, y por eso la deuda se salda sin borrarse: siguen saliendo datos operativos hacia un tercero en otra jurisdicción. Lo que cambió es que ahora hay una decisión explícita sobre a quién, bajo qué retención y con qué condición de reevaluación, en lugar de un proveedor heredado sin evaluar. La garantía es más débil que residencia contratada, y 1.5 lo deja escrito para que nadie la cite después como si fuera otra cosa.
 
 **D-7 · Extracción de la baseline sin scriptar.** Re-materializar el ancla de producción requiere extraer a mano los 39 fragmentos desde el catálogo productivo. Es el único paso manual del mecanismo de reproducibilidad y, a la vez, el único que mantiene vivo el ancla. Ver `docs/MIGRATION_REPLAY_BASELINE_V1.md` §14.4.
 
