@@ -491,6 +491,12 @@ Estado de producción al mismo corte (`meqvjabgyrgwkxpclqxp`, Postgres 17.6, `sa
 - `authenticated` tiene sólo `SELECT` sobre `productos`, `vencimientos` y `producto_sucursal`; **0** policies de `SELECT USING(true)` en `public`;
 - advisors de seguridad: sin ERROR; 22 INFO `rls_enabled_no_policy` (7 del schema archivado, correcto por diseño; 15 de tablas NoVen deliberadamente server-only); 3 WARN — `pg_net` en `public`, protección de contraseñas filtradas desactivada, y `aceptar_invitacion_acceso_v1()` ejecutable por `authenticated` como `SECURITY DEFINER` (intencional: es el canje de invitación).
 
+**Observación registrada el 2026-09-05, no es un ítem.** `noven_private.puede_gestionar_invitacion_v1` es **la única de las 28 implementaciones de `noven_private` con un `GRANT EXECUTE` a `service_role`**; las otras 27 sólo lo conceden a `authenticated`. Salió al revisar el diff estructural del bloque 5a, cruzando el ACL del fingerprint anterior.
+
+**No es una exposición.** `noven_private` no está entre los esquemas expuestos por PostgREST, así que nadie llega a la función por HTTP tenga el privilegio que tenga — el mismo argumento que sostiene el patrón de las trece RPC que funcionan. Y como referencia del otro lado: las **57** funciones de `public` tienen grant a `service_role` sin excepción, porque es el privilegio por defecto de Supabase sobre ese schema.
+
+Lo que sí es, es una **inconsistencia con el patrón**: una implementación privada con un grant que sus 27 pares no tienen, sin razón registrada. Queda anotada acá para que quien revise grants la encuentre con la evidencia ya hecha, en lugar de volver a derivarla. No se abre como ítem propio ni se toca ahora: cambiar un grant sin entender por qué se puso es cómo se rompen cosas en silencio.
+
 ## 7. Deuda conocida
 
 Limitaciones aceptadas conscientemente. No son invariantes: son cosas que hay que resolver cuando el contexto lo permita.
