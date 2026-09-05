@@ -339,6 +339,64 @@ Agregar índices "por las dudas" antes de medir es la forma habitual de pagar es
 
 **Condición de disparo:** se ejecuta cuando se cumpla la condición de salida ya registrada, no antes. Adelantarlo agregaría un mecanismo de capacidades sin un segundo caso que lo valide, que es cómo se diseñan abstracciones equivocadas.
 
+### 3.5 · Rediseñar las políticas RLS para que no evalúen por fila — PENDIENTE
+
+**Este ítem no es una idea: sale medido del 3.3.** La evidencia completa está en
+`docs/BENCHMARK_VOLUMEN_V1.md`, con los planes crudos en
+`scripts/benchmark-volumen/`.
+
+**Qué se midió.** Con 4.883 filas visibles para el usuario —que no es un volumen
+grande— la lista de vencimientos tarda 3.048 ms. De esos, el
+`Bitmap Index Scan` sobre `idx_vencimientos_sucursal` consume **0,066 ms** y el
+predicado de la política consume el resto, ejecutándose **una vez por fila**. Son
+dos funciones `SECURITY DEFINER` anidadas, cada una con su join:
+
+```
+puede_leer_producto_sucursal(sucursal_id, producto_id)
+  └── puede_leer_familia_sucursal(sucursal_id, familia_id)
+        └── join usuarios × sucursales × familias × usuario_accesos
+```
+
+**Por qué no se arregla fácil, y por qué eso hay que preservarlo.** `STABLE` no
+alcanza: garantiza el mismo resultado con los mismos argumentos, y acá los
+argumentos son columnas de cada fila. Lo que haría falta es *inlining*, y
+Postgres sólo funde una función SQL en la consulta si no es `SECURITY DEFINER` y
+no tiene cláusula `SET`. Estas tienen las dos.
+
+**Es una tensión estructural, no un defecto: lo que hace segura a la función es
+exactamente lo que impide optimizarla.** Ninguna de las dos puntas se suelta sin
+pensarlo, y la salida no es sacar `SECURITY DEFINER`.
+
+**La forma del arreglo, ya medida.** Una función **sin argumentos de fila** —que
+dependa sólo de `auth.uid()`— que devuelva el alcance del usuario, más una prueba
+de pertenencia. Postgres la materializa una vez y el test por fila pasa a ser una
+búsqueda en tabla hash. Probado en base descartable, con equivalencia verificada
+en 4.883 filas antes de comparar:
+
+| Camino | Hoy | Con la forma alternativa |
+|---|---:|---:|
+| vencimientos · tabla base | 3.048 ms | **68 ms** |
+| vencimientos · lista (vista) | 6.984 ms | **7.809 ms** |
+
+**El segundo número es la razón por la que este ítem existe y no se resolvió
+en el 3.3.** Arreglar una política no arregla el camino: la vista arrastra las
+políticas de `productos` y `producto_sucursal`, que repiten el mismo patrón. Un
+45× en la consulta que se toca y ningún cambio en la pantalla que el usuario
+abre es exactamente la figura que produce un arreglo parcial.
+
+**Alcance:** rediseñar el conjunto de políticas de lectura, no una. Con
+verificación de equivalencia fila por fila para cada una —una política que
+devuelve otras filas no es una optimización, es un cambio de permisos— y
+midiendo el camino completo de la pantalla, no la consulta aislada.
+
+**Condición de cierre:** los caminos de vencimientos, dashboard y análisis
+bajan de forma medible **sobre la vista**, con `EXPLAIN (ANALYZE, BUFFERS)` antes
+y después, y el conteo de filas visibles idéntico al actual para cada rol.
+
+**Por qué no se arrancó junto con el 3.3:** medir autorizaba el diagnóstico, no
+el rediseño. Empujar un 45× tentador sin haber resuelto el patrón completo
+habría dado una mejora que el usuario no ve.
+
 ## 6. Verificación del estado actual
 
 Qué corre y qué prueba, al 2026-09-02:
