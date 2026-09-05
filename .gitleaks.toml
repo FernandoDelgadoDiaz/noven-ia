@@ -91,4 +91,17 @@ paths = [
 regexes = [
   # Placeholders de documentación y de .env.example.
   '''(?i)(tu[_-]clave|your[_-]key|reemplaz|placeholder|xxxx+|\.\.\.)''',
+  # UUID del usuario sintético del benchmark del ítem 3.3. La regla genérica
+  # `generic-api-key` lo marca porque en los informes aparece como
+  # `"auth_uid": "<uuid>"`, y esa forma —nombre de campo con pinta de
+  # credencial más valor largo— es exactamente lo que busca.
+  #
+  # No es una credencial: es determinista, se deriva por hash de la semilla
+  # pública `noven-benchmark-3-3-v1` en `scripts/benchmark-volumen/dataset.mjs`,
+  # y sólo existe dentro de una base descartable que muere con el job.
+  #
+  # Se allowlistea EL VALOR y no la ruta del archivo a propósito: los informes
+  # del benchmark siguen escaneándose para todo lo demás. Silenciar el archivo
+  # entero habría dejado un hueco permanente por un falso positivo puntual.
+  '''340e2192-ccf4-f406-6532-ec4e1b149aee''',
 ]
