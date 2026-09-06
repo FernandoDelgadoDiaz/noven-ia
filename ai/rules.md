@@ -39,6 +39,10 @@ agregado, con el motivo a la vista.
 
 - **`CREATE OR REPLACE` CONSERVA EL ACL del objeto, tanto en vistas como en funciones.** Reemplazar la definicion no toca los grants: los privilegios que tenia antes los sigue teniendo despues. Verificado por fingerprint estructural en los dos casos, no leido de la documentacion — una vista reemplazada en el item 2.5 y `instrumentar_sugerencia_rag_impl` reemplazada en el item del escalon cero, ambas con **cero entradas de ACL** en el diff.
 
+  **PERO NO CONSERVA LAS RELOPTIONS.** `security_invoker` de una vista se PIERDE al reemplazarla y vuelve al default, y una vista sin el evalua RLS como su DUENIO: cualquier usuario autenticado veria las filas de todas las organizaciones. Toda migracion que haga `CREATE OR REPLACE VIEW` tiene que volver a poner `ALTER VIEW ... SET (security_invoker = true)` a continuacion. Verificado en el bloque B, donde el verificador de exposicion lo cazo antes de llegar a produccion.
+
+  Lo que sobrevive es el ACL; la configuracion no. Que las dos cosas suenen a "propiedades del objeto" es justo lo que hace facil el error.
+
   Se sigue de ahi que reemplazar una funcion NO repara un grant equivocado ni rompe uno correcto: si el permiso estaba mal, sigue mal despues del reemplazo, y hace falta un `GRANT` explicito —eso fue #162—. Repetir el `REVOKE`/`GRANT` junto al reemplazo es un no-op deliberado que deja el patron a la vista; lo que nunca hay que asumir es que el reemplazo por si solo arregle o rompa permisos.
 
 - **El diff estructural se compara POR CLAVE, nunca por conteo de valores.** El aplanado del fingerprint cuenta valores sin asociarlos a su objeto, asi que dos cambios opuestos se cancelan y el diff miente. Paso dos veces, y las dos la primera lectura era falsa:

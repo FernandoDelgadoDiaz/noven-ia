@@ -122,6 +122,18 @@ assert.ok(
   'la tarjeta tampoco debe seguir manejando un estado que la vista ya no emite',
 )
 
+// --- 5b. security_invoker se vuelve a poner tras el reemplazo ---------------
+//
+// `CREATE OR REPLACE VIEW` conserva el ACL pero NO las reloptions: la vista
+// vuelve al default y pasa a evaluar RLS como su dueño. Sin este ALTER,
+// cualquier autenticado vería las filas de todas las organizaciones.
+assert.match(
+  cuerpo,
+  /ALTER VIEW public\.v_seguimiento_rag_actual SET \(security_invoker = true\)/,
+  'reemplazar la vista la deja sin security_invoker: hay que volver a ponerlo o ' +
+    'se rompe el aislamiento multitenant',
+)
+
 // --- 6. El inicio del tramo sale del tramo, no del click -------------------
 //
 // El circuito de ejecución centralizada va a mover el inicio a la confirmación

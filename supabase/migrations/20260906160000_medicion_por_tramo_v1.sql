@@ -231,5 +231,15 @@ FROM vencimientos v
   ) nv ON true
 WHERE v.activo = true AND s.dias_donacion IS NOT NULL;
 
+-- `CREATE OR REPLACE VIEW` NO CONSERVA LAS RELOPTIONS DE LA VISTA. El ACL sí
+-- sobrevive —está verificado por fingerprint—, pero `security_invoker` NO: el
+-- reemplazo la devuelve al default, y una vista sin él evalúa RLS COMO SU DUEÑO.
+-- Acá eso significa que cualquier usuario autenticado vería las filas de TODAS
+-- las organizaciones a través de esta vista.
+--
+-- Lo cazó el verificador de exposición contra la base real. Es la distinción
+-- exacta que faltaba en `ai/rules.md`: sobrevive el ACL, no la configuración.
+ALTER VIEW public.v_seguimiento_rag_actual SET (security_invoker = true);
+
 COMMENT ON VIEW public.v_seguimiento_rag_actual IS
   'Seguimiento del tramo ABIERTO de cada vencimiento, medido contra su propia ventana. Descuenta las salidas declaradas como no-venta (bloque 5a) y no mide tramos cuya ventana no alcanza para observar una unidad (ventanaObservable: dias x velocidad_necesaria >= 1). El inicio de la ventana sale de v_intervencion_tramos, no del click que aplica el RAG.';
