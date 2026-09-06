@@ -41,6 +41,15 @@ agregado, con el motivo a la vista.
 
   Se sigue de ahi que reemplazar una funcion NO repara un grant equivocado ni rompe uno correcto: si el permiso estaba mal, sigue mal despues del reemplazo, y hace falta un `GRANT` explicito —eso fue #162—. Repetir el `REVOKE`/`GRANT` junto al reemplazo es un no-op deliberado que deja el patron a la vista; lo que nunca hay que asumir es que el reemplazo por si solo arregle o rompa permisos.
 
+- **El diff estructural se compara POR CLAVE, nunca por conteo de valores.** El aplanado del fingerprint cuenta valores sin asociarlos a su objeto, asi que dos cambios opuestos se cancelan y el diff miente. Paso dos veces, y las dos la primera lectura era falsa:
+
+  - La reparacion del grant de instrumentacion parecia cambiar **182 cosas**. Comparada como conjunto era **una sola** entrada nueva: un EXECUTE agregado. Una entrada nueva en un array ordenado corre de posicion a todas las de abajo, y el diff por indice reporta cada corrimiento como un cambio.
+  - El bloque del tramo mostraba `AGREGA columns.not_null = False` sin ningun `SACA` de `True`, lo que leido de apuro decia que la columna `tipo` habia quedado nullable — habria sido un defecto real. Era artefacto: `tipo` SUMA un `not_null=True` y `porcentaje_descuento` PIERDE uno, asi que el conteo de `True` no se mueve. Verificado por nombre, `tipo` es `NOT NULL DEFAULT 'rag'`.
+
+  Un ejemplo se lee como anecdota; dos se leen como forma. Indexar por `(schema, tabla, nombre)` —o `(schema, nombre)` para vistas y funciones— y comparar objeto contra objeto. El conteo sirve para el titular; nunca para el veredicto.
+
+- **Y leer lo que el diff dice, no solo lo que se fue a buscar.** La vista `v_intervencion_tramos` aparecio en su diff con dieciseis entradas de ACL —ocho privilegios por dos roles, incluidos INSERT, UPDATE, DELETE y TRUNCATE— para una vista declarada de solo lectura. Estaban a la vista y no se leyeron, porque lo que se estaba buscando en ese diff era otra cosa. Lo cazo despues el verificador de exposicion contra la base real.
+
 - **Un `GRANT` es un hecho del catalogo, no del texto de las migraciones.** Los permisos son ACUMULATIVOS: una migracion posterior puede devolver lo que otra revoco. Leer un archivo suelto para concluir que un permiso esta puesto es adivinar; hay que mirar el estado final, en el catalogo o reconstruido en orden sobre todas las migraciones.
 
 - **Un wrapper `public.*` `SECURITY INVOKER` corre con los privilegios de QUIEN LLAMA**, asi que `authenticated` necesita `EXECUTE` sobre la implementacion `noven_private.*_impl`. Revocarselo —que parece mas seguro y se escribe solo— deja la RPC concedida y a la vez inutilizable: falla recien en runtime con `permission denied`. El aislamiento no lo da ese `REVOKE` sino que `noven_private` no este entre los esquemas expuestos por PostgREST.

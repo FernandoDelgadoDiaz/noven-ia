@@ -183,6 +183,7 @@ export const CLASIFICACION_VISTAS = Object.freeze({
   v_producto_sucursal_operativo: 'vista_lectura_tenant',
   v_productos_catalogo: 'vista_lectura_tenant',
   v_resultado_operador_rag: 'vista_lectura_tenant',
+  v_intervencion_tramos: 'vista_lectura_tenant',
   v_resultado_vencimiento_tramos: 'vista_lectura_tenant',
   v_seguimiento_rag_actual: 'vista_lectura_tenant',
   v_vencimientos_operativos: 'vista_lectura_tenant',
