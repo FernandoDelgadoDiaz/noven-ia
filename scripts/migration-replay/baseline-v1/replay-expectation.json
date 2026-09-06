@@ -10,10 +10,11 @@
     "20260905182910_salidas_no_venta_v1.sql",
     "20260905190500_reparar_grant_instrumentacion_rag_v1.sql",
     "20260905223000_escalon_cero_implicito_v1.sql",
-    "20260906004500_tramos_y_tipo_intervencion_v1.sql"
+    "20260906004500_tramos_y_tipo_intervencion_v1.sql",
+    "20260906160000_medicion_por_tramo_v1.sql"
   ],
-  "forward_migrations_sha256": "16f9ffab16672af324fada8f9c61de5a0e1cfb800d25b5d0bd7af1e83fa0bfb3",
-  "replay_fingerprint_sha256": "1eb0487100e919c4a26860aba17c5242fc284e5b5202f12b87a6342bd4cbb9ba",
+  "forward_migrations_sha256": "a2688125116a00e671f7599a719012450fdeb19fff5054e044cffc2f59a5d20e",
+  "replay_fingerprint_sha256": "53c6eb39f53204dca3df4471aabcd359aa3f0616b66da8d1db046e93d13aabf9",
   "anchor_fingerprint_sha256": "837771691ffc6e2276c66a26f9ae010c872f12ea33b118406d48b2ad6fca38af",
   "anchor_materialized_at": "2026-09-01",
   "anchor_materialized_from": "catalogo productivo meqvjabgyrgwkxpclqxp (PR #129)",

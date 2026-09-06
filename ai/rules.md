@@ -35,9 +35,23 @@ mas cercano o asumir un default convierte "no se" en un numero que despues nadie
 puede distinguir de una medicion real. Estado propio y exclusion explicita del
 agregado, con el motivo a la vista.
 
+## Una regla verificada cubre lo que se verifico, no la categoria a la que parece pertenecer
+
+Este es el error de razonamiento que mas caro salio en el trabajo del bloque B, y no fue no saber algo: fue **extender una regla probada mas alla de lo que probo**.
+
+`CREATE OR REPLACE` conserva el ACL. Eso se verifico con fingerprint estructural, en vistas y en funciones, y es cierto. De ahi se paso —sin notar el paso— a "conserva las propiedades del objeto", que es falso: **las reloptions NO sobreviven**, y `security_invoker` vuelve al default. Que ACL y reloptions suenen las dos a "propiedades de la vista" es lo que vuelve la generalizacion casi inevitable.
+
+**La regla:** al usar una propiedad verificada, preguntarse que se midio EXACTAMENTE. Si la evidencia dice "el ACL no cambio", eso es lo que cubre — no "nada cambio", ni "las propiedades se conservan". Una evidencia sobre un atributo no es evidencia sobre su categoria.
+
+La generalizacion silenciosa es peligrosa justamente porque se siente como aplicar la regla, no como extenderla. Cuando la conclusion sea de una clase mas amplia que la medicion, hay que volver a medir.
+
 ## Esquema y SQL
 
 - **`CREATE OR REPLACE` CONSERVA EL ACL del objeto, tanto en vistas como en funciones.** Reemplazar la definicion no toca los grants: los privilegios que tenia antes los sigue teniendo despues. Verificado por fingerprint estructural en los dos casos, no leido de la documentacion — una vista reemplazada en el item 2.5 y `instrumentar_sugerencia_rag_impl` reemplazada en el item del escalon cero, ambas con **cero entradas de ACL** en el diff.
+
+  **PERO NO CONSERVA LAS RELOPTIONS.** `security_invoker` de una vista se PIERDE al reemplazarla y vuelve al default, y una vista sin el evalua RLS como su DUENIO: cualquier usuario autenticado veria las filas de todas las organizaciones. Toda migracion que haga `CREATE OR REPLACE VIEW` tiene que volver a poner `ALTER VIEW ... SET (security_invoker = true)` a continuacion. Verificado en el bloque B, donde el verificador de exposicion lo cazo antes de llegar a produccion.
+
+  Lo que sobrevive es el ACL; la configuracion no. Que las dos cosas suenen a "propiedades del objeto" es justo lo que hace facil el error.
 
   Se sigue de ahi que reemplazar una funcion NO repara un grant equivocado ni rompe uno correcto: si el permiso estaba mal, sigue mal despues del reemplazo, y hace falta un `GRANT` explicito —eso fue #162—. Repetir el `REVOKE`/`GRANT` junto al reemplazo es un no-op deliberado que deja el patron a la vista; lo que nunca hay que asumir es que el reemplazo por si solo arregle o rompa permisos.
 
@@ -46,9 +60,20 @@ agregado, con el motivo a la vista.
   - La reparacion del grant de instrumentacion parecia cambiar **182 cosas**. Comparada como conjunto era **una sola** entrada nueva: un EXECUTE agregado. Una entrada nueva en un array ordenado corre de posicion a todas las de abajo, y el diff por indice reporta cada corrimiento como un cambio.
   - El bloque del tramo mostraba `AGREGA columns.not_null = False` sin ningun `SACA` de `True`, lo que leido de apuro decia que la columna `tipo` habia quedado nullable — habria sido un defecto real. Era artefacto: `tipo` SUMA un `not_null=True` y `porcentaje_descuento` PIERDE uno, asi que el conteo de `True` no se mueve. Verificado por nombre, `tipo` es `NOT NULL DEFAULT 'rag'`.
 
+  Y elegir a mano QUE campos comparar reintroduce el mismo error con otro campo: comparar por `definition_sha256` dejo pasar que la vista habia perdido `security_invoker`. **Comparar el OBJETO ENTERO, campo por campo**, con `scripts/migration-replay/comparar-fingerprint.mjs --ref origin/master`, que indexa por clave natural y aborta si la clave es ambigua.
+
   Un ejemplo se lee como anecdota; dos se leen como forma. Indexar por `(schema, tabla, nombre)` —o `(schema, nombre)` para vistas y funciones— y comparar objeto contra objeto. El conteo sirve para el titular; nunca para el veredicto.
 
 - **Y leer lo que el diff dice, no solo lo que se fue a buscar.** La vista `v_intervencion_tramos` aparecio en su diff con dieciseis entradas de ACL —ocho privilegios por dos roles, incluidos INSERT, UPDATE, DELETE y TRUNCATE— para una vista declarada de solo lectura. Estaban a la vista y no se leyeron, porque lo que se estaba buscando en ese diff era otra cosa. Lo cazo despues el verificador de exposicion contra la base real.
+
+- **Las propiedades que NO estan en el texto de la migracion solo se verifican contra el catalogo real.** Ningun contrato de texto puede verlas: el SQL se ve bien, los grants estan, el fingerprint no marca nada raro. Paso dos veces en dos dias y las dos las cazo el verificador de exposicion contra la base efimera, no la lectura del diff:
+
+  - Los **privilegios por defecto** de Supabase sobre `public` le daban a `authenticated` los seis de escritura sobre una vista nueva, sin que ninguna migracion los escribiera (bloque A).
+  - **`security_invoker` se perdio** al hacer `CREATE OR REPLACE VIEW`: la propiedad venia de otra migracion anterior y el reemplazo la borro en silencio (bloque B).
+
+  En los dos casos el defecto era invisible en el codigo y grave en la base — el segundo habria dejado a `v_seguimiento_rag_actual`, que leen cinco lugares, sin filtrar por organizacion. Que el aislamiento multitenant sea hipotetico con un solo cliente no lo hace menos grave: con un solo tenant un fallo de aislamiento NO DA SINTOMA, y nadie se entera hasta que hay un segundo.
+
+  Por eso el contrato de texto llega antes y el verificador contra el catalogo decide. Cuando una invariante dependa de un hecho del catalogo —permisos, reloptions, defaults del schema, lo que herede un objeto de otra migracion— la verificacion tiene que correr contra una base real, no sobre el archivo.
 
 - **Un `GRANT` es un hecho del catalogo, no del texto de las migraciones.** Los permisos son ACUMULATIVOS: una migracion posterior puede devolver lo que otra revoco. Leer un archivo suelto para concluir que un permiso esta puesto es adivinar; hay que mirar el estado final, en el catalogo o reconstruido en orden sobre todas las migraciones.
 
@@ -85,6 +110,16 @@ agregado, con el motivo a la vista.
 
 - Cada invariante que no debe volver atras se protege con un contrato en `scripts/tests/*.test.mjs`.
 - Los tests no dependen de la fecha real: si el caso involucra ventanas de riesgo, fijar el reloj.
+
+- **Un contrato que no se verifico por mutacion no protege nada todavia.** Romper a proposito lo que el contrato dice cuidar, y confirmar que falla, es la unica prueba de que la asercion mira donde dice mirar. Escribir la asercion es la mitad del trabajo.
+
+- **Antes de concluir que un contrato NO caza una mutacion, verificar que la mutacion ENTRO.** Un mutante que no se aplica —un `sed` con un espacio donde el archivo tiene varios, un patron que no matchea— se lee EXACTAMENTE IGUAL que un contrato que no protege, y la conclusion natural es la equivocada: se debilita o se reescribe una asercion que estaba bien. Hacer que la mutacion falle ruidosamente si no reemplaza nada (contar los reemplazos y abortar en cero) en vez de confiar en que entro.
+
+  Del mismo tipo: cuando un mutante SI es cazado, mirar QUE asercion lo cazo. Si fue otra distinta de la que lo apuntaba, la asercion apuntada sigue sin probarse y hay que rehacer el mutante hasta que dispare sola.
+
+- **La asercion de AUSENCIA se hace sobre el cuerpo, no sobre el archivo entero.** Las cabeceras citan a proposito el defecto que se esta corrigiendo, y una busqueda ingenua confunde la cita con el defecto vivo. Distinguir "tocar" de "mencionar": prohibir el DDL contra un objeto, no que su nombre aparezca.
+
+- **Un contrato de texto no puede verificar un hecho del catalogo.** "No hay ningun GRANT de escritura en la migracion" puede ser cierto y el privilegio estar puesto igual, porque lo dan los defaults del schema. Para esa clase de invariante el contrato de texto llega antes, y el verificador contra la base decide.
 
 ## Politicas RLS y costo por fila
 

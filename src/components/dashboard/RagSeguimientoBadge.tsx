@@ -42,7 +42,6 @@ function presentacion(row: SeguimientoRagRow): Presentacion {
 
   switch (row.estado_seguimiento_rag) {
     case 'efectivo':
-    case 'efectivo_por_vmd':
       return {
         titulo: 'Intervención funcionando',
         detalle: `${recuperadas} un recuperadas · salida ${velocidad} un/día · requerida ${necesaria}`,
@@ -58,6 +57,16 @@ function presentacion(row: SeguimientoRagRow): Presentacion {
           : `Salida ${velocidad} un/día · requerida ${necesaria}. Revisar o escalar.`,
         className: 'bg-amber-50 text-amber-900 border-amber-200',
         Icono: AlertTriangle,
+      }
+    case 'ventana_insuficiente':
+      // Distinto de "no hay evidencia" y distinto de "no se movió nada": la
+      // ventana todavía es demasiado corta para que un movimiento signifique
+      // algo. Sobre tres minutos, cero unidades no es una observación.
+      return {
+        titulo: 'Ventana todavía corta',
+        detalle: 'Pasó muy poco tiempo desde el cambio para medir la respuesta. Todavía no se puede decir si funciona.',
+        className: 'bg-slate-50 text-slate-700 border-slate-200',
+        Icono: Clock3,
       }
     case 'pendiente_control_operador':
       return {
