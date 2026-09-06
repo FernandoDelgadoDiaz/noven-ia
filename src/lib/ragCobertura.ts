@@ -92,8 +92,13 @@ export interface Sugerencia {
 /** Estados en los que la ventana comercial ya no admite intervención comercial. */
 const ESTADOS_VENTANA_CERRADA = new Set(['donacion', 'decomiso'])
 
-/** Estados en los que el RAG está cumpliendo: no se sugiere nada. */
-const ESTADOS_EFECTIVOS = new Set(['efectivo', 'efectivo_por_vmd'])
+/** Estados en los que el RAG está cumpliendo: no se sugiere nada.
+ *
+ * `efectivo_por_vmd` se retiró en el bloque B: declaraba efectiva una
+ * intervención SIN ninguna observación, comparando contra la venta media de
+ * Glaciar. Es circular — esa media describe cómo se movía el producto SIN
+ * intervención—, y la vista ya no lo emite. */
+const ESTADOS_EFECTIVOS = new Set(['efectivo'])
 
 /** Estados que habilitan evaluar un escalamiento. */
 const ESTADOS_ESCALABLES = new Set(['insuficiente', 'sin_movimiento'])
@@ -235,6 +240,14 @@ export function evaluarSugerencia(
   }
   if (estado === 'sin_rag' || !finito(entrada.ragPorcentaje)) return sinSugerencia('sin_rag')
   if (estado && ESTADOS_EFECTIVOS.has(estado)) return sinSugerencia('rag_efectivo')
+
+  // `ventana_insuficiente` viene de la vista y NO es lo mismo que no tener
+  // observación: la hay, pero el tramo es demasiado corto para que el cociente
+  // signifique algo. Sin este mapeo caería en `sin_observacion_posterior` y las
+  // dos situaciones compartirían motivo — que es exactamente lo que la regla de
+  // `ai/rules.md` prohíbe. El motor ya tiene el motivo correcto y lo calcula
+  // solo en la Guarda 2; acá se lo respeta cuando quien lo determinó fue la vista.
+  if (estado === 'ventana_insuficiente') return sinSugerencia('ventana_no_observable')
 
   // Guarda 1 · Sin observación posterior al RAG el estado es "pendiente de
   // control", no "RAG fallido". Es la regla §6.4 del documento de riesgo, y la

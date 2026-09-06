@@ -110,7 +110,7 @@ function resolverEstado(
   }
   if (estadoRag === 'dato_a_revisar') return 'dato_a_revisar'
   if (estadoRag === 'pendiente_control_operador') return 'intervencion_aplicada'
-  if (estadoRag === 'efectivo' || estadoRag === 'efectivo_por_vmd') return 'bajo_control'
+  if (estadoRag === 'efectivo') return 'bajo_control'
   return 'requiere_intervencion'
 }
 

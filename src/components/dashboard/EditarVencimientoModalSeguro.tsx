@@ -78,7 +78,6 @@ const RAG_ESTADO_LABEL: Record<EstadoSeguimientoRag, string> = {
   decomiso: 'Producto vencido',
   donacion: 'En ventana de donación',
   sin_rag: 'Sin RAG registrado',
-  efectivo_por_vmd: 'Velocidad Glaciar suficiente',
   pendiente_control_operador: 'Pendiente de nuevo control',
   dato_a_revisar: 'Cantidad a revisar',
   sin_movimiento: 'Sin movimiento',

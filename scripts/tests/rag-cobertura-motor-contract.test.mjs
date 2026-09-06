@@ -155,7 +155,10 @@ const con = (cambios) => evaluarSugerencia({ ...BASE, ...cambios }, ESCALA)
 
 const CASOS_SIN_SUGERENCIA = [
   ['RAG efectivo', { estado: 'efectivo' }, 'rag_efectivo'],
-  ['efectivo por VMD', { estado: 'efectivo_por_vmd' }, 'rag_efectivo'],
+  // `efectivo_por_vmd` se retiró en el bloque B. En su lugar entra el estado
+  // nuevo, que NO debe confundirse con no tener observación: la hay, y el
+  // tramo es demasiado corto para medirla.
+  ['ventana insuficiente', { estado: 'ventana_insuficiente' }, 'ventana_no_observable'],
   ['ventana de donación', { estado: 'donacion' }, 'ventana_cerrada'],
   ['vencido', { estado: 'decomiso' }, 'ventana_cerrada'],
   ['sin días comerciales', { diasComercialesRestantes: 0 }, 'ventana_cerrada'],
