@@ -504,6 +504,39 @@ aplicados y una al 20 % registra 1; una posterior de 50 a 20 registra −2; el
 promedio; y una organización sin escala configurada queda en `sin_escala`, que
 tampoco es lo mismo que las otras dos.
 
+### Fuera de numeración · Circuito de validación y ejecución centralizada de RAG — PENDIENTE
+
+**Planteo de producto, no de endurecimiento.** Se registra acá para que no se
+pierda y para que su dependencia quede escrita; el detalle vive en
+`docs/CIRCUITO_RAG_CENTRALIZADO_V1.md` y los principios normativos en
+`PRODUCT_VISION.md`.
+
+**Qué es.** El circuito por el cual una sugerencia de Noven pasa a ser una
+rebaja efectivamente ejecutada: recomendación, autorización y ejecución como tres
+actos distintos con responsables distintos, con la ejecución de precios
+centralizada en el sistema de la cadena y no en Noven.
+
+**Dónde va en el orden.** Después de A (tramos y tipo de intervención), B (medir
+cada tramo contra su ventana) y C (la UX de la oferta central). Antes que él no
+hay nada que coordinar: sin C el operador no puede declarar una oferta central,
+y sin B no hay medición por tramo que respalde una sugerencia.
+
+**La dependencia que importa, y no es de código.** Conviene tener **veinte o
+treinta sugerencias aceptadas y medidas en producción** antes de construir el
+circuito. Un circuito de autorización sobre sugerencias cuya efectividad todavía
+no se midió pediría que alguien apruebe algo que Noven no puede respaldar
+todavía.
+
+**Dónde está eso hoy, medido el 2026-09-06:** la instrumentación arranca el
+2026-09-05 con la reparación de D-7, y hay **3 intervenciones instrumentadas,
+las tres con `origen_sugerencia = manual`** — es decir, **cero sugerencias
+aceptadas medidas**. La distancia hasta veinte o treinta no es de semanas de
+desarrollo sino de uso real, y ése es el punto: el circuito no se adelanta a la
+evidencia que lo justifica.
+
+**Condición para arrancarlo:** A, B y C cerrados, y veinte a treinta sugerencias
+aceptadas con su tramo medido.
+
 ## 6. Verificación del estado actual
 
 Qué corre y qué prueba, al 2026-09-02:

@@ -230,6 +230,18 @@ Si agregamos una alerta:
 
 Si no existe una respuesta clara, la funcionalidad debe cuestionarse.
 
+## Recomendación, autorización y ejecución
+
+Noven separa recomendación, autorización y ejecución. Son tres actos distintos, con responsables distintos.
+
+Noven no cambia precios ni sustituye al sistema de la cadena. Coordina el circuito; la ejecución sigue siendo del sistema del cliente.
+
+La ejecución de precios es centralizada por decisión de la compañía, no del producto. Noven se adapta a esa decisión; no la presupone ni la impone.
+
+Noven nunca mide contra un precio supuesto: un tramo arranca cuando una persona confirma que el precio está en góndola.
+
+El circuito concreto que se desprende de estos principios —bandejas, roles, plazos y orden de impacto— vive en `docs/CIRCUITO_RAG_CENTRALIZADO_V1.md`. Acá van los principios; allá el detalle.
+
 ## Límites de producto
 
 Noven NO debe convertirse en:
