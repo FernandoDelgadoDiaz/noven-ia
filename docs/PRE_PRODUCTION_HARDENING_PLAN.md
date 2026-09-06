@@ -534,6 +534,13 @@ aceptadas medidas**. La distancia hasta veinte o treinta no es de semanas de
 desarrollo sino de uso real, y ése es el punto: el circuito no se adelanta a la
 evidencia que lo justifica.
 
+**Un punto que toca el bloque B, ahora y no después.** Si una rebaja entra en
+vigencia al día siguiente, el inicio del tramo no puede ser el click de
+autorización. El circuito lo resuelve haciendo que el tramo arranque en la
+confirmación en góndola —que también es un click—, así que **el modelo de tramos
+no necesita cambiar**. Pero B no debe cerrar esa puerta: nada en B puede asumir
+que el inicio del tramo coincide con el momento en que se decide el descuento.
+
 **Condición para arrancarlo:** A, B y C cerrados, y veinte a treinta sugerencias
 aceptadas con su tramo medido.
 
