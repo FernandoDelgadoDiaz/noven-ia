@@ -79,6 +79,7 @@ const RAG_ESTADO_LABEL: Record<EstadoSeguimientoRag, string> = {
   donacion: 'En ventana de donación',
   sin_rag: 'Sin RAG registrado',
   pendiente_control_operador: 'Pendiente de nuevo control',
+  ventana_insuficiente: 'Ventana todavía corta para medir',
   dato_a_revisar: 'Cantidad a revisar',
   sin_movimiento: 'Sin movimiento',
   efectivo: 'RAG efectivo',
