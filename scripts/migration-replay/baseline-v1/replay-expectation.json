@@ -13,8 +13,8 @@
     "20260906004500_tramos_y_tipo_intervencion_v1.sql",
     "20260906160000_medicion_por_tramo_v1.sql"
   ],
-  "forward_migrations_sha256": "6390c17771686448aba2db21ab7380ae5e54c0a00d34f9522604155cce7ef70c",
-  "replay_fingerprint_sha256": "e87e9424088e4b2ed55af11cdf5e87294ea813b9005a605578c8501d6734d2e2",
+  "forward_migrations_sha256": "a2688125116a00e671f7599a719012450fdeb19fff5054e044cffc2f59a5d20e",
+  "replay_fingerprint_sha256": "53c6eb39f53204dca3df4471aabcd359aa3f0616b66da8d1db046e93d13aabf9",
   "anchor_fingerprint_sha256": "837771691ffc6e2276c66a26f9ae010c872f12ea33b118406d48b2ad6fca38af",
   "anchor_materialized_at": "2026-09-01",
   "anchor_materialized_from": "catalogo productivo meqvjabgyrgwkxpclqxp (PR #129)",
