@@ -468,10 +468,41 @@ escala—. La decisión del último caso ya está tomada arriba: `fuera_de_escal
 No re-instrumenta nada hacia atrás:
 las 17 filas previas siguen sin evidencia por D-7.
 
+**Simulación de la regla sobre los 17 registros reales (2026-09-05).** No
+escribe nada; reproduce el cálculo para ver qué daría:
+
+| Tipo | Desde | Hasta | Escalones | Estado | Casos |
+|---|---|---|---:|---|---:|
+| primera | sin descuento | 20 % | 1 | medido | 2 |
+| primera | sin descuento | 30 % | 2 | medido | 6 |
+| primera | sin descuento | 50 % | 3 | medido | 5 |
+| primera | sin descuento | 60 % | — | `fuera_de_escala` | 1 |
+| posterior | 50 % | 20 % | **−2** | medido | 2 |
+| posterior | 60 % | 20 % | — | `fuera_de_escala` | 1 |
+
+**Medibles: de 2 a 15 de 17.** Con la fórmula vieja sólo las dos posteriores
+con ambas puntas en la escala daban un número.
+
+**Un caso que el enunciado del ítem no había previsto: las intervenciones
+posteriores reales son DESCENSOS, no ascensos.** Las tres que existen van de
+50 a 20 y de 60 a 20; ninguna sube. Bajar de escalón es un movimiento medido
+y se registra con signo (−2), no se descarta ni se toma en valor absoluto: una
+intervención que redujo el descuento es información, y promediarla como si
+hubiera subido invertiría la conclusión.
+
+**Consecuencia para el motor histórico, anotada acá para no redescubrirla.**
+Guardar el signo es necesario y no alcanza: **si alguna vez se promedian
+escalones aplicados, hay que separar ascensos de descensos ANTES de promediar.**
+Un promedio que los mezcla no significa nada aunque cada número esté bien
+guardado — dos intervenciones que subieron 2 y dos que bajaron 2 promedian cero,
+y cero es exactamente lo que no pasó. Son dos poblaciones distintas: subir un
+escalón es apurar la salida, bajarlo es corregir un descuento que sobraba.
+
 **Condición de cierre:** una primera intervención al 50 % registra 3 escalones
-aplicados, una al 20 % registra 1, una posterior de 20 a 30 sigue registrando 1,
-y el 60 % queda marcado `fuera_de_escala` —distinguible de "no medido"— y fuera
-del promedio.
+aplicados y una al 20 % registra 1; una posterior de 50 a 20 registra −2; el
+60 % queda marcado `fuera_de_escala` —distinguible de "no medido"— y fuera del
+promedio; y una organización sin escala configurada queda en `sin_escala`, que
+tampoco es lo mismo que las otras dos.
 
 ## 6. Verificación del estado actual
 

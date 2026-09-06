@@ -35,6 +35,16 @@ mas cercano o asumir un default convierte "no se" en un numero que despues nadie
 puede distinguir de una medicion real. Estado propio y exclusion explicita del
 agregado, con el motivo a la vista.
 
+## Esquema y SQL
+
+- **`CREATE OR REPLACE` CONSERVA EL ACL del objeto, tanto en vistas como en funciones.** Reemplazar la definicion no toca los grants: los privilegios que tenia antes los sigue teniendo despues. Verificado por fingerprint estructural en los dos casos, no leido de la documentacion — una vista reemplazada en el item 2.5 y `instrumentar_sugerencia_rag_impl` reemplazada en el item del escalon cero, ambas con **cero entradas de ACL** en el diff.
+
+  Se sigue de ahi que reemplazar una funcion NO repara un grant equivocado ni rompe uno correcto: si el permiso estaba mal, sigue mal despues del reemplazo, y hace falta un `GRANT` explicito —eso fue #162—. Repetir el `REVOKE`/`GRANT` junto al reemplazo es un no-op deliberado que deja el patron a la vista; lo que nunca hay que asumir es que el reemplazo por si solo arregle o rompa permisos.
+
+- **Un `GRANT` es un hecho del catalogo, no del texto de las migraciones.** Los permisos son ACUMULATIVOS: una migracion posterior puede devolver lo que otra revoco. Leer un archivo suelto para concluir que un permiso esta puesto es adivinar; hay que mirar el estado final, en el catalogo o reconstruido en orden sobre todas las migraciones.
+
+- **Un wrapper `public.*` `SECURITY INVOKER` corre con los privilegios de QUIEN LLAMA**, asi que `authenticated` necesita `EXECUTE` sobre la implementacion `noven_private.*_impl`. Revocarselo —que parece mas seguro y se escribe solo— deja la RPC concedida y a la vez inutilizable: falla recien en runtime con `permission denied`. El aislamiento no lo da ese `REVOKE` sino que `noven_private` no este entre los esquemas expuestos por PostgREST.
+
 ## TypeScript
 
 - Strict activo (`tsconfig.app.json`): no `any`, no type assertions sin justificacion.
