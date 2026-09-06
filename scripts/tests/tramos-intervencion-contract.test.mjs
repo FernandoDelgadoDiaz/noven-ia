@@ -186,6 +186,31 @@ assert.ok(
   !/GRANT (INSERT|UPDATE|DELETE)[\s\S]{0,60}v_intervencion_tramos/i.test(cuerpo),
   'ninguna escritura sobre la vista de tramos',
 )
+
+// EL DEFECTO QUE ESTA ASERCIÓN EXISTE PARA IMPEDIR, y que la versión anterior
+// de este contrato dejó pasar.
+//
+// Los privilegios por defecto de Supabase sobre `public` le dan a
+// `authenticated` TODO sobre cada relación nueva. Una vista recién creada nace
+// con INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES y TRIGGER concedidos SIN QUE
+// NINGUNA MIGRACIÓN LOS ESCRIBA. Revocarle sólo a PUBLIC y a `anon` deja los
+// seis puestos.
+//
+// La aserción de arriba —"no hay ningún GRANT de escritura en el texto"— pasaba
+// perfectamente, porque el problema no estaba en el texto. Lo cazó el
+// verificador de exposición contra la base real, que es donde un grant es un
+// hecho. Es la regla de `ai/rules.md` aplicada contra este mismo contrato: un
+// grant es un hecho del catálogo, no del texto de las migraciones.
+//
+// Lo que se puede verificar sin red es que la migración haga la revocación
+// explícita. No reemplaza al verificador; le llega antes.
+assert.match(
+  cuerpo,
+  /REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLE\s*\n?\s*public\.v_intervencion_tramos FROM authenticated/,
+  'hay que revocarle la escritura a AUTHENTICATED explícitamente: los privilegios por ' +
+    'defecto de Supabase se la dan sin que ninguna migración los escriba, y revocar ' +
+    'sólo a PUBLIC y anon no los toca',
+)
 assert.equal(
   CLASIFICACION_VISTAS.v_intervencion_tramos,
   'vista_lectura_tenant',

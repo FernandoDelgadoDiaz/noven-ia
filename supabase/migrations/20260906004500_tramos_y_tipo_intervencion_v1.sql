@@ -197,7 +197,20 @@ COMMENT ON VIEW public.v_intervencion_tramos IS
 -- y el aislamiento multitenant deja de existir para quien la consulte.
 ALTER VIEW public.v_intervencion_tramos SET (security_invoker = true);
 
+-- LOS PRIVILEGIOS POR DEFECTO DE SUPABASE SOBRE `public` LE DAN A
+-- `authenticated` TODO sobre cada relación nueva. Una vista recién creada nace
+-- con INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES y TRIGGER concedidos sin que
+-- ninguna migración los escriba, así que revocarle sólo a PUBLIC y a `anon` no
+-- alcanza: hay que revocárselos EXPLÍCITAMENTE a `authenticated`.
+--
+-- Es el mismo patrón de `20260903160000_exposicion_vistas_v1`, que existe
+-- precisamente porque esto ya había pasado con las otras diez vistas. Y es la
+-- regla de `ai/rules.md` en su forma más literal: un grant es un hecho del
+-- catálogo, no del texto de las migraciones — acá el grant de más no lo escribe
+-- nadie y está igual.
 REVOKE ALL ON TABLE public.v_intervencion_tramos FROM PUBLIC, anon;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLE
+  public.v_intervencion_tramos FROM authenticated;
 GRANT SELECT ON TABLE public.v_intervencion_tramos TO authenticated;
 
 -- --- 5. Que algo produzca `no_aplica` ---------------------------------------
