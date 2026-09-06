@@ -86,6 +86,16 @@ agregado, con el motivo a la vista.
 - Cada invariante que no debe volver atras se protege con un contrato en `scripts/tests/*.test.mjs`.
 - Los tests no dependen de la fecha real: si el caso involucra ventanas de riesgo, fijar el reloj.
 
+- **Un contrato que no se verifico por mutacion no protege nada todavia.** Romper a proposito lo que el contrato dice cuidar, y confirmar que falla, es la unica prueba de que la asercion mira donde dice mirar. Escribir la asercion es la mitad del trabajo.
+
+- **Antes de concluir que un contrato NO caza una mutacion, verificar que la mutacion ENTRO.** Un mutante que no se aplica —un `sed` con un espacio donde el archivo tiene varios, un patron que no matchea— se lee EXACTAMENTE IGUAL que un contrato que no protege, y la conclusion natural es la equivocada: se debilita o se reescribe una asercion que estaba bien. Hacer que la mutacion falle ruidosamente si no reemplaza nada (contar los reemplazos y abortar en cero) en vez de confiar en que entro.
+
+  Del mismo tipo: cuando un mutante SI es cazado, mirar QUE asercion lo cazo. Si fue otra distinta de la que lo apuntaba, la asercion apuntada sigue sin probarse y hay que rehacer el mutante hasta que dispare sola.
+
+- **La asercion de AUSENCIA se hace sobre el cuerpo, no sobre el archivo entero.** Las cabeceras citan a proposito el defecto que se esta corrigiendo, y una busqueda ingenua confunde la cita con el defecto vivo. Distinguir "tocar" de "mencionar": prohibir el DDL contra un objeto, no que su nombre aparezca.
+
+- **Un contrato de texto no puede verificar un hecho del catalogo.** "No hay ningun GRANT de escritura en la migracion" puede ser cierto y el privilegio estar puesto igual, porque lo dan los defaults del schema. Para esa clase de invariante el contrato de texto llega antes, y el verificador contra la base decide.
+
 ## Politicas RLS y costo por fila
 
 Medido en el item 3.3 (`docs/BENCHMARK_VOLUMEN_V1.md`). Leer esto ANTES de
