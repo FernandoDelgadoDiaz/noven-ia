@@ -67,6 +67,13 @@ agregado, con el motivo a la vista.
 - El alcance se verifica siempre contra `usuario_accesos` en el servidor. El cliente no envia ni decide rol, sucursal ni familias.
 - No hardcodear keys, URLs ni secrets: usar variables de entorno. Los secretos de servidor no llevan prefijo `VITE_`.
 
+## Esquema y SQL
+
+- **`CREATE OR REPLACE VIEW` preserva los grants de la vista.** Recrear una vista no la re-expone, pero tampoco la limpia: los privilegios que ya tenia sobreviven intactos al reemplazo. Una vista que nace con grants de mas los arrastra en silencio a traves de cada `CREATE OR REPLACE` posterior, y nada en el diff de la migracion lo muestra.
+- Por eso: al crear una vista, declarar sus grants explicitamente —`REVOKE` de lo que no va, `GRANT SELECT` de lo que si— en la misma migracion que la crea. No confiar en que un reemplazo posterior corrija un grant de mas.
+- Toda vista expuesta a `authenticated` lleva `security_invoker = true`. Sin eso evalua RLS como su dueno y expone las filas de todas las organizaciones.
+- **Lo unico que detecta un grant de mas sobre una vista es `clasificacion-exposicion-contract.test.mjs`.** Ni el gate de replay ni la revision del diff lo ven: el grant no aparece en el texto de ninguna migracion, es un hecho del catalogo que se hereda. Si se agrega una vista, va clasificada.
+
 ## Dominio
 
 - La politica de donacion viene de `sectores.dias_donacion`. No inferirla en el cliente ni hardcodear un valor global.
