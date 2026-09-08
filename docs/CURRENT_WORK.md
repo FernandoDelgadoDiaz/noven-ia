@@ -43,13 +43,13 @@ Fecha de corte: **2026-09-08**.
 - Base revisada: `origin/master` en `1f2a9b8`.
 - Último CI de esa base: run `34250337992`, completo en verde.
 - Rama activa: `docs/current-work-operational-rule`.
-- Head remoto: `17b6443` al abrir el PR.
+- Head remoto validado: `8cd31a4`.
 - Propietario de la rama: Codex hasta merge o relevo explícito.
 - Alcance de la rama: continuidad pública, reconciliación de estados y decisión
   de iniciar el circuito RAG. No contiene código productivo ni migraciones.
 - Publicación: autorizada por el responsable en versión reducida. PR
   [#177](https://github.com/FernandoDelgadoDiaz/noven-ia/pull/177) abierto contra
-  `master`; CI pendiente.
+  `master`; run `34281365574` completo en verde.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -127,16 +127,17 @@ Ejecutadas y repetidas el 2026-09-08 después de reducir el checkpoint público:
 - `git diff --check`: verde.
 - Playwright local no se ejecutó porque `npm ci` no instala directamente el
   runner; `AGENTS.md` ahora remite a la preparación exacta usada por CI. El
-  Playwright del CI de la base está verde y el PR debe volver a ejecutarlo.
+  Playwright del PR #177 terminó en verde.
+- CI del PR #177: contratos, lint, build, replay, aislamiento, cuota, exposición
+  y Playwright completos en verde en el run `34281365574`.
 
 ## Próximo paso ejecutable
 
-1. Esperar el CI completo del PR #177; no mergear con gates fallidos.
-2. Mergear la reconciliación y comprobar el CI posterior de `master`.
-3. Cerrar PR #160 como reemplazado, conservando su historial.
-4. Crear desde el nuevo `master` una rama pequeña para el bloque 1 del circuito:
+1. Mergear el PR #177 y comprobar el CI posterior de `master`.
+2. Cerrar PR #160 como reemplazado, conservando su historial.
+3. Crear desde el nuevo `master` una rama pequeña para el bloque 1 del circuito:
    modelo de solicitud, estados y permisos.
-5. Diseñar migración y contratos sin aplicar SQL en producción dentro de ese
+4. Diseñar migración y contratos sin aplicar SQL en producción dentro de ese
    primer PR.
 
 ## Protocolo de relevo
@@ -168,3 +169,5 @@ Ejecutadas y repetidas el 2026-09-08 después de reducir el checkpoint público:
 - Publicó la rama reducida mediante la conexión autorizada de GitHub y abrió el
   PR #177 contra `master`. El cliente Git local no tenía credenciales; no se
   cambió la configuración ni se intentó eludir la autenticación.
+- El CI completo del PR #177 terminó verde en el run `34281365574`, incluidos
+  replay, pruebas de aislamiento y Playwright. Queda habilitado el merge.
