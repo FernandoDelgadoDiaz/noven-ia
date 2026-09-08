@@ -101,6 +101,21 @@
         "CREATE TABLE IF NOT EXISTS public.analisis_cache"
       ],
       "resolution": "document_only_no_ledger_normalization"
+    },
+    {
+      "id": "convivencia_rag_oferta_central_timestamp",
+      "kind": "repository_production_version_mismatch",
+      "repository_path": "supabase/migrations/20260906230000_convivencia_rag_oferta_central_v1.sql",
+      "repository_version": "20260906230000",
+      "production_ledger_version": "20260908095426",
+      "production_ledger_name": "convivencia_rag_oferta_central_v1",
+      "universal_replay": true,
+      "reason": "Al aplicar el archivo versionado mediante el mecanismo remoto de Supabase, el ledger registro el timestamp de ejecucion 20260908095426 en lugar del timestamp 20260906230000 del nombre en Git, conservando el mismo nombre y efecto estructural.",
+      "evidence_markers": [
+        "intervenciones_rag_un_vigente_por_tipo_uidx",
+        "ALTER VIEW public.v_intervencion_tramos SET (security_invoker = true)"
+      ],
+      "resolution": "document_only_no_ledger_normalization"
     }
   ],
   "known_clean_replay_exceptions": [

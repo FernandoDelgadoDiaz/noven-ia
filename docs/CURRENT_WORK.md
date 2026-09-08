@@ -36,7 +36,7 @@ el siguiente agente debe considerarlo no transferido.
 
 ### Base productiva
 
-- `master`: `8191a9e` al corte de este documento.
+- `master`: `13ded23` al corte de este documento.
 - Bloque 5a · salidas de stock que no son venta: mergeado en PR #164.
 - Escalón cero implícito: mergeado en PR #166.
 - Bloque A · tramo y tipo de intervención: mergeado en PR #167.
@@ -46,14 +46,14 @@ el siguiente agente debe considerarlo no transferido.
 Los SHA son evidencia del corte, no una invitación a trabajar sobre una base
 vieja. Siempre hay que volver a consultar el `master` remoto.
 
-### Trabajo en curso de Codex · C1
+### C1 · cerrado por Codex
 
 - Rama: `feat/convivencia-rag-oferta-central`.
 - Head recibido de Claude Code: `494d573`.
-- Propiedad: Codex la asumió el 2026-09-08; Claude Code no debe modificarla
-  mientras este estado siga vigente.
-- Estado: corrección y expectativa móvil transmitidas; PR #171 abierto y
-  pendiente de CI completo. Todavía no hay cambios productivos.
+- Propiedad: Codex la asumió y cerró el 2026-09-08. La rama ya no debe recibir
+  trabajo nuevo; el siguiente bloque parte de `master`.
+- Estado: PR #171 mergeado como `13ded23`, CI del PR y del push a `master`
+  completos en verde, y migración aplicada y verificada en producción.
 - Alcance: permitir un RAG y una oferta central simultáneos sin que uno cierre al
   otro; separar sus tramos; mostrar una sola medición combinada y marcarla como
   no atribuible cuando se superponen.
@@ -109,19 +109,13 @@ operativas (bloque C2)".
 
 ### 2 · Terminar y revisar C1
 
-- Revisar la rama `feat/convivencia-rag-oferta-central` contra el `master` más
-  reciente y contra el contrato UX.
-- Restaurar `security_invoker=true` en las dos vistas reemplazadas por C1. La
-  primera regeneración demostró que `v_intervencion_tramos` lo perdía.
-- Regenerar la expectativa móvil después del arreglo; el artefacto del run
-  `34062416239` no es válido para merge porque captura el esquema inseguro.
+- Cerrado en PR #171 y `master` `13ded23`.
+- `security_invoker=true` restaurado y verificado en las dos vistas.
 - Artefacto válido: run `34176477330`, sobre `85a82b8`; checksum ZIP
   `6dd14df41f1fcbe17fa5ae7bf2cd47f47d2bc20493c07761478c669214c7f7f2`.
-- Confirmar que cada escritura, finalización, instrumentación y tramo esté
-  acotado por tipo.
-- Abrir PR pequeño, ejecutar CI completo y mergear sólo en verde.
-- Aplicar su migración a producción únicamente siguiendo el procedimiento normal
-  y verificarla después; nunca tocar el ledger manualmente.
+- Migración aplicada en producción como ledger `20260908095426`; el desfase con
+  Git `20260906230000` está documentado en `history-manifest.json` y el ledger no
+  fue normalizado.
 
 ### 3 · Construir C2 · oferta central en las pantallas actuales
 
@@ -158,8 +152,6 @@ Después de cerrar A, B y C y superar la condición de evidencia:
 
 ## Pendientes concretos
 
-- C1: terminar la corrección de `security_invoker`, regenerar la expectativa,
-  revisar el nuevo diff estructural, abrir PR, CI, merge y aplicación controlada.
 - C2: esquema de operaciones por tipo, interfaz mínima y pruebas.
 - Resolver técnicamente la presentación de transferencia como acción visible sin
   confundirla con una intervención de precio ni con una venta.
@@ -222,6 +214,16 @@ Después de cerrar A, B y C y superar la condición de evidencia:
   artefacto nuevo; no se regeneró localmente ni se modificó el ancla.
 - El contrato C1 pasa y una mutación que elimina el `ALTER VIEW` nuevo falla en
   la aserción correcta, demostrando que la regresión vuelve a ser detectable.
+- Mergeó el PR #171 como `13ded23` después de CI completo verde, y esperó también
+  el CI verde del push a `master` antes de tocar producción.
+- Aplicó C1 en producción mediante el mecanismo normal de Supabase. El ledger la
+  registró como `20260908095426 convivencia_rag_oferta_central_v1`, frente al
+  archivo Git `20260906230000`; no modificó ni normalizó el ledger.
+- Verificación productiva posterior: índice único vigente por
+  `(vencimiento_id, tipo)`, índice anterior ausente, filtros `tipo='rag'` en las
+  dos funciones, ambas vistas con `security_invoker=true`, permisos coincidentes
+  con el fingerprint, 20 intervenciones preservadas, 15 vigentes y cero
+  duplicados vigentes por tipo. Las vistas responden correctamente.
 - Un merge accidental ocurrió sólo en un worktree local ajeno a C1; se restauró
   el ref exacto y se dejó una referencia local recuperable. Nunca se transmitió
   a GitHub ni afectó producción.
