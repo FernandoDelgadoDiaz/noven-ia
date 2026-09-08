@@ -36,7 +36,7 @@ el siguiente agente debe considerarlo no transferido.
 
 ### Base productiva
 
-- `master`: `13ded23` al corte de este documento.
+- `master`: `589717b` al corte de este documento.
 - Bloque 5a · salidas de stock que no son venta: mergeado en PR #164.
 - Escalón cero implícito: mergeado en PR #166.
 - Bloque A · tramo y tipo de intervención: mergeado en PR #167.
@@ -116,6 +116,17 @@ operativas (bloque C2)".
 - Migración aplicada en producción como ledger `20260908095426`; el desfase con
   Git `20260906230000` está documentado en `history-manifest.json` y el ledger no
   fue normalizado.
+
+### Trabajo en curso de Codex · C2A
+
+- Rama: `feat/c2a-intervenciones-explicitas`.
+- Base remota: `master` `589717b` después del PR #172.
+- Alcance: agregar operaciones explícitas para informar/finalizar oferta central
+  y finalizar RAG, todas acotadas por tipo; asegurar también el cliente anterior
+  durante el despliegue gradual.
+- No incluye todavía cambios de interfaz ni crea ofertas centrales en producción.
+- Siguiente paso dentro de C2: adaptar el modal y la tarjeta actuales para usar
+  estas operaciones, y conectar la transferencia sin tratarla como venta.
 
 ### 3 · Construir C2 · oferta central en las pantallas actuales
 
