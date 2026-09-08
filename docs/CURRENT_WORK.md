@@ -52,9 +52,8 @@ vieja. Siempre hay que volver a consultar el `master` remoto.
 - Head recibido de Claude Code: `494d573`.
 - Propiedad: Codex la asumió el 2026-09-08; Claude Code no debe modificarla
   mientras este estado siga vigente.
-- Estado: corrección de seguridad y expectativa móvil verificadas; falta
-  transmitir los dos artefactos, abrir el PR y ejecutar el CI completo. Todavía
-  no hay cambios productivos.
+- Estado: corrección y expectativa móvil transmitidas; PR #171 abierto y
+  pendiente de CI completo. Todavía no hay cambios productivos.
 - Alcance: permitir un RAG y una oferta central simultáneos sin que uno cierre al
   otro; separar sus tramos; mostrar una sola medición combinada y marcarla como
   no atribuible cuando se superponen.
@@ -213,6 +212,11 @@ Después de cerrar A, B y C y superar la condición de evidencia:
 - Antes del commit final revalidó `master` en `8191a9e`, la rama en `85a82b8`,
   únicamente los PR #160 y #118 abiertos, y producción sin C1 en el ledger,
   con el índice anterior y ambas vistas todavía en `security_invoker=true`.
+- Transmitió la expectativa móvil y este registro como `9b4bf61` y abrió el PR
+  #171. GitHub detectó un único conflicto add/add en `CURRENT_WORK.md` porque C1
+  nació antes del merge de #170; lo resolvió conservando la versión de C1, que
+  ya incluye íntegramente el contenido de `master` más el seguimiento posterior.
+  No hubo conflicto en código, migraciones ni fingerprints.
 - La expectativa del run viejo quedó descartada y el fallo transitorio 112/113
   de `migration-replay-moving-expectation` quedó resuelto exclusivamente con el
   artefacto nuevo; no se regeneró localmente ni se modificó el ancla.
