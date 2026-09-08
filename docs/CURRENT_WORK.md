@@ -65,6 +65,8 @@ vieja. Siempre hay que volver a consultar el `master` remoto.
   Dashboard y el modal de control actuales.
 - Cambios productivos o de base: ninguno; sólo documentación.
 - PR: [#170](https://github.com/FernandoDelgadoDiaz/noven-ia/pull/170).
+- Estado autocontenido: mientras este archivo exista sólo en la rama, #170 sigue
+  pendiente; cuando esta versión esté en `master`, el contrato UX queda cerrado.
 
 ## Decisiones de producto ya fijadas
 
@@ -98,8 +100,9 @@ operativas (bloque C2)".
 
 ### 1 · Cerrar el contrato UX
 
-- Abrir PR de `docs/c2-ux-operator-contract`.
-- Esperar CI completo verde y mergear.
+- PR [#170](https://github.com/FernandoDelgadoDiaz/noven-ia/pull/170).
+- Esperar CI completo verde y mergear. Si esta versión del documento se está
+  leyendo desde `master`, este paso ya está cerrado.
 - No modifica producción.
 
 ### 2 · Terminar y revisar C1
