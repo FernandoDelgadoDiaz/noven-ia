@@ -79,6 +79,7 @@ const ledgerDivergences = new Map(
 assert.deepEqual([...ledgerDivergences.keys()], [
   'cuota_y_cache_timestamp',
   'convivencia_rag_oferta_central_timestamp',
+  'intervenciones_explicitas_por_tipo_timestamp',
 ])
 const cuotaCacheTimestamp = ledgerDivergences.get('cuota_y_cache_timestamp')
 assert.equal(cuotaCacheTimestamp.kind, 'repository_production_version_mismatch')
@@ -135,6 +136,46 @@ const convivenciaSql = fs.readFileSync(
 )
 for (const marker of convivenciaTimestamp.evidence_markers) {
   assert.ok(convivenciaSql.includes(marker), `C1: no se encontró evidencia ${marker}`)
+}
+
+const intervencionesExplicitasTimestamp = ledgerDivergences.get(
+  'intervenciones_explicitas_por_tipo_timestamp',
+)
+assert.equal(
+  intervencionesExplicitasTimestamp.kind,
+  'repository_production_version_mismatch',
+)
+assert.equal(intervencionesExplicitasTimestamp.repository_version, '20260908103000')
+assert.equal(intervencionesExplicitasTimestamp.production_ledger_version, '20260908110244')
+assert.equal(
+  intervencionesExplicitasTimestamp.production_ledger_name,
+  'intervenciones_explicitas_por_tipo_v1',
+)
+assert.equal(intervencionesExplicitasTimestamp.universal_replay, true)
+assert.equal(
+  intervencionesExplicitasTimestamp.resolution,
+  'document_only_no_ledger_normalization',
+)
+assert.notEqual(
+  intervencionesExplicitasTimestamp.repository_version,
+  intervencionesExplicitasTimestamp.production_ledger_version,
+  'la divergencia documentada no puede colapsarse silenciosamente',
+)
+assert.ok(
+  path.basename(intervencionesExplicitasTimestamp.repository_path).startsWith(
+    `${intervencionesExplicitasTimestamp.repository_version}_`,
+  ),
+  'la versión Git debe corresponder al nombre del archivo versionado',
+)
+const intervencionesExplicitasSql = fs.readFileSync(
+  path.join(root, intervencionesExplicitasTimestamp.repository_path),
+  'utf8',
+)
+for (const marker of intervencionesExplicitasTimestamp.evidence_markers) {
+  assert.ok(
+    intervencionesExplicitasSql.includes(marker),
+    `C2A: no se encontró evidencia ${marker}`,
+  )
 }
 
 const cleanExceptions = new Map(

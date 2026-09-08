@@ -116,6 +116,22 @@
         "ALTER VIEW public.v_intervencion_tramos SET (security_invoker = true)"
       ],
       "resolution": "document_only_no_ledger_normalization"
+    },
+    {
+      "id": "intervenciones_explicitas_por_tipo_timestamp",
+      "kind": "repository_production_version_mismatch",
+      "repository_path": "supabase/migrations/20260908103000_intervenciones_explicitas_por_tipo_v1.sql",
+      "repository_version": "20260908103000",
+      "production_ledger_version": "20260908110244",
+      "production_ledger_name": "intervenciones_explicitas_por_tipo_v1",
+      "universal_replay": true,
+      "reason": "Al aplicar el archivo versionado mediante el mecanismo remoto de Supabase, el ledger registro el timestamp de ejecucion 20260908110244 en lugar del timestamp 20260908103000 del nombre en Git, conservando el mismo nombre y efecto estructural.",
+      "evidence_markers": [
+        "CREATE OR REPLACE FUNCTION public.informar_oferta_central",
+        "CREATE OR REPLACE FUNCTION public.finalizar_rag_vigente",
+        "CREATE OR REPLACE FUNCTION public.finalizar_oferta_central"
+      ],
+      "resolution": "document_only_no_ledger_normalization"
     }
   ],
   "known_clean_replay_exceptions": [
