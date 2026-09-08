@@ -1,7 +1,9 @@
 # NOVEN · Plan de endurecimiento pre-producción
 
-**Estado del documento:** reconstruido desde evidencia del repositorio el 2026-09-02; Fases 2 y 3 definidas el 2026-09-03.
-**Punto de verificación:** `master` = `c7adbd3` (2.2 y 2.3 mergeados).
+**Estado del documento:** reconstruido desde evidencia del repositorio el
+2026-09-02; Fases 2 y 3 definidas el 2026-09-03; veredictos reconciliados con
+`master` el 2026-09-08.
+**Punto de verificación reconciliado:** `master` = `1f2a9b8` (C2B cerrado).
 
 ## 0. Por qué existe este documento
 
@@ -209,13 +211,16 @@ Contrato: `no-browser-business-writes.test.mjs` recorre el AST de `src/` con el 
 
 PR #137. `analisis.ts` sólo se concede a `gerente_zonal` de la zona y a `gerente_sucursal` o `supervisor` de esa sucursal exacta. El operador recibe 403. Al quedar un único ámbito posible se eliminaron —no desactivaron— el filtrado por `usuario_familias_sucursal`, la variante `SYSTEM_OPERADOR` del prompt y la bifurcación `scopeCompleto`. Decisión registrada en `ai/decisions.md` con motivo y condición de salida.
 
-### Fuera de numeración · Archivo frío de respaldos de agosto — EN EJECUCIÓN
+### Fuera de numeración · Archivo frío de respaldos de agosto — HECHO
 
 El inventario físico productivo contiene 36 tablas: 33 core y tres respaldos históricos de agosto que la baseline excluye deliberadamente. Los respaldos conservan 113 filas: 19 en `dedup_turrocklets_backup_20260805`, 6 en `productos_descripcion_backup_20260805` y 88 en `productos_familia_backup_20260806`.
 
 La revisión previa confirmó que no tienen foreign keys, vistas, funciones, triggers, publicaciones ni referencias desde el código activo. La migración nueva `20260903103749_archive_august_backups_v1.sql` propone moverlos de `public` a `noven_archive`, preservar filas, RLS, policies e índices, y revocar acceso a `PUBLIC`, `anon`, `authenticated` y `service_role`. No usa `DROP`, `DELETE` ni `TRUNCATE`; aborta ante cualquier inventario o dependencia inesperados. En un replay limpio funciona como no-op de datos porque la baseline no fabrica estos respaldos.
 
-La decisión, evidencia de catálogo, mecanismo reversible y condición de restauración están en `docs/NOVEN_AUGUST_BACKUPS_COLD_ARCHIVE.md`. El contrato `august-backups-cold-archive-contract.test.mjs` verifica las guardas no destructivas, el inventario exacto, el comportamiento del replay y las exclusiones del fingerprint. El ítem permanece **EN EJECUCIÓN** hasta merge, aplicación y verificación productiva.
+La decisión, evidencia de catálogo, mecanismo reversible y condición de restauración están en `docs/NOVEN_AUGUST_BACKUPS_COLD_ARCHIVE.md`. El contrato `august-backups-cold-archive-contract.test.mjs` verifica las guardas no destructivas, el inventario exacto, el comportamiento del replay y las exclusiones del fingerprint.
+
+El cierre y su evidencia quedaron registrados en el PR #160. Este documento
+conserva el veredicto; los detalles de verificación permanecen en ese historial.
 
 ## 4. Fase 2 — Superficie de exposición
 
@@ -242,6 +247,8 @@ Hoy no es explotable en la práctica —la política `regiones_select_scope` só
 **PR #148**, migración `20260903120000_regiones_solo_select_v1.sql`. Revoca `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `REFERENCES` y `TRIGGER`, y deja `GRANT SELECT` explícito. No toca `service_role`, ni la política, ni datos.
 
 La evidencia la da el gate de replay: el diff de la huella estructural es exactamente seis grants quitados sobre `public.regiones` y ninguno agregado. Contrato: `regiones-solo-select-contract.test.mjs`, verificado contra cuatro regresiones.
+
+El cierre y su evidencia quedaron registrados en el PR #160.
 
 ### 2.3 · Secret scanning en CI — HECHO
 
@@ -281,6 +288,8 @@ El contrato prueba quince formas de exposición indebida sobre catálogos armado
 
 **Este ítem subsume a 2.4**: si cada tabla declara su clase y el test verifica que sus grants y políticas reales coinciden con la clase declarada, entonces una política `USING(true)` sobre una tabla `lectura_tenant` falla por definición. Dos tests separados dirían dos veces lo mismo con una costura entre ellos.
 
+El cierre y su evidencia quedaron registrados en el PR #160.
+
 Los veinticuatro lints `rls_enabled_no_policy` del advisor —dieciséis en `public`, siete en `desafio5s_archive`— **no son un defecto**: son tablas `solo_servidor` con RLS habilitada y sin grants, es decir, negación total para `authenticated`. La clasificación tiene que registrar eso como intencional, o el advisor va a seguir pareciendo una lista de pendientes que nadie atiende.
 
 **Salvedad registrada:** el advisor marca `public.aceptar_invitacion_acceso_v1()` como `SECURITY DEFINER` ejecutable por `authenticated` vía REST. Se revisó el cuerpo de la función: **no es un defecto.** No toma argumentos, deriva la identidad de `auth.uid()`, cruza contra el email del propio `auth.users` y sólo activa filas de `usuario_accesos` de ese mismo `usuario_id`, con `SET search_path`. Es `SECURITY DEFINER` porque tiene que escribir en tablas que `authenticated` no puede tocar, que es el patrón correcto. Queda anotado para que no se re-investigue.
@@ -305,7 +314,10 @@ Se ejecuta ante **cualquiera** de estos tres hechos: entra una segunda organizac
 
 Fase 2 acota la exposición de un despliegue de una sucursal. Fase 3 es lo que hace falta para que la segunda organización no sea un proyecto en sí misma.
 
-Ninguno de estos ítems está empezado. Los cuatro tienen en común que hoy funcionan porque hay **una** organización con **una** sucursal con datos: son correctos por coincidencia, no por diseño.
+Los ítems 3.1, 3.2, 3.4 y 3.5 no están implementados. El benchmark 3.3 sí está
+cerrado y produjo el diagnóstico que da origen a 3.5. Todos comparten que hoy
+funcionan con **una** organización y **una** sucursal con datos: varias
+decisiones todavía son correctas por coincidencia, no por diseño.
 
 ### 3.1 · Procedimiento idempotente de alta de organizaciones — PENDIENTE
 
@@ -323,13 +335,19 @@ Ese último es el que importa. Una migración que arregla un SKU de la 091 se va
 
 **Alcance:** un mecanismo de reparación acotado por tenant, fuera de la cadena de migraciones, con registro de quién reparó qué y cuándo, y sin capacidad de tocar filas fuera del tenant indicado.
 
-### 3.3 · Benchmark de performance con volumen realista — PENDIENTE
+### 3.3 · Benchmark de performance con volumen realista — HECHO
 
 **Antes de decidir cualquier índice.** Hoy hay 713 filas en `producto_sucursal` y 145 vencimientos, todas de la 091. Cualquier plan de consulta medido contra ese volumen es ruido: a esa escala Postgres elige secuencial y acierta.
 
 Agregar índices "por las dudas" antes de medir es la forma habitual de pagar escritura para comprar una lectura que nadie hizo.
 
 **Alcance:** generar volumen sintético representativo —varias organizaciones, decenas de sucursales, órdenes de magnitud más de vencimientos—, medir las consultas del dashboard, del análisis y del scanner, y **recién entonces** decidir índices, con el plan de ejecución como evidencia.
+
+PR #161 cerró la medición con planes reproducibles en
+`docs/BENCHMARK_VOLUMEN_V1.md` y `scripts/benchmark-volumen/`. El resultado fue
+negativo para la hipótesis de índices: el cuello está en políticas RLS evaluadas
+por fila. La salida es el ítem 3.5; 3.3 no queda pendiente por haber encontrado
+un problema distinto.
 
 ### 3.4 · Reemplazar el literal `091` por capacidad organizacional — PENDIENTE
 
@@ -397,7 +415,7 @@ y después, y el conteo de filas visibles idéntico al actual para cada rol.
 el rediseño. Empujar un 45× tentador sin haber resuelto el patrón completo
 habría dado una mejora que el usuario no ve.
 
-### Fuera de numeración · El escalón cero implícito — PENDIENTE
+### Fuera de numeración · El escalón cero implícito — HECHO
 
 **Pertenece a la secuencia de intervenciones medibles (5 → A → B → C), no a la
 capacidad multitenant. Va después del bloque 5a, con su propia migración y su
@@ -504,7 +522,10 @@ aplicados y una al 20 % registra 1; una posterior de 50 a 20 registra −2; el
 promedio; y una organización sin escala configurada queda en `sin_escala`, que
 tampoco es lo mismo que las otras dos.
 
-### Fuera de numeración · Circuito de validación y ejecución centralizada de RAG — PENDIENTE
+PR #166 cerró el ítem con su migración y contratos. El detalle de verificación
+permanece en el historial de ese PR.
+
+### Fuera de numeración · Circuito de validación y ejecución centralizada de RAG — EN EJECUCIÓN
 
 **Planteo de producto, no de endurecimiento.** Se registra acá para que no se
 pierda y para que su dependencia quede escrita; el detalle vive en
@@ -521,18 +542,19 @@ cada tramo contra su ventana) y C (la UX de la oferta central). Antes que él no
 hay nada que coordinar: sin C el operador no puede declarar una oferta central,
 y sin B no hay medición por tramo que respalde una sugerencia.
 
-**La dependencia que importa, y no es de código.** Conviene tener **veinte o
-treinta sugerencias aceptadas y medidas en producción** antes de construir el
-circuito. Un circuito de autorización sobre sugerencias cuya efectividad todavía
-no se midió pediría que alguien apruebe algo que Noven no puede respaldar
-todavía.
+**Decisión de implementación del 2026-09-08.** A, B y C están cerrados y el
+circuito empieza a construirse ahora. La evidencia no se inventa: la producen
+las solicitudes, ejecuciones, confirmaciones y controles de la operación real.
+Esperar fuera del circuito impediría capturar justamente los hechos necesarios
+para construirla.
 
-**Dónde está eso hoy, medido el 2026-09-06:** la instrumentación arranca el
-2026-09-05 con la reparación de D-7, y hay **3 intervenciones instrumentadas,
-las tres con `origen_sugerencia = manual`** — es decir, **cero sugerencias
-aceptadas medidas**. La distancia hasta veinte o treinta no es de semanas de
-desarrollo sino de uso real, y ése es el punto: el circuito no se adelanta a la
-evidencia que lo justifica.
+La muestra de **veinte a treinta sugerencias aceptadas y medidas en producción**
+sigue siendo una condición, pero para otro alcance: afirmar efectividad
+histórica, recalibrar umbrales, modificar recomendaciones a partir de
+antecedentes o aumentar autonomía. No es una condición para implementar la
+coordinación y su trazabilidad. Mientras la muestra no exista, el porcentaje
+sale únicamente del motor determinístico vigente y la interfaz debe expresar
+“evidencia insuficiente” cuando corresponda.
 
 **Un punto que toca el bloque B, ahora y no después.** Si una rebaja entra en
 vigencia al día siguiente, el inicio del tramo no puede ser el click de
@@ -541,10 +563,18 @@ confirmación en góndola —que también es un click—, así que **el modelo d
 no necesita cambiar**. Pero B no debe cerrar esa puerta: nada en B puede asumir
 que el inicio del tramo coincide con el momento en que se decide el descuento.
 
-**Condición para arrancarlo:** A, B y C cerrados, y veinte a treinta sugerencias
-aceptadas con su tramo medido.
+**Condición de entrada cumplida:** A, B y C cerrados. La implementación queda
+dividida en modelo y estados, validación gerencial, bandeja zonal, confirmación
+en góndola y operación por lote. Cada bloque debe registrar sus pruebas y
+pendientes en `docs/CURRENT_WORK.md` dentro de la misma rama.
 
-### Fuera de numeración · Deuda que BLOQUEA el bloque C2 — PENDIENTE
+### Fuera de numeración · Deuda que bloqueaba el bloque C2 — HECHO
+
+PR #173 incorporó RPC independientes para informar y finalizar cada tipo de
+intervención y acotó el camino heredado de finalización a `tipo = 'rag'`. PR #175
+conectó esas operaciones en las pantallas de C2B. Sus contratos cerraron la
+condición antes de C2; el defecto descrito a continuación queda como antecedente
+de por qué esa separación es invariante.
 
 **`registrar_control_vencimiento_dashboard_invoker_v1` finaliza "la intervención
 viva" del vencimiento sin filtrar por tipo.** Es el camino que usa el botón
@@ -568,11 +598,10 @@ en silencio en cuanto exista. La diferencia es que aquélla se arregló antes de
 levantar el índice, y ésta queda para C2 porque acotarla exige decidir **qué
 tipo finaliza cada botón** — decisión que pertenece a la UX.
 
-**C2 NO PUEDE MERGEARSE SIN RESOLVER ESTO.** No es una mejora deseable ni un
-pendiente: es la condición para que el primer caso real no se rompa. Y arreglarlo
-implica además decidir si se sigue usando el canal de comandos dentro de la nota
-(`p_porcentaje_rag = 0` más `p_nota = 'FINALIZAR_RAG|motivo|…'`) o si esa
-operación pasa a una RPC con firma propia.
+**La condición se cerró antes de mergear C2.** No era una mejora deseable sino
+una condición para que el primer caso real no se rompiera. Se eligieron RPC con
+firma propia y se conservó el canal heredado sólo con el filtro explícito de
+tipo, para no alterar silenciosamente el camino diario existente.
 
 **Anotado aparte, sin bloquear nada:** ese canal de comandos —una operación que
 depende de partir texto libre, invisible en la firma de la RPC— es deuda propia.
@@ -581,14 +610,16 @@ en riesgo el camino diario del operador, que es el criterio que no se negocia.
 
 ## 6. Verificación del estado actual
 
-Qué corre y qué prueba, al 2026-09-02:
+Qué corre y qué prueba, verificado nuevamente el 2026-09-08:
 
-- **`scripts/tests/`: 100 archivos `.test.mjs`.** Contratos en Node puro (`node:assert`), sin framework: leen el código fuente o transpilan un módulo TS y afirman invariantes. `scripts/test.mjs` los corre en procesos separados y devuelve exit≠0 si alguno falla. Veinte fueron creados por este plan: `admin-rate-limit-contract`, `august-backups-cold-archive-contract`, `auth-directory-scope-contract`, `ci-trigger-contract`, `clasificacion-exposicion-contract`, `corpus-evaluacion-contract`, `cuota-analisis-contract`, `desafio5s-cold-archive-contract`, `live-isolation-gates-contract`, `no-browser-business-writes`, `regenerate-workflow-contract`, `regiones-solo-select-contract`, `replay-log-extractor`, `secret-scanning-contract` y los cinco `migration-replay-*`.
+- **`scripts/tests/`: 115 archivos `.test.mjs`.** Contratos en Node puro (`node:assert`), sin framework: leen el código fuente o transpilan un módulo TS y afirman invariantes. `scripts/test.mjs` los corre en procesos separados y devuelve exit≠0 si alguno falla. La suite local completa quedó 115/115 en verde sobre el corte reconciliado.
 - **`e2e/`: 2 specs, 14 tests** (12 en `critical-flows.spec.mjs`, 2 en `catalog-role-boundary.spec.mjs`), 3 fixtures. **Corren contra un Supabase interceptado por fixture** (`VITE_SUPABASE_URL=http://127.0.0.1:4173/__supabase`), no real: son tests de flujo de UI y **no ejercen RLS**. La verificación con backend real vive exclusivamente en `scripts/live-isolation/`.
 - **`.github/workflows/ci.yml`: un único job `verify`,** en orden — `npm test` → `npm run lint` → `npm run build` → replay de Baseline V1 con fingerprint estructural → export de credenciales efímeras → Gates 1–3 de aislamiento → cuota por actor bajo concurrencia → Playwright/Chromium → parada del Supabase efímero (`if: always()`). Triggers: push a `master` y pull request contra `master`. El trigger dedicado de la rama histórica `feat/multitenant-architecture-v1`, ya fusionada, fue retirado en E1 y quedó cubierto por `ci-trigger-contract.test.mjs`.
 - **`.github/workflows/regenerate-replay-expectation.yml`:** manual, para regenerar la expectativa móvil sin tener el entorno; opcionalmente emite el respaldo verificable en logs, apagado por defecto. Ver 1.4E–1.4F.
 
-Estado de producción al mismo corte (`meqvjabgyrgwkxpclqxp`, Postgres 17.6, `sa-east-1`):
+Estado de producción en el corte histórico del 2026-09-02
+(`meqvjabgyrgwkxpclqxp`, Postgres 17.6, `sa-east-1`). Estos conteos no son el
+estado operativo actual; para continuidad usar `docs/CURRENT_WORK.md`:
 
 - 1 organización, 17 zonas, 183 sucursales cargadas y activas — **datos operativos únicamente en la 091**: 713 filas de `producto_sucursal` y 145 vencimientos, todas de 091;
 - 713 productos de catálogo, 3 importaciones;
@@ -672,11 +703,17 @@ Requieren intervención manual del responsable:
 - verificar y completar las reglas de protección de `master` en la UI de GitHub (ver 0.1);
 - activar leaked-password protection en Supabase Auth (ítem 2.1);
 - mover la extensión `pg_net` fuera del schema `public`;
-- cargar `OPENAI_API_KEY` en Netlify y en los secretos de GitHub Actions: sin esa credencial el corpus de evaluación no puede correrse contra el proveedor y el ítem 1.5 no cierra;
 - reconstruir la línea de base de merma, que no es derivable de los datos cargados;
 - decidir el estado de las 182 sucursales cargadas sin datos operativos;
 - la prueba operativa corta en 091 que `docs/PRODUCTION_CUTOVER_STATUS_20260827.md` define como paso previo a incorporar una segunda sucursal real (Dashboard, Scanner, cierre vendido, Historial, importación por familia y masiva, Admin).
 
 ## 9. Mantenimiento de este documento
 
-Cada PR de endurecimiento que cambie el estado de un ítem debe actualizar su veredicto acá, en el mismo PR. Un ítem que pasa de PARCIAL a HECHO sin que este archivo lo refleje reintroduce exactamente el problema que motivó §0.
+Cada PR de endurecimiento que cambie el estado de un ítem debe actualizar su
+veredicto acá, en el mismo PR. Un ítem que pasa de PARCIAL a HECHO sin que este
+archivo lo refleje reintroduce exactamente el problema que motivó §0.
+
+Además, todo cambio de estado, hallazgo, prueba y pendiente del trabajo activo
+se registra en `docs/CURRENT_WORK.md` **dentro de la misma rama que lo produce**,
+antes del handoff o del PR. Ese archivo es el relevo operativo entre agentes; el
+chat no forma parte del contrato de continuidad.
