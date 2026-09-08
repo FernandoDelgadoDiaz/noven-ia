@@ -134,11 +134,13 @@ assert.equal(
 
 // --- 7. security_invoker, la lección del bloque B --------------------------
 
-assert.match(
-  cuerpo,
-  /ALTER VIEW public\.v_seguimiento_rag_actual SET \(security_invoker = true\)/,
-  'CREATE OR REPLACE VIEW no conserva las reloptions: sin esto la vista evalúa RLS ' +
-    'como su dueño y el aislamiento multitenant desaparece',
-)
+for (const vista of ['v_intervencion_tramos', 'v_seguimiento_rag_actual']) {
+  assert.match(
+    cuerpo,
+    new RegExp(`ALTER VIEW public\\.${vista} SET \\(security_invoker = true\\)`),
+    `CREATE OR REPLACE VIEW no conserva las reloptions: ${vista} tiene que ` +
+      'restaurar security_invoker o evaluará RLS como su dueño',
+  )
+}
 
 console.log('✓ RAG y oferta central conviven, y ninguno cierra al otro en silencio')

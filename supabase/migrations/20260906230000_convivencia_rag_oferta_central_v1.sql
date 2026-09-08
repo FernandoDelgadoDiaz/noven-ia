@@ -305,6 +305,13 @@ SELECT
   c.origen_sugerencia
 FROM con_fin c;
 
+-- CREATE OR REPLACE VIEW borra las reloptions. Esta vista es leída directamente
+-- por authenticated y también alimenta v_seguimiento_rag_actual: si vuelve al
+-- default, evalúa RLS como postgres y deja de respetar el alcance del invocador.
+-- El fingerprint de la primera regeneración de C1 detectó exactamente esa
+-- regresión (`security_invoker=true` -> NULL) antes de abrir el PR.
+ALTER VIEW public.v_intervencion_tramos SET (security_invoker = true);
+
 -- --- 5. El seguimiento deja de ocultar el segundo tramo ----------------------
 --
 -- La vista tomaba EL tramo abierto con `LIMIT 1`. Con convivencia hay dos y
