@@ -12,10 +12,11 @@
     "20260905223000_escalon_cero_implicito_v1.sql",
     "20260906004500_tramos_y_tipo_intervencion_v1.sql",
     "20260906160000_medicion_por_tramo_v1.sql",
-    "20260906230000_convivencia_rag_oferta_central_v1.sql"
+    "20260906230000_convivencia_rag_oferta_central_v1.sql",
+    "20260908103000_intervenciones_explicitas_por_tipo_v1.sql"
   ],
-  "forward_migrations_sha256": "b9f1d4a99cb2a09d9532e7ba73071b9e04bac15de2fdd019bfba0bdd935c08d6",
-  "replay_fingerprint_sha256": "48c4edaca871ead602e392f292111fff784c6ace6726c8c1185b733284421a0c",
+  "forward_migrations_sha256": "46947bfc2e23baf791f35ec4606508cc41656e79e9c0bebd805e507ab095bca6",
+  "replay_fingerprint_sha256": "ce64a6ef42982ff26c49d870dd90dc0e68bc0ffd3d8f00971ca213d243bcda26",
   "anchor_fingerprint_sha256": "837771691ffc6e2276c66a26f9ae010c872f12ea33b118406d48b2ad6fca38af",
   "anchor_materialized_at": "2026-09-01",
   "anchor_materialized_from": "catalogo productivo meqvjabgyrgwkxpclqxp (PR #129)",
