@@ -76,7 +76,10 @@ assert.equal(bonobon.resolution, 'baseline_required')
 const ledgerDivergences = new Map(
   manifest.known_production_ledger_divergences.map((entry) => [entry.id, entry]),
 )
-assert.deepEqual([...ledgerDivergences.keys()], ['cuota_y_cache_timestamp'])
+assert.deepEqual([...ledgerDivergences.keys()], [
+  'cuota_y_cache_timestamp',
+  'convivencia_rag_oferta_central_timestamp',
+])
 const cuotaCacheTimestamp = ledgerDivergences.get('cuota_y_cache_timestamp')
 assert.equal(cuotaCacheTimestamp.kind, 'repository_production_version_mismatch')
 assert.equal(cuotaCacheTimestamp.repository_version, '20260902170000')
@@ -101,6 +104,37 @@ const cuotaCacheSql = fs.readFileSync(
 )
 for (const marker of cuotaCacheTimestamp.evidence_markers) {
   assert.ok(cuotaCacheSql.includes(marker), `C3: no se encontró evidencia ${marker}`)
+}
+
+const convivenciaTimestamp = ledgerDivergences.get(
+  'convivencia_rag_oferta_central_timestamp',
+)
+assert.equal(convivenciaTimestamp.kind, 'repository_production_version_mismatch')
+assert.equal(convivenciaTimestamp.repository_version, '20260906230000')
+assert.equal(convivenciaTimestamp.production_ledger_version, '20260908095426')
+assert.equal(
+  convivenciaTimestamp.production_ledger_name,
+  'convivencia_rag_oferta_central_v1',
+)
+assert.equal(convivenciaTimestamp.universal_replay, true)
+assert.equal(convivenciaTimestamp.resolution, 'document_only_no_ledger_normalization')
+assert.notEqual(
+  convivenciaTimestamp.repository_version,
+  convivenciaTimestamp.production_ledger_version,
+  'la divergencia documentada no puede colapsarse silenciosamente',
+)
+assert.ok(
+  path.basename(convivenciaTimestamp.repository_path).startsWith(
+    `${convivenciaTimestamp.repository_version}_`,
+  ),
+  'la versión Git debe corresponder al nombre del archivo versionado',
+)
+const convivenciaSql = fs.readFileSync(
+  path.join(root, convivenciaTimestamp.repository_path),
+  'utf8',
+)
+for (const marker of convivenciaTimestamp.evidence_markers) {
+  assert.ok(convivenciaSql.includes(marker), `C1: no se encontró evidencia ${marker}`)
 }
 
 const cleanExceptions = new Map(
