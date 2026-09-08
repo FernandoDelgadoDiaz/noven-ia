@@ -10,8 +10,8 @@ const card = fs.readFileSync(path.join(ROOT, 'src/components/dashboard/AlertaIte
 
 assert.match(
   hook,
-  /\.from\('intervenciones_rag'\)[\s\S]*?motivo_finalizacion[\s\S]*?nota_finalizacion/,
-  'el dashboard debe leer la última intervención RAG y su motivo de finalización',
+  /\.from\('intervenciones_rag'\)[\s\S]*?tipo, porcentaje_descuento, nota,[\s\S]*?motivo_finalizacion[\s\S]*?nota_finalizacion/,
+  'el dashboard debe leer el tipo vigente y conservar la compatibilidad histórica',
 )
 assert.match(
   hook,
@@ -20,8 +20,8 @@ assert.match(
 )
 assert.match(
   card,
-  /✓ Oferta centralizada/,
-  'la tarjeta debe mostrar la pastilla de oferta centralizada',
+  /✓ Oferta central activa/,
+  'la tarjeta debe mostrar la pastilla de oferta central activa',
 )
 assert.match(
   card,
@@ -29,4 +29,4 @@ assert.match(
   'con RAG activo u oferta centralizada no debe sugerirse gestionar RAG en paralelo',
 )
 
-console.log('✓ Oferta centralizada queda visible y evita una sugerencia RAG redundante')
+console.log('✓ Oferta central queda visible, convive con RAG y evita una sugerencia redundante')

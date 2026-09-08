@@ -158,12 +158,15 @@ for (const origen of ['sugerida_aceptada', 'sugerida_rechazada', 'manual']) {
 const inicioInstr = modal.indexOf("supabase.rpc('instrumentar_sugerencia_rag'")
 assert.ok(inicioInstr !== -1, 'la instrumentación tiene que llamarse al guardar')
 const bloqueInstr = modal.slice(inicioInstr, modal.indexOf('onGuardado()', inicioInstr))
+const bloqueFalloInstr = bloqueInstr.match(/if \(instrError\) \{([\s\S]*?)\n\s*\}/)?.[1]
 
-assert.match(bloqueInstr, /console\.error/,
+assert.ok(bloqueFalloInstr, 'el fallo de instrumentación debe tratarse explícitamente')
+
+assert.match(bloqueFalloInstr, /console\.error/,
   'un fallo de instrumentación se loguea')
-assert.doesNotMatch(bloqueInstr, /setError\(/,
+assert.doesNotMatch(bloqueFalloInstr, /setError\(/,
   'un fallo de instrumentación no puede voltear un control ya registrado: es evidencia, no operación')
-assert.doesNotMatch(bloqueInstr, /\breturn\b/,
+assert.doesNotMatch(bloqueFalloInstr, /\breturn\b/,
   'un fallo de instrumentación no puede cortar el flujo: el control ya quedó registrado')
 
 // --- 8. La escala se lee acotada por RLS, no filtrada a mano ----------------

@@ -10,6 +10,7 @@ type AlertaVencimiento = VencimientoConRiesgo & {
   rag_porcentaje?: number | null
   oferta_centralizada?: boolean
   oferta_centralizada_nota?: string | null
+  transferencia_informada?: boolean
 }
 
 interface AlertaItemProps {
@@ -72,10 +73,12 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
   const showPulse = cfg.dotPulse
   const showAccionBtn = (isDecomiso || isDonacion) && Boolean(onRegistrarAccion)
   const tieneRagActivo = vencimiento.rag_porcentaje != null && vencimiento.rag_porcentaje > 0
-  const tieneOfertaCentralizada = !tieneRagActivo && vencimiento.oferta_centralizada === true
-  const tieneIntervencionVisible = tieneRagActivo || tieneOfertaCentralizada
+  const tieneOfertaCentralizada = vencimiento.oferta_centralizada === true
+  const tieneTransferenciaInformada = vencimiento.transferencia_informada === true
+  const tieneIntervencionComercial = tieneRagActivo || tieneOfertaCentralizada
+  const tieneIntervencionVisible = tieneIntervencionComercial || tieneTransferenciaInformada
   const accionesBase = (isDecomiso || isDonacion) ? [] : vencimiento.acciones_sugeridas
-  const accionesSinRag = tieneIntervencionVisible
+  const accionesSinRag = tieneIntervencionComercial
     ? accionesBase.filter((accion) => !/\bRAG\b/i.test(accion))
     : accionesBase
   const accionesVisibles = accionesSinRag.slice(0, tieneIntervencionVisible ? 1 : 2)
@@ -207,7 +210,12 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
               className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-sky-50 text-sky-700 border border-sky-200 whitespace-nowrap shrink-0"
               title={vencimiento.oferta_centralizada_nota ?? undefined}
             >
-              ✓ Oferta centralizada
+              ✓ Oferta central activa
+            </span>
+          )}
+          {tieneTransferenciaInformada && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-violet-50 text-violet-700 border border-violet-200 whitespace-nowrap shrink-0">
+              ✓ Transferencia informada
             </span>
           )}
           {accionesVisibles.map((accion) => (
@@ -215,7 +223,7 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
               {accion}
             </span>
           ))}
-          {accionesRestantes > 0 && <span className="text-[10px] text-muted-foreground shrink-0">+{accionesRestantes}</span>}
+          {accionesRestantes > 0 && <span className="text-[10px] text-muted-foreground shrink-0">Ver {accionesRestantes} más</span>}
         </div>
       )}
 

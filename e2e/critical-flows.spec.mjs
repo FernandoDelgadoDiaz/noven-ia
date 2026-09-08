@@ -47,6 +47,38 @@ test.describe('Noven · recorridos críticos multitenant', () => {
     await expect(page.getByText('UNIDADES EN RIESGO')).toHaveCount(0)
   })
 
+  test('una oferta explícita finalizada no reaparece por una marca histórica anterior', async ({ page }) => {
+    const vencimientoId = 'bbbbbbbb-bbbb-4bbb-8bbb-000009100001'
+    await installNovenFixture(page, {
+      interventions: [
+        {
+          vencimiento_id: vencimientoId,
+          tipo: 'oferta_central',
+          porcentaje_descuento: null,
+          nota: 'Oferta informada por el operador',
+          aplicado_at: '2026-09-07T12:00:00Z',
+          finalizado_at: '2026-09-08T12:00:00Z',
+          motivo_finalizacion: 'decision_comercial',
+          nota_finalizacion: null,
+        },
+        {
+          vencimiento_id: vencimientoId,
+          tipo: 'rag',
+          porcentaje_descuento: 20,
+          nota: null,
+          aplicado_at: '2026-08-28T12:00:00Z',
+          finalizado_at: '2026-09-01T12:00:00Z',
+          motivo_finalizacion: 'oferta_centralizada',
+          nota_finalizacion: 'Compatibilidad con el modelo anterior',
+        },
+      ],
+    })
+    await login(page)
+
+    await expect(page.getByText('PRODUCTO E2E 091')).toBeVisible()
+    await expect(page.getByText('Oferta central activa')).toHaveCount(0)
+  })
+
   test('en móvil región → zona → sucursales permanece dentro de Noven', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     const fixture = await installNovenFixture(page)
@@ -242,6 +274,81 @@ test.describe('Noven · escrituras críticas Scanner', () => {
       p_stock_actual: 30,
       p_porcentaje_rag: 30,
       p_nota: null,
+    })
+    expect(fixture.directTableWrites).toEqual([])
+  })
+
+  test('oferta central se informa y finaliza por RPC propias sin tocar el RAG', async ({ page }) => {
+    const fixture = await installScannerWriteFixture(page, {
+      hasActiveControl: true,
+      ragPorcentaje: 20,
+      ofertaCentralActiva: true,
+    })
+    await login(page)
+    await buscarProductoScanner(page)
+
+    const dialog = page.getByRole('dialog', { name: 'Control de vencimiento' })
+    await expect(dialog.getByRole('button', { name: 'Finalizar RAG vigente' })).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Finalizar oferta central' })).toBeVisible()
+    await dialog.getByRole('button', { name: 'Finalizar oferta central' }).click()
+    await page.getByRole('button', { name: 'Finalizar oferta', exact: true }).click()
+
+    await expect.poll(() => fixture.rpcCalls.filter((call) => call.name === 'finalizar_oferta_central').length).toBe(1)
+    expect(fixture.rpcCalls.find((call) => call.name === 'finalizar_oferta_central')?.body).toEqual({
+      p_vencimiento_id: SCANNER_IDS.control,
+      p_nota: null,
+    })
+    expect(fixture.rpcCalls.filter((call) => call.name === 'finalizar_rag_vigente')).toHaveLength(0)
+    expect(fixture.directTableWrites).toEqual([])
+  })
+
+  test('una oferta central empieza sólo cuando el operador la informa', async ({ page }) => {
+    const fixture = await installScannerWriteFixture(page, { hasActiveControl: true })
+    await login(page)
+    await buscarProductoScanner(page)
+
+    const dialog = page.getByRole('dialog', { name: 'Control de vencimiento' })
+    await dialog.getByRole('button', { name: 'Informar oferta central' }).click()
+
+    await expect.poll(() => fixture.rpcCalls.filter((call) => call.name === 'informar_oferta_central').length).toBe(1)
+    expect(fixture.rpcCalls.find((call) => call.name === 'informar_oferta_central')?.body).toEqual({
+      p_vencimiento_id: SCANNER_IDS.control,
+      p_nota: null,
+    })
+    expect(fixture.rpcCalls.filter((call) => call.name === 'registrar_control_vencimiento_dashboard')).toHaveLength(0)
+    expect(fixture.directTableWrites).toEqual([])
+  })
+
+  test('una caída anómala permite informar transferencia y no la cuenta como venta', async ({ page }) => {
+    const fixture = await installScannerWriteFixture(page, {
+      hasActiveControl: true,
+      activeControlQuantity: 20,
+      controlObservationId: 501,
+      salidaContext: {
+        observacion_id: 501,
+        vencimiento_id: SCANNER_IDS.control,
+        cantidad_previa: 20,
+        cantidad_actual: 10,
+        bajada: 10,
+        dias: 2,
+        velocidad_necesaria: 0.5,
+        umbral: 10,
+        ya_declarada: false,
+      },
+    })
+    await login(page)
+    await buscarProductoScanner(page)
+
+    const dialog = page.getByRole('dialog', { name: 'Control de vencimiento' })
+    await dialog.getByLabel('Cantidad comprometida observada hoy').fill('10')
+    await dialog.getByRole('button', { name: 'Registrar control' }).click()
+    await expect(page.getByText('¿Qué pasó con 10 unidades?')).toBeVisible()
+    await page.getByRole('button', { name: 'Hubo transferencia' }).click()
+
+    await expect.poll(() => fixture.rpcCalls.filter((call) => call.name === 'declarar_salida_no_venta').length).toBe(1)
+    expect(fixture.rpcCalls.find((call) => call.name === 'declarar_salida_no_venta')?.body).toEqual({
+      p_observacion_id: 501,
+      p_respuesta: 'transferencia',
     })
     expect(fixture.directTableWrites).toEqual([])
   })

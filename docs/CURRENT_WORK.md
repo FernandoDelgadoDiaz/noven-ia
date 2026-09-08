@@ -36,7 +36,7 @@ el siguiente agente debe considerarlo no transferido.
 
 ### Base productiva
 
-- `master`: `a7b0c49` al corte de este documento.
+- `master`: `d4f6358` al corte de este documento.
 - Bloque 5a · salidas de stock que no son venta: mergeado en PR #164.
 - Escalón cero implícito: mergeado en PR #166.
 - Bloque A · tramo y tipo de intervención: mergeado en PR #167.
@@ -83,8 +83,8 @@ vieja. Siempre hay que volver a consultar el `master` remoto.
   migración y cero duplicados vigentes por tipo.
 - El ledger productivo registró `20260908110244` frente al archivo Git
   `20260908103000`; la divergencia está inventariada y no debe normalizarse.
-- C2B sigue apilado: debe partir del nuevo `master`, pasar CI propio y recién
-  entonces habilitar la interfaz de operador.
+- C2B fue rebasado sobre `master` después de cerrar y documentar C2A. Debe pasar
+  CI propio antes de habilitar la interfaz de operador.
 
 ## Decisiones de producto ya fijadas
 
@@ -105,10 +105,14 @@ vieja. Siempre hay que volver a consultar el `master` remoto.
 6. **Una sola acción destacada.** El modal puede conservar controles compactos
    independientes para intervenciones que conviven, pero sólo resalta el próximo
    paso principal según rol y estado.
-7. **La sugerencia no se negocia.** Desaparecen `Usar NN%` y la posibilidad de
-   elegir otro porcentaje. Gerente o supervisor usa `Informar NN%`.
-8. **Pedir y ejecutar no inicia la medición.** El tramo RAG comienza cuando una
-   persona confirma mediante botón que el precio está aplicado en góndola.
+7. **En el futuro circuito centralizado, la sugerencia no se negocia.** Allí
+   desaparecen `Usar NN%` y la posibilidad de elegir otro porcentaje; gerente o
+   supervisor usará `Informar NN%`. C2B conserva el flujo RAG actual mientras se
+   reúne evidencia real y no adelanta ese circuito.
+8. **En el futuro circuito centralizado, pedir y ejecutar no inicia la
+   medición.** El tramo RAG comenzará cuando una persona confirme mediante botón
+   que el precio está aplicado en góndola. Esa separación tampoco forma parte de
+   C2B.
 
 El contrato completo de textos, estados, roles y condiciones de aceptación está
 en `docs/CIRCUITO_RAG_CENTRALIZADO_V1.md`, sección "Contrato UX de las pantallas
@@ -132,30 +136,42 @@ operativas (bloque C2)".
   Git `20260906230000` está documentado en `history-manifest.json` y el ledger no
   fue normalizado.
 
-### Trabajo en curso de Codex · C2A
+### Trabajo en curso de Codex · C2B
 
-- Rama: `feat/c2a-intervenciones-explicitas`.
-- Base remota: `master` `589717b` después del PR #172.
-- Alcance: agregar operaciones explícitas para informar/finalizar oferta central
-  y finalizar RAG, todas acotadas por tipo; asegurar también el cliente anterior
-  durante el despliegue gradual.
-- No incluye todavía cambios de interfaz ni crea ofertas centrales en producción.
-- Siguiente paso dentro de C2: adaptar el modal y la tarjeta actuales para usar
-  estas operaciones, y conectar la transferencia sin tratarla como venta.
+- Rama: `feat/c2b-ui-intervenciones-v2`, rebasada sobre `master` `d4f6358`. La
+  rama remota anterior `feat/c2b-ui-intervenciones` queda reemplazada y no debe
+  recibir trabajo nuevo.
+- C2A ya está mergeado, aplicado y documentado; C2B no queda apilado sobre una
+  rama pendiente.
+- El diff contra `master` contiene once archivos: interfaz, hooks, contratos,
+  fixtures E2E y este registro. No contiene migraciones ni fingerprints.
+- El modal conserva stock, vencimiento y cantidad como acción principal, agrupa
+  RAG y oferta central bajo **Intervenciones** y usa las RPC explícitas por tipo.
+- La tarjeta puede mostrar simultáneamente RAG, oferta central y la última
+  transferencia informada, con texto legible en lugar de un `+1` aislado.
+- Después de un control con una caída anómala, pregunta su causa y permite
+  declarar transferencia; las unidades continúan derivándose en el servidor y
+  no se cuentan como venta.
+- La revisión previa al PR corrigió tres fallas: el modal ya no se desmonta antes
+  de que el operador clasifique una caída anómala, y una oferta central explícita
+  finalizada prevalece sobre cualquier marca histórica anterior. Además, una
+  transferencia informada no oculta una sugerencia RAG que todavía corresponda.
+- Tiene contratos y E2E para convivencia, click explícito, transferencia y la
+  regresión de oferta histórica. La ejecución Playwright completa corresponde al
+  runner de CI.
+- Verificación local: `npm test` 115/115 archivos en verde; `npm run lint` sin
+  errores y con el warning preexistente de `ScannerModal.tsx`; `npm run build`
+  verde. El ancla `expected-fingerprint.json` sigue intacta con SHA-256
+  `0da259b3b5d37dc241d9358d8ed883614a856dc8fc71fdd62a3f80ffe79de0b2`.
+- No agrega migraciones, roles, bandejas ni el circuito zonal futuro.
 
 ### 3 · Construir C2 · oferta central en las pantallas actuales
 
-- Resolver primero el bloqueo conocido: el camino actual de **Finalizar RAG**
-  busca "la intervención viva" sin filtrar por tipo y podría cerrar la oferta
-  central equivocada.
-- Crear operaciones explícitas por tipo; no esconder comandos en texto libre.
-- Permitir que el operador informe y finalice una oferta central desde el modal
-  actual, sin inferencia ni fechas retroactivas.
-- Mostrar RAG y oferta central simultáneos en la tarjeta sin alterar su jerarquía.
-- Integrar la transferencia como tercera acción visible sin convertir sus
-  unidades en ventas ni obligarla a usar el modelo temporal de precios.
-- Agregar contratos y E2E para cero intervenciones, cada intervención por
-  separado, convivencia, alternancia y finalización correcta.
+- C2A cerró el bloqueo de las operaciones por tipo en PR #173.
+- C2B adapta el modal y la tarjeta actuales, sin inferencia ni fechas
+  retroactivas, y conecta la declaración de transferencia sin contarla como
+  venta.
+- Falta publicar C2B, obtener CI completo verde, mergear y verificar el deploy.
 
 ### 4 · Reunir evidencia antes del circuito zonal
 
@@ -178,9 +194,7 @@ Después de cerrar A, B y C y superar la condición de evidencia:
 
 ## Pendientes concretos
 
-- C2: esquema de operaciones por tipo, interfaz mínima y pruebas.
-- Resolver técnicamente la presentación de transferencia como acción visible sin
-  confundirla con una intervención de precio ni con una venta.
+- C2B: cerrar CI, merge y verificación del deploy de la interfaz mínima.
 - Reunir evidencia real de veinte a treinta sugerencias aceptadas y medidas.
 - Construir las bandejas del gerente y de la administrativa sólo después de esa
   evidencia.
@@ -191,6 +205,25 @@ Después de cerrar A, B y C y superar la condición de evidencia:
 
 ### 2026-09-08 · Codex
 
+- Rebasó C2B sobre `master` `d4f6358` una vez cerrados C2A y su registro de
+  ledger. La rama conserva once archivos de interfaz, contratos y continuidad,
+  sin migraciones ni cambios de esquema.
+- En la revisión previa al PR detectó que `onGuardado()` desmontaba el modal
+  justo después de abrir la pregunta por una caída anómala; lo corrigió para que
+  el operador pueda declarar transferencia u otra causa antes del cierre.
+- También evitó que el fallback del modelo anterior resucite una oferta central
+  histórica después de que exista una oferta explícita ya finalizada, y agregó
+  cobertura de regresión estática y E2E.
+- Separó la señal visible de transferencia de las intervenciones comerciales:
+  puede convivir con ellas y no bloquea una sugerencia RAG todavía válida.
+- Cerró la validación local de C2B con 115/115 contratos, lint sin errores y
+  build verde. Playwright queda como gate obligatorio del PR.
+- Antes de transmitir revalidó `master` en `d4f6358`, únicamente los PR #160 y
+  #118 abiertos, y producción en modo de sólo lectura: las tres RPC de C2A
+  siguen presentes, hay 22 intervenciones, 17 vigentes, cero ofertas centrales
+  informadas y cero duplicados vigentes por tipo. No ejecutó escrituras.
+- Mergeó el registro del timestamp productivo de C2A en PR #174 como `d4f6358`.
+  El ledger permanece intacto y el push a `master` pasó CI completo.
 - Cerró C2A en PR #173 como `a7b0c49`: 114/114 contratos, lint, build,
   baseline/replay, Gates 1–3, cuota, exposición y Playwright en verde tanto en el
   PR como en el push a `master`.
