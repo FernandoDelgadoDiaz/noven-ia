@@ -7,6 +7,9 @@ que lo gobiernan viven en `PRODUCT_VISION.md`, sección "Recomendación,
 autorización y ejecución"; acá está el detalle. Si algo de este documento
 contradice esos principios, prevalecen ellos.
 
+El estado ejecutable, la rama activa y el siguiente paso se mantienen en
+`docs/CURRENT_WORK.md`; este documento conserva el contrato de producto.
+
 ---
 
 ## El problema real
@@ -83,6 +86,125 @@ en vez de confirmar algo falso.
 Sin esa salida, alguien va a apretar el verde igual y el tramo arranca sobre un
 precio que no existe. Es la misma familia de problemas que venimos persiguiendo:
 **dos situaciones distintas produciendo el mismo estado.**
+
+---
+
+## Contrato UX de las pantallas operativas (bloque C2)
+
+La referencia visual son las pantallas actuales: la tarjeta de alerta priorizada
+del Dashboard y el modal donde se registra el control. C2 **las extiende; no las
+rediseña**. La mayoría de los usos diarios son de operadores en góndola, por lo
+que cada estado debe responder rápidamente una sola pregunta: **qué tengo que
+hacer ahora**.
+
+### La verdad entra por el click
+
+NoVen no infiere intervenciones ni reconstruye fechas anteriores al registro:
+
+- si un producto ya estaba físicamente en oferta central cuando se escanea, pero
+  nadie toca **"Informar oferta central"**, para NoVen sigue sin intervención;
+- al tocar ese botón se abre el tramo en la fecha y hora del click, usando el
+  control con stock conocido como punto inicial. No se retrotrae al comienzo
+  real de una oferta que NoVen no observó;
+- **"Finalizar oferta central"** cierra solamente ese tramo en la fecha y hora
+  del click;
+- una transferencia se declara mediante su botón cuando el operador la observa.
+  Las unidades transferidas no se cuentan como venta y la declaración no abre,
+  reemplaza ni cierra un RAG o una oferta central;
+- en el circuito centralizado de RAG, ni la solicitud del gerente ni la marca de
+  ejecución administrativa abren el tramo. El RAG empieza cuando alguien en la
+  sucursal toca **"Confirmar NN% en góndola"**.
+
+Por lo tanto, una realidad que todavía no fue informada puede existir fuera de
+NoVen, pero el sistema no la presenta ni la mide como si la conociera.
+
+### Riesgo e intervenciones son dimensiones independientes
+
+**Seguro, Radar y Urgente** describen el riesgo calculado. No dicen qué acción se
+está aplicando. Un producto en cualquiera de esos estados puede tener:
+
+- ninguna intervención;
+- sólo RAG;
+- sólo oferta central;
+- RAG y oferta central simultáneamente;
+- una transferencia declarada durante cualquiera de los estados anteriores.
+
+RAG y oferta central conservan inicios y finales independientes. Iniciar o
+finalizar uno nunca modifica el otro. Cuando se superponen, la pantalla puede
+mostrar la respuesta combinada, pero el histórico no debe atribuirla falsamente
+a una sola intervención.
+
+Para el usuario son tres herramientas contra la pérdida —RAG, oferta central y
+transferencia— aunque su persistencia interna pueda ser distinta: RAG y oferta
+central tienen tramos de vigencia; la transferencia es un movimiento físico de
+stock.
+
+### Dashboard del operador
+
+La tarjeta actual conserva su jerarquía: producto, urgencia, vencimiento, stock
+comprometido, intervenciones y próximo paso. Es una superficie de lectura; no se
+convierte en una bandeja administrativa.
+
+- Las intervenciones se muestran como pastillas breves: **"RAG activo · 20%"**,
+  **"Oferta central activa"** y **"Transferencia informada"**.
+- Cuando no entren todas, se muestran hasta dos y luego **"Ver N más"**. Un
+  **"+1"** aislado no alcanza porque obliga a adivinar qué está oculto.
+- Debajo puede existir un solo aviso principal: control pendiente, revisar
+  intervención, solicitud pendiente, listo para confirmar u otra próxima acción.
+- El color nunca comunica por sí solo: cada estado lleva texto e icono.
+- Las acciones se realizan al abrir el producto; no se agregan filas de botones
+  a la tarjeta.
+
+### Modal de control
+
+Los campos actuales de stock, vencimiento y cantidad observada se mantienen. La
+sección actual de RAG evoluciona a **Intervenciones** reutilizando la misma
+estructura visual. No se apilan tres tarjetas. Puede haber controles compactos
+independientes para RAG y oferta central —porque pueden convivir—, pero sólo una
+acción se destaca como próximo paso principal. Ningún control válido se oculta
+por estar activa otra intervención.
+
+| Estado específico | Control visible |
+|---|---|
+| Sin oferta central informada | **Informar oferta central** |
+| Oferta central activa | **Finalizar oferta central** |
+| RAG vigente | **Finalizar RAG** |
+| Transferencia observada | **Informar transferencia** |
+| Sugerencia RAG · operador | **Requiere gerente o supervisor** — deshabilitada |
+| Sugerencia RAG · gerente o supervisor | **Informar NN%** |
+| Solicitud pendiente de ejecución | **Pendiente de ejecución** — sin acción |
+| Ejecutada, todavía no habilitada | **Ejecutada · disponible mañana** — sin acción |
+| Lista para verificar | **Confirmar NN% en góndola** |
+| Ejecutada pero ausente en góndola | **No está aplicado** |
+
+Los textos **"Usar NN%"** y **"elegir otro porcentaje"** quedan prohibidos en
+este circuito: pedir no es aplicar y la sugerencia no se negocia. El porcentaje
+se muestra, pero ningún cliente puede reemplazarlo silenciosamente por otro.
+
+### Separación por rol
+
+- El operador registra controles, informa una oferta central observable, declara
+  una transferencia y confirma si el RAG ejecutado está realmente en góndola.
+- El gerente o supervisor valida la sugerencia y crea la solicitud mediante
+  **"Informar NN%"**.
+- La administrativa zonal trabaja en su bandeja propia; no aparecen controles
+  administrativos dentro del Dashboard del operador.
+
+### Condiciones de aceptación de C2
+
+1. Sin click no existe intervención para NoVen y no empieza ninguna medición.
+2. Una oferta central ya vigente al primer escaneo empieza en NoVen cuando el
+   operador la informa, nunca antes.
+3. Iniciar o finalizar una intervención no altera las otras.
+4. Solicitar o marcar ejecutado un RAG no abre un tramo; confirmarlo en góndola,
+   sí.
+5. La tarjeta del Dashboard mantiene su estructura actual y muestra estados, no
+   una colección de botones.
+6. El modal destaca una sola próxima acción inequívoca según rol y estado, sin
+   ocultar los controles independientes necesarios para que dos intervenciones
+   puedan convivir.
+7. Cada transición conserva usuario, fecha y hora; nada se sobrescribe ni se
+   deduce a partir del color de la interfaz.
 
 ---
 
