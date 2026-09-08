@@ -36,7 +36,7 @@ el siguiente agente debe considerarlo no transferido.
 
 ### Base productiva
 
-- `master`: `589717b` al corte de este documento.
+- `master`: `a7b0c49` al corte de este documento.
 - Bloque 5a · salidas de stock que no son venta: mergeado en PR #164.
 - Escalón cero implícito: mergeado en PR #166.
 - Bloque A · tramo y tipo de intervención: mergeado en PR #167.
@@ -70,6 +70,21 @@ vieja. Siempre hay que volver a consultar el `master` remoto.
 - Cambios productivos o de base: ninguno; sólo documentación.
 - PR: [#170](https://github.com/FernandoDelgadoDiaz/noven-ia/pull/170).
 - Estado: mergeado en `master` como `8191a9e`, con CI completo verde.
+
+### C2A · operaciones explícitas por tipo · cerrado
+
+- Rama: `feat/c2a-intervenciones-explicitas`.
+- PR: [#173](https://github.com/FernandoDelgadoDiaz/noven-ia/pull/173).
+- Estado: mergeado en `master` como `a7b0c49`, con CI completo verde en el PR y
+  en el push a `master`; migración aplicada y verificada en producción.
+- Alcance: iniciar oferta central por click actual y finalizar RAG u oferta
+  central de forma independiente e idempotente, sin cierres cruzados.
+- Producción preservó 20 intervenciones, 15 vigentes, cero ofertas creadas por la
+  migración y cero duplicados vigentes por tipo.
+- El ledger productivo registró `20260908110244` frente al archivo Git
+  `20260908103000`; la divergencia está inventariada y no debe normalizarse.
+- C2B sigue apilado: debe partir del nuevo `master`, pasar CI propio y recién
+  entonces habilitar la interfaz de operador.
 
 ## Decisiones de producto ya fijadas
 
@@ -175,6 +190,15 @@ Después de cerrar A, B y C y superar la condición de evidencia:
 ## Registro de actividad
 
 ### 2026-09-08 · Codex
+
+- Cerró C2A en PR #173 como `a7b0c49`: 114/114 contratos, lint, build,
+  baseline/replay, Gates 1–3, cuota, exposición y Playwright en verde tanto en el
+  PR como en el push a `master`.
+- Aplicó `intervenciones_explicitas_por_tipo_v1` en producción mediante Supabase
+  y verificó las tres RPC, sus permisos y el filtro RAG del camino legacy. No se
+  insertaron, cerraron ni modificaron intervenciones.
+- Registró el desfase Git `20260908103000` / ledger `20260908110244` sin tocar ni
+  normalizar el historial productivo.
 
 - Mergeó el contrato UX en PR #170 como `8191a9e`; CI completo verde y ninguna
   modificación de producción.
