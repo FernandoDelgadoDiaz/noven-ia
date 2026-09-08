@@ -128,6 +128,20 @@ operativas (bloque C2)".
 - Siguiente paso dentro de C2: adaptar el modal y la tarjeta actuales para usar
   estas operaciones, y conectar la transferencia sin tratarla como venta.
 
+### Borrador apilado de Codex · C2B
+
+- Rama: `feat/c2b-ui-intervenciones`, basada en C2A; no abrir PR ni mergear antes
+  de que C2A quede validado y mergeado.
+- El modal conserva stock, vencimiento y cantidad como acción principal, agrupa
+  RAG y oferta central bajo **Intervenciones** y usa las RPC explícitas por tipo.
+- La tarjeta puede mostrar simultáneamente RAG, oferta central y la última
+  transferencia informada, con texto legible en lugar de un `+1` aislado.
+- Después de un control con una caída anómala, pregunta su causa y permite
+  declarar transferencia; las unidades continúan derivándose en el servidor y
+  no se cuentan como venta.
+- Contratos estáticos, lint y build pasan. Los E2E nuevos están escritos pero su
+  ejecución completa queda pendiente del runner aislado de CI y del merge C2A.
+
 ### 3 · Construir C2 · oferta central en las pantallas actuales
 
 - Resolver primero el bloqueo conocido: el camino actual de **Finalizar RAG**

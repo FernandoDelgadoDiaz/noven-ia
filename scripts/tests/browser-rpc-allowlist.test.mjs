@@ -17,13 +17,26 @@ const ALLOWED_BROWSER_RPCS = new Set([
   'buscar_producto_scanner',
   'cerrar_vencimiento_operativo',
   'completar_cod_art_producto_scanner',
+  // Lee exclusivamente los insumos server-side de la última caída para que el
+  // cliente decida si corresponde preguntar; no acepta cantidades calculadas
+  // por el navegador.
+  'contexto_salida_control',
   'crear_producto_scanner',
+  // Declara la causa sobre una observación ya autorizada. Las unidades se
+  // derivan en el servidor y una transferencia nunca se vuelve venta.
+  'declarar_salida_no_venta',
+  // C2 separa cada cierre por tipo: ninguna de estas RPC puede cerrar "la viva".
+  'finalizar_oferta_central',
+  'finalizar_rag_vigente',
   'guardar_vencimiento_y_stock_scanner_v1',
   // Registra qué sugirió el motor de urgencia y qué hizo la persona. Escribe
   // sólo columnas de instrumentación sobre la intervención RAG vigente del
   // vencimiento, verifica permiso sobre el producto en el DEFINER, y no pisa
   // una intervención ya instrumentada.
   'instrumentar_sugerencia_rag',
+  // El click abre una oferta central desde el stock ya conocido; no recibe ni
+  // permite retrotraer fecha de inicio.
+  'informar_oferta_central',
   'listar_familias_scanner',
   'listar_mis_alertas_zonales_v1',
   'modo_imagen_producto_operador',
@@ -70,7 +83,7 @@ assert.deepEqual(
   `RPC aprobadas pero sin caller browser: ${aprobadasSinCaller.join(', ')}. Revisar si corresponde revocar EXECUTE.`,
 )
 
-assert.equal(usados.size, 16, 'La superficie browser esperada debe permanecer en 16 RPC explícitas')
+assert.equal(usados.size, 21, 'La superficie browser esperada debe permanecer en 21 RPC explícitas')
 assert.equal(usados.has('listar_resumen_radar_zonal_v1'), false, 'El resumen Radar huérfano no debe volver al navegador')
 
 console.log(`✓ Allowlist browser RPC: ${usados.size} entradas explícitas y sin superficie huérfana`)

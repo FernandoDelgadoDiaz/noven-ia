@@ -52,11 +52,20 @@ interface VencimientoOperativoRow {
 
 interface IntervencionRagResumenRow {
   vencimiento_id: string
-  porcentaje_descuento: number
+  tipo: 'rag' | 'oferta_central'
+  porcentaje_descuento: number | null
+  nota: string | null
   aplicado_at: string
   finalizado_at: string | null
   motivo_finalizacion: string | null
   nota_finalizacion: string | null
+}
+
+interface ObservacionIntervencionResumenRow {
+  id: number
+  vencimiento_id: string
+  observada_at: string
+  no_venta_respuesta: string | null
 }
 
 /** Narrowing helper para el camino legacy. */
@@ -223,42 +232,88 @@ export function useVencimientos(sucursalId: string | null): UseVencimientosRetur
     let conRiesgo: VencimientoConRiesgo[] = conRiesgoBase
 
     if (conRiesgoBase.length > 0) {
-      const { data: intervencionesRag, error: intervencionesRagError } = await supabase
-        .from('intervenciones_rag')
-        .select('vencimiento_id, porcentaje_descuento, aplicado_at, finalizado_at, motivo_finalizacion, nota_finalizacion')
-        .in('vencimiento_id', conRiesgoBase.map((row) => row.id))
-        .order('aplicado_at', { ascending: false })
+      const ids = conRiesgoBase.map((row) => row.id)
+      const [intervencionesResult, observacionesResult] = await Promise.all([
+        supabase
+          .from('intervenciones_rag')
+          .select('vencimiento_id, tipo, porcentaje_descuento, nota, aplicado_at, finalizado_at, motivo_finalizacion, nota_finalizacion')
+          .in('vencimiento_id', ids)
+          .order('aplicado_at', { ascending: false }),
+        supabase
+          .from('vencimiento_observaciones')
+          .select('id, vencimiento_id, observada_at, no_venta_respuesta')
+          .in('vencimiento_id', ids)
+          .order('observada_at', { ascending: false })
+          .order('id', { ascending: false }),
+      ])
+
+      const { data: intervencionesRag, error: intervencionesRagError } = intervencionesResult
+      const { data: observaciones, error: observacionesError } = observacionesResult
 
       if (!intervencionesRagError) {
         const estadoPorVencimiento = new Map<string, {
           rag_porcentaje: number | null
           oferta_centralizada: boolean
           oferta_centralizada_nota: string | null
+          oferta_central_explicita: boolean
         }>()
 
         for (const row of (intervencionesRag ?? []) as IntervencionRagResumenRow[]) {
-          if (estadoPorVencimiento.has(row.vencimiento_id)) continue
+          const estado = estadoPorVencimiento.get(row.vencimiento_id) ?? {
+            rag_porcentaje: null,
+            oferta_centralizada: false,
+            oferta_centralizada_nota: null,
+            oferta_central_explicita: false,
+          }
 
-          const ragActivo = row.finalizado_at == null
+          if (
+            row.finalizado_at == null
+            && row.tipo === 'rag'
+            && estado.rag_porcentaje == null
+            && row.porcentaje_descuento != null
             && Number.isFinite(row.porcentaje_descuento)
             && row.porcentaje_descuento > 0
+          ) {
+            estado.rag_porcentaje = row.porcentaje_descuento
+          }
 
-          estadoPorVencimiento.set(row.vencimiento_id, {
-            rag_porcentaje: ragActivo ? row.porcentaje_descuento : null,
-            oferta_centralizada: !ragActivo && row.motivo_finalizacion === 'oferta_centralizada',
-            oferta_centralizada_nota: row.motivo_finalizacion === 'oferta_centralizada'
-              ? row.nota_finalizacion
-              : null,
-          })
+          if (row.finalizado_at == null && row.tipo === 'oferta_central') {
+            estado.oferta_centralizada = true
+            estado.oferta_centralizada_nota = row.nota
+            estado.oferta_central_explicita = true
+          } else if (
+            !estado.oferta_centralizada
+            && row.motivo_finalizacion === 'oferta_centralizada'
+          ) {
+            // Compatibilidad visual con el registro histórico anterior a C2.
+            estado.oferta_centralizada = true
+            estado.oferta_centralizada_nota = row.nota_finalizacion
+          }
+
+          estadoPorVencimiento.set(row.vencimiento_id, estado)
+        }
+
+        const ultimaObservacion = new Map<string, ObservacionIntervencionResumenRow>()
+        if (!observacionesError) {
+          for (const row of (observaciones ?? []) as ObservacionIntervencionResumenRow[]) {
+            if (!ultimaObservacion.has(row.vencimiento_id)) {
+              ultimaObservacion.set(row.vencimiento_id, row)
+            }
+          }
+        } else if (!vistaOperativaNoDisponible(observacionesError)) {
+          console.error('[useVencimientos] observaciones de intervención:', observacionesError)
         }
 
         conRiesgo = conRiesgoBase.map((row) => {
           const estado = estadoPorVencimiento.get(row.id)
+          const ultima = ultimaObservacion.get(row.id)
           return {
             ...row,
             rag_porcentaje: estado?.rag_porcentaje ?? null,
             oferta_centralizada: estado?.oferta_centralizada ?? false,
             oferta_centralizada_nota: estado?.oferta_centralizada_nota ?? null,
+            oferta_central_explicita: estado?.oferta_central_explicita ?? false,
+            transferencia_informada: ultima?.no_venta_respuesta === 'transferencia',
           }
         })
       } else if (!vistaOperativaNoDisponible(intervencionesRagError)) {

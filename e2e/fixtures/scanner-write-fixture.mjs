@@ -77,6 +77,9 @@ export async function installScannerWriteFixture(page, options = {}) {
     productVmd = 2,
     diasDonacion = 10,
     ragPorcentaje = null,
+    ofertaCentralActiva = false,
+    controlObservationId = null,
+    salidaContext = null,
   } = options
 
   await installNovenFixture(page)
@@ -139,6 +142,17 @@ export async function installScannerWriteFixture(page, options = {}) {
       if (rpc === 'registrar_control_vencimiento_dashboard') {
         rpcCalls.push({ name: rpc, body })
         if (controlSaveError) return route.fulfill(rpcError(controlSaveError))
+        const response = controlObservationId == null ? null : { observacion_id: controlObservationId }
+        return route.fulfill({ status: 200, headers: jsonHeaders(), body: JSON.stringify(response) })
+      }
+
+      if (rpc === 'contexto_salida_control') {
+        rpcCalls.push({ name: rpc, body })
+        return route.fulfill({ status: 200, headers: jsonHeaders(), body: JSON.stringify(salidaContext ? [salidaContext] : []) })
+      }
+
+      if (['informar_oferta_central', 'finalizar_oferta_central', 'finalizar_rag_vigente', 'declarar_salida_no_venta'].includes(rpc)) {
+        rpcCalls.push({ name: rpc, body })
         return route.fulfill({ status: 200, headers: jsonHeaders(), body: 'null' })
       }
 
@@ -174,6 +188,9 @@ export async function installScannerWriteFixture(page, options = {}) {
             velocidad_necesaria: null,
             dias_comerciales_restantes: 0,
             estado_seguimiento_rag: ragPorcentaje == null ? 'sin_rag' : 'pendiente_control_operador',
+            hay_oferta_central: ofertaCentralActiva,
+            intervenciones_abiertas: Number(ragPorcentaje != null) + Number(ofertaCentralActiva),
+            medicion_atribuible: !(ragPorcentaje != null && ofertaCentralActiva),
           }
         : null
       return route.fulfill({ status: 200, headers: jsonHeaders(), body: JSON.stringify(row) })

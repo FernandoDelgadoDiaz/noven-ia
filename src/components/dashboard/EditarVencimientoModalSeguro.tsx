@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   AlertTriangle,
+  ArrowRightLeft,
   CheckCircle,
   CircleOff,
   Percent,
   Save,
+  Tags,
   Trash2,
   X,
 } from 'lucide-react'
@@ -28,6 +30,12 @@ import ProductIdentity from '@/components/product/ProductIdentity'
 import type { EstadoSeguimientoRag } from '@/types/index'
 import { useEscalaRag } from '@/hooks/useEscalaRag'
 import { coberturaComoPorcentaje, evaluarSugerencia } from '@/lib/ragCobertura'
+import {
+  CAUSAS_NO_VENTA,
+  evaluarSalidaAnomala,
+  type ContextoSalida,
+  type RespuestaNoVenta,
+} from '@/lib/salidaAnomala'
 
 interface VencimientoParaEditar {
   id: string
@@ -63,6 +71,14 @@ interface SeguimientoRagRow {
   dias_desde_ultimo_rag: number | null
   dias_comerciales_restantes: number
   estado_seguimiento_rag: EstadoSeguimientoRag
+  hay_oferta_central: boolean
+  intervenciones_abiertas: number
+  medicion_atribuible: boolean
+}
+
+interface SalidaPendiente {
+  observacionId: number
+  bajada: number
 }
 
 interface Props {
@@ -72,7 +88,7 @@ interface Props {
   onImagenActualizada?: (url: string) => void
 }
 
-type MotivoFinalizacionRag = 'oferta_centralizada' | 'decision_comercial' | 'otro'
+type MotivoFinalizacionRag = 'decision_comercial' | 'otro'
 
 const RAG_ESTADO_LABEL: Record<EstadoSeguimientoRag, string> = {
   decomiso: 'Producto vencido',
@@ -115,8 +131,13 @@ export default function EditarVencimientoModalSeguro({
   const [finalizandoRag, setFinalizandoRag] = useState(false)
   const [confirmarFinalizarRag, setConfirmarFinalizarRag] = useState(false)
   const { escala: escalaRag } = useEscalaRag()
-  const [motivoFinalizacionRag, setMotivoFinalizacionRag] = useState<MotivoFinalizacionRag>('oferta_centralizada')
+  const [motivoFinalizacionRag, setMotivoFinalizacionRag] = useState<MotivoFinalizacionRag>('decision_comercial')
   const [notaFinalizacionRag, setNotaFinalizacionRag] = useState('')
+  const [notaOfertaCentral, setNotaOfertaCentral] = useState('')
+  const [gestionandoOfertaCentral, setGestionandoOfertaCentral] = useState(false)
+  const [confirmarFinalizarOferta, setConfirmarFinalizarOferta] = useState(false)
+  const [salidaPendiente, setSalidaPendiente] = useState<SalidaPendiente | null>(null)
+  const [declarandoSalida, setDeclarandoSalida] = useState(false)
 
   const fotoInputRef = useRef<HTMLInputElement>(null)
   const [fotoUrl, setFotoUrl] = useState<string | null>(vencimiento.productos.imagen_url ?? null)
@@ -141,7 +162,7 @@ export default function EditarVencimientoModalSeguro({
       setCargandoRag(true)
       const { data, error: ragError } = await supabase
         .from('v_seguimiento_rag_actual')
-        .select('dias_donacion, rag_porcentaje, rag_aplicado_at, cantidad_base_rag, cantidad_observada, unidades_vendidas_observadas, velocidad_observada, velocidad_necesaria, dias_observados, dias_desde_ultimo_rag, dias_comerciales_restantes, estado_seguimiento_rag')
+        .select('dias_donacion, rag_porcentaje, rag_aplicado_at, cantidad_base_rag, cantidad_observada, unidades_vendidas_observadas, velocidad_observada, velocidad_necesaria, dias_observados, dias_desde_ultimo_rag, dias_comerciales_restantes, estado_seguimiento_rag, hay_oferta_central, intervenciones_abiertas, medicion_atribuible')
         .eq('vencimiento_id', vencimiento.id)
         .maybeSingle()
 
@@ -314,7 +335,7 @@ export default function EditarVencimientoModalSeguro({
     }
 
     setGuardando(true)
-    const { error: rpcError } = await supabase.rpc('registrar_control_vencimiento_dashboard', {
+    const { data: controlData, error: rpcError } = await supabase.rpc('registrar_control_vencimiento_dashboard', {
       p_vencimiento_id: vencimiento.id,
       p_cantidad_comprometida: cantidad,
       p_fecha_vencimiento: fechaVencimiento,
@@ -353,6 +374,45 @@ export default function EditarVencimientoModalSeguro({
       }
     }
 
+    const observacionId = Number((controlData as { observacion_id?: number } | null)?.observacion_id)
+    if (Number.isFinite(observacionId)) {
+      const { data: contextoData, error: contextoError } = await supabase.rpc(
+        'contexto_salida_control',
+        { p_observacion_id: observacionId },
+      )
+      if (!contextoError) {
+        const row = Array.isArray(contextoData) ? contextoData[0] : contextoData
+        if (row) {
+          const contexto = row as {
+            cantidad_previa: number | null
+            cantidad_actual: number | null
+            bajada: number | null
+            dias: number | null
+            velocidad_necesaria: number | null
+            umbral: number | null
+            ya_declarada: boolean
+          }
+          const decision = evaluarSalidaAnomala({
+            cantidadPrevia: contexto.cantidad_previa,
+            cantidadActual: contexto.cantidad_actual,
+            bajada: contexto.bajada,
+            dias: contexto.dias,
+            velocidadNecesaria: contexto.velocidad_necesaria,
+            umbral: contexto.umbral,
+            yaDeclarada: contexto.ya_declarada,
+          } satisfies ContextoSalida)
+          if (decision.preguntar && decision.bajada != null) {
+            setGuardando(false)
+            setSalidaPendiente({ observacionId, bajada: decision.bajada })
+            onGuardado()
+            return
+          }
+        }
+      } else {
+        console.error('[EditarVencimientoModalSeguro] contexto salida:', contextoError)
+      }
+    }
+
     setGuardando(false)
     onGuardado()
     onClose()
@@ -364,23 +424,11 @@ export default function EditarVencimientoModalSeguro({
       setConfirmarFinalizarRag(false)
       return
     }
-    if (!Number.isFinite(cantidad) || cantidad <= 0 || !fechaVencimiento || !Number.isFinite(stockActual) || stockActual < 0) {
-      setError('Revisá stock, fecha y cantidad antes de finalizar el RAG.')
-      setConfirmarFinalizarRag(false)
-      return
-    }
-
-    const notaSegura = notaFinalizacionRag.replaceAll('|', '/').trim()
-    const comando = `FINALIZAR_RAG|${motivoFinalizacionRag}|${notaSegura}`
-
     setFinalizandoRag(true)
-    const { error: rpcError } = await supabase.rpc('registrar_control_vencimiento_dashboard', {
+    const { error: rpcError } = await supabase.rpc('finalizar_rag_vigente', {
       p_vencimiento_id: vencimiento.id,
-      p_cantidad_comprometida: cantidad,
-      p_fecha_vencimiento: fechaVencimiento,
-      p_stock_actual: stockActual,
-      p_porcentaje_rag: 0,
-      p_nota: comando,
+      p_motivo: motivoFinalizacionRag,
+      p_nota: notaFinalizacionRag.trim() || null,
     })
     setFinalizandoRag(false)
 
@@ -391,6 +439,68 @@ export default function EditarVencimientoModalSeguro({
     }
 
     setConfirmarFinalizarRag(false)
+    onGuardado()
+    onClose()
+  }
+
+  function hayControlSinGuardar(): boolean {
+    return stockActual !== vencimiento.productos.stock_actual
+      || fechaVencimiento !== vencimiento.fecha_vencimiento
+      || cantidad !== vencimiento.cantidad
+  }
+
+  async function handleInformarOfertaCentral(): Promise<void> {
+    setError(null)
+    if (hayControlSinGuardar()) {
+      setError('Registrá primero el control para que la oferta comience con ese stock conocido.')
+      return
+    }
+
+    setGestionandoOfertaCentral(true)
+    const { error: rpcError } = await supabase.rpc('informar_oferta_central', {
+      p_vencimiento_id: vencimiento.id,
+      p_nota: notaOfertaCentral.trim() || null,
+    })
+    setGestionandoOfertaCentral(false)
+    if (rpcError) {
+      setError(`No se pudo informar la oferta central: ${rpcError.message}`)
+      return
+    }
+    onGuardado()
+    onClose()
+  }
+
+  async function handleFinalizarOfertaCentral(): Promise<void> {
+    setError(null)
+    setGestionandoOfertaCentral(true)
+    const { error: rpcError } = await supabase.rpc('finalizar_oferta_central', {
+      p_vencimiento_id: vencimiento.id,
+      p_nota: notaOfertaCentral.trim() || null,
+    })
+    setGestionandoOfertaCentral(false)
+    if (rpcError) {
+      setError(`No se pudo finalizar la oferta central: ${rpcError.message}`)
+      setConfirmarFinalizarOferta(false)
+      return
+    }
+    setConfirmarFinalizarOferta(false)
+    onGuardado()
+    onClose()
+  }
+
+  async function handleDeclararSalida(respuesta: RespuestaNoVenta): Promise<void> {
+    if (!salidaPendiente) return
+    setDeclarandoSalida(true)
+    const { error: rpcError } = await supabase.rpc('declarar_salida_no_venta', {
+      p_observacion_id: salidaPendiente.observacionId,
+      p_respuesta: respuesta,
+    })
+    setDeclarandoSalida(false)
+    if (rpcError) {
+      setError(`No se pudo registrar la salida: ${rpcError.message}`)
+      return
+    }
+    setSalidaPendiente(null)
     onGuardado()
     onClose()
   }
@@ -430,7 +540,8 @@ export default function EditarVencimientoModalSeguro({
 
   const badge = BADGE_CONFIG[nivelCalculado]
   const riskViz = RISK_VISUAL[nivelCalculado]
-  const ocupado = guardando || cerrandoVendido || anulando || subiendoFoto || finalizandoRag
+  const ocupado = guardando || cerrandoVendido || anulando || subiendoFoto
+    || finalizandoRag || gestionandoOfertaCentral || declarandoSalida
   const puedeEditarFoto = modoFoto === 'agregar' || modoFoto === 'reemplazar'
   const inputCls = 'w-full h-11 px-3 bg-surface-base border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150'
 
@@ -489,8 +600,17 @@ export default function EditarVencimientoModalSeguro({
             <p className="text-[11px] text-muted-foreground mt-1">Si llega a 0, Noven te pedirá confirmar el cierre como vendido.</p>
           </Campo>
 
-          {(puedeGestionarRag || seguimientoRag?.rag_porcentaje != null) && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3.5 space-y-3">
+          <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 space-y-3">
+            <div className="flex items-center gap-2">
+              <Tags className="h-4 w-4 text-slate-700" />
+              <div>
+                <p className="text-xs font-bold">Intervenciones</p>
+                <p className="text-[11px] text-muted-foreground">Informá sólo lo que está aplicado en góndola.</p>
+              </div>
+            </div>
+
+            {(puedeGestionarRag || seguimientoRag?.rag_porcentaje != null) && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-3">
               <div className="flex items-center gap-2"><Percent className="h-4 w-4 text-amber-700" /><div><p className="text-xs font-bold">RAG · Retiro Anticipado de Góndola</p><p className="text-[11px] text-muted-foreground">Descuento aplicado en Glaciar.</p></div></div>
               <input type="number" min={1} max={100} step="0.01" value={ragPorcentaje} onChange={(e) => setRagPorcentaje(e.target.value)} disabled={!puedeGestionarRag} placeholder="Ej. 30" className={inputCls} />
               {cargandoRag ? <p className="text-[11px] text-muted-foreground">Cargando seguimiento…</p> : seguimientoRag?.rag_porcentaje != null ? (
@@ -549,7 +669,58 @@ export default function EditarVencimientoModalSeguro({
                 </div>
               ) : <p className="text-[11px] text-muted-foreground">Todavía no hay un RAG registrado.</p>}
             </div>
-          )}
+            )}
+
+            <div className="rounded-lg border border-sky-200 bg-sky-50/60 p-3 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <Tags className="h-4 w-4 text-sky-700" />
+                <div className="flex-1">
+                  <p className="text-xs font-bold">Oferta central</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {seguimientoRag?.hay_oferta_central
+                      ? 'Informada como activa en góndola.'
+                      : 'No informada en NoVen.'}
+                  </p>
+                </div>
+                {seguimientoRag?.hay_oferta_central && (
+                  <span className="text-[10px] font-semibold rounded-full border border-sky-200 bg-white px-2 py-0.5 text-sky-700">Activa</span>
+                )}
+              </div>
+              <input
+                type="text"
+                value={notaOfertaCentral}
+                onChange={(e) => setNotaOfertaCentral(e.target.value)}
+                placeholder="Detalle opcional, ej. 2x1"
+                className={inputCls}
+              />
+              {seguimientoRag?.hay_oferta_central ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmarFinalizarOferta(true)}
+                  disabled={ocupado}
+                  className="w-full h-9 flex items-center justify-center gap-2 rounded-lg border border-sky-300 bg-white text-sky-800 font-semibold text-xs disabled:opacity-50"
+                >
+                  <CircleOff className="h-3.5 w-3.5" />Finalizar oferta central
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleInformarOfertaCentral()}
+                  disabled={ocupado}
+                  className="w-full h-9 flex items-center justify-center gap-2 rounded-lg border border-sky-400 bg-white text-sky-800 font-semibold text-xs disabled:opacity-50"
+                >
+                  <Tags className="h-3.5 w-3.5" />
+                  {gestionandoOfertaCentral ? 'Informando…' : 'Informar oferta central'}
+                </button>
+              )}
+            </div>
+
+            {seguimientoRag != null && seguimientoRag.intervenciones_abiertas > 1 && (
+              <p className="text-[10px] text-slate-600">
+                RAG y oferta central conviven. La salida observada es combinada y no se atribuye a una sola intervención.
+              </p>
+            )}
+          </div>
 
           {error && <div className="flex gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5"><AlertTriangle className="h-4 w-4 text-red-500 shrink-0" /><p className="text-red-600 text-xs">{error}</p></div>}
         </div>
@@ -598,7 +769,6 @@ export default function EditarVencimientoModalSeguro({
                 onChange={(e) => setMotivoFinalizacionRag(e.target.value as MotivoFinalizacionRag)}
                 className={inputCls}
               >
-                <option value="oferta_centralizada">Oferta/promoción centralizada</option>
                 <option value="decision_comercial">Decisión comercial</option>
                 <option value="otro">Otro motivo</option>
               </select>
@@ -610,13 +780,57 @@ export default function EditarVencimientoModalSeguro({
                 type="text"
                 value={notaFinalizacionRag}
                 onChange={(e) => setNotaFinalizacionRag(e.target.value)}
-                placeholder="Ej. 2x1 centralizado"
+                placeholder="Detalle del motivo"
                 className={inputCls}
               />
             </div>
             <div className="flex gap-2">
               <button type="button" onClick={() => setConfirmarFinalizarRag(false)} disabled={finalizandoRag} className="flex-1 h-11 rounded-xl border border-border text-sm font-medium">Cancelar</button>
               <button type="button" onClick={() => void handleFinalizarRag()} disabled={finalizandoRag} className="flex-1 h-11 rounded-xl bg-slate-800 text-white text-sm font-bold disabled:opacity-50">{finalizandoRag ? 'Finalizando…' : 'Finalizar RAG'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmarFinalizarOferta && seguimientoRag?.hay_oferta_central && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-white rounded-[24px] shadow-2xl p-5 space-y-4">
+            <div>
+              <p className="font-bold text-foreground">Finalizar oferta central</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Sólo se cerrará la oferta central. El RAG seguirá vigente si está activo.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setConfirmarFinalizarOferta(false)} disabled={gestionandoOfertaCentral} className="flex-1 h-11 rounded-xl border border-border text-sm font-medium">Cancelar</button>
+              <button type="button" onClick={() => void handleFinalizarOfertaCentral()} disabled={gestionandoOfertaCentral} className="flex-1 h-11 rounded-xl bg-sky-700 text-white text-sm font-bold disabled:opacity-50">{gestionandoOfertaCentral ? 'Finalizando…' : 'Finalizar oferta'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {salidaPendiente && (
+        <div className="fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-white rounded-[24px] shadow-2xl p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="rounded-xl bg-violet-50 p-2 text-violet-700"><ArrowRightLeft className="h-5 w-5" /></div>
+              <div>
+                <p className="font-bold text-foreground">¿Qué pasó con {salidaPendiente.bajada.toLocaleString('es-AR')} unidades?</p>
+                <p className="text-sm text-muted-foreground mt-1">Marcá si salieron por venta o por otra causa. NoVen descuenta las transferencias de la venta medida.</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {CAUSAS_NO_VENTA.map((causa) => (
+                <button
+                  key={causa.valor}
+                  type="button"
+                  onClick={() => void handleDeclararSalida(causa.valor)}
+                  disabled={declarandoSalida}
+                  className="w-full h-11 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-800 disabled:opacity-50"
+                >
+                  {causa.etiqueta}
+                </button>
+              ))}
             </div>
           </div>
         </div>
