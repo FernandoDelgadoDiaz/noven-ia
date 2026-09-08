@@ -64,7 +64,7 @@ vieja. Siempre hay que volver a consultar el `master` remoto.
 - Alcance: fijar cómo se incorporan los nuevos estados conservando la tarjeta del
   Dashboard y el modal de control actuales.
 - Cambios productivos o de base: ninguno; sólo documentación.
-- PR: debe enlazarse aquí al abrirlo.
+- PR: [#170](https://github.com/FernandoDelgadoDiaz/noven-ia/pull/170).
 
 ## Decisiones de producto ya fijadas
 
