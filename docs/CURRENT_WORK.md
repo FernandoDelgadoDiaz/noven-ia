@@ -189,6 +189,13 @@ Después de cerrar A, B y C y superar la condición de evidencia:
   C1 no figura en el ledger, sigue vigente el índice anterior por
   `vencimiento_id`, y ambas vistas productivas conservan
   `security_invoker=true`. No ejecutó DDL ni modificó filas.
+- Completó las precondiciones de datos de C1 en producción mediante consultas de
+  sólo lectura: existen 20 intervenciones, todas de tipo `rag`; 15 permanecen
+  vigentes y no hay grupos duplicados vigentes por `(vencimiento_id, tipo)`.
+- Transmitió la corrección de seguridad a la rama como `638d288`. Para continuar
+  falta ejecutar nuevamente `Regenerar expectativa del replay` sobre esa rama;
+  al corte de este registro GitHub sólo mostraba el run anterior sobre
+  `494d573`, por lo que ningún artefacto nuevo puede aceptarse todavía.
 - La expectativa descargada se considera descartada. Debe generarse otra desde
   la migración corregida; `expected-fingerprint.json` permanece intacto.
 - Verificación posterior al arreglo: el contrato C1 pasa y una mutación que
