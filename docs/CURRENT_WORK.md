@@ -52,8 +52,9 @@ vieja. Siempre hay que volver a consultar el `master` remoto.
 - Head recibido de Claude Code: `494d573`.
 - Propiedad: Codex la asumió el 2026-09-08; Claude Code no debe modificarla
   mientras este estado siga vigente.
-- Estado: corrección de seguridad y regeneración de expectativa móvil en curso;
-  todavía no hay PR ni cambios productivos.
+- Estado: corrección de seguridad y expectativa móvil verificadas; falta
+  transmitir los dos artefactos, abrir el PR y ejecutar el CI completo. Todavía
+  no hay cambios productivos.
 - Alcance: permitir un RAG y una oferta central simultáneos sin que uno cierre al
   otro; separar sus tramos; mostrar una sola medición combinada y marcarla como
   no atribuible cuando se superponen.
@@ -115,6 +116,8 @@ operativas (bloque C2)".
   primera regeneración demostró que `v_intervencion_tramos` lo perdía.
 - Regenerar la expectativa móvil después del arreglo; el artefacto del run
   `34062416239` no es válido para merge porque captura el esquema inseguro.
+- Artefacto válido: run `34176477330`, sobre `85a82b8`; checksum ZIP
+  `6dd14df41f1fcbe17fa5ae7bf2cd47f47d2bc20493c07761478c669214c7f7f2`.
 - Confirmar que cada escritura, finalización, instrumentación y tramo esté
   acotado por tipo.
 - Abrir PR pequeño, ejecutar CI completo y mergear sólo en verde.
@@ -193,18 +196,28 @@ Después de cerrar A, B y C y superar la condición de evidencia:
   sólo lectura: existen 20 intervenciones, todas de tipo `rag`; 15 permanecen
   vigentes y no hay grupos duplicados vigentes por `(vencimiento_id, tipo)`.
 - Transmitió la corrección de seguridad a la rama como `638d288`. Para continuar
-  falta ejecutar nuevamente `Regenerar expectativa del replay` sobre esa rama;
-  al corte de este registro GitHub sólo mostraba el run anterior sobre
-  `494d573`, por lo que ningún artefacto nuevo puede aceptarse todavía.
-- La expectativa descargada se considera descartada. Debe generarse otra desde
-  la migración corregida; `expected-fingerprint.json` permanece intacto.
-- Verificación posterior al arreglo: el contrato C1 pasa y una mutación que
-  elimina el `ALTER VIEW` nuevo falla en la aserción correcta. `npm run lint`
-  queda con cero errores y el warning preexistente de `ScannerModal.tsx`;
-  `npm run build` pasa. `npm test` queda en 112/113: falla únicamente
-  `migration-replay-moving-expectation` porque el hash de la migración cambió y
-  la expectativa descartada ya no coincide. Es el fallo esperado hasta volver a
-  correr el workflow de regeneración; no se corrige localmente.
+  ejecutó nuevamente `Regenerar expectativa del replay` después de documentar
+  las precondiciones como `85a82b8`.
+- Validó el run nuevo `34176477330`: terminó verde sobre el head exacto
+  `85a82b8`. Su artefacto `expectativa-replay-regenerada` pesa 36.521 bytes,
+  coincide byte a byte con el SHA-256 publicado y contiene únicamente
+  `expected-replay-fingerprint.json` y `replay-expectation.json`.
+- El diff contra `master` es el esperado y no tiene cambios de opciones, ACL,
+  RLS ni policies: modifica dos funciones y dos vistas, quita el índice único
+  vigente por vencimiento y agrega el índice único vigente por
+  `(vencimiento_id, tipo)`.
+- Con la expectativa nueva: `npm test` pasa 113/113, `npm run lint` pasa con cero
+  errores y el warning preexistente de `ScannerModal.tsx`, y `npm run build`
+  pasa. El checksum del ancla permanece
+  `0da259b3b5d37dc241d9358d8ed883614a856dc8fc71fdd62a3f80ffe79de0b2`.
+- Antes del commit final revalidó `master` en `8191a9e`, la rama en `85a82b8`,
+  únicamente los PR #160 y #118 abiertos, y producción sin C1 en el ledger,
+  con el índice anterior y ambas vistas todavía en `security_invoker=true`.
+- La expectativa del run viejo quedó descartada y el fallo transitorio 112/113
+  de `migration-replay-moving-expectation` quedó resuelto exclusivamente con el
+  artefacto nuevo; no se regeneró localmente ni se modificó el ancla.
+- El contrato C1 pasa y una mutación que elimina el `ALTER VIEW` nuevo falla en
+  la aserción correcta, demostrando que la regresión vuelve a ser detectable.
 - Un merge accidental ocurrió sólo en un worktree local ajeno a C1; se restauró
   el ref exacto y se dejó una referencia local recuperable. Nunca se transmitió
   a GitHub ni afectó producción.
