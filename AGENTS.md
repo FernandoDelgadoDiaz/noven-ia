@@ -51,7 +51,10 @@ Implementación en `src/lib/riesgo.ts`. Reglas completas en `docs/RISK_AND_RAG_R
 - `npm run build` — build de producción
 - `npm run lint` — linting
 - `npm test` — suite de contratos (`scripts/tests/*.test.mjs`)
-- `npx playwright test` — E2E de navegador (contra Supabase interceptado por fixture)
+- Playwright E2E — el CI instala temporalmente `@playwright/test@1.55.0` y
+  Chromium antes de ejecutarlo. `npm ci` por sí solo no habilita
+  `npx playwright test`; para reproducirlo localmente, seguir los pasos de
+  instalación y symlink de `.github/workflows/ci.yml`, o usar el CI del PR.
 
 ## Referencias
 

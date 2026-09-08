@@ -1,6 +1,6 @@
 # Circuito de validación y ejecución centralizada de RAG
 
-**Estado: PLANTEO DE PRODUCTO. No implementar todavía.**
+**Estado: CONTRATO APROBADO · IMPLEMENTACIÓN POR BLOQUES AUTORIZADA.**
 
 Va después de la oferta central —bloques A, B y C—. Los principios normativos
 que lo gobiernan viven en `PRODUCT_VISION.md`, sección "Recomendación,
@@ -326,18 +326,37 @@ calibrar bien los umbrales importa más de lo que se pensaba.
 
 ---
 
-## Por qué esto va después, y qué falta antes
+## Secuencia de implementación y evidencia
 
 **Primero hay que cerrar la oferta central** (bloques A, B y C): declararla desde
 el inicio, finalizarla, que conviva con RAG, y las salidas que no son venta.
 
-**Y falta evidencia de uso.** La sugerencia todavía no se aceptó nunca en
-producción. Construir un circuito de autorización sobre una recomendación que
-nadie validó es armar el proceso antes de saber si el consejo sirve.
+**Decisión del 2026-09-08:** la evidencia no se inventa ni se reemplaza con datos
+fabricados, pero tampoco se obtiene esperando fuera del circuito. El propio
+flujo operativo —sugerir, validar, ejecutar, confirmar y volver a controlar— es
+el mecanismo que la produce. Por eso la implementación empieza una vez cerrados
+A, B y C, condición que ya se cumplió.
 
-Conviene tener **veinte o treinta sugerencias aceptadas y medidas** antes de
-arrancar. Si resulta que la mitad de las veces se elige otro porcentaje, el
-circuito hay que diseñarlo distinto.
+La muestra de **veinte a treinta sugerencias aceptadas y medidas** conserva otro
+papel: es condición para afirmar efectividad histórica, recalibrar umbrales,
+recomendar a partir de antecedentes o aumentar autonomía. No es condición para
+construir la coordinación y trazabilidad que permiten obtener esa muestra.
+
+Hasta que exista evidencia suficiente:
+
+- el porcentaje proviene únicamente del motor determinístico vigente;
+- ningún histórico aislado modifica la sugerencia;
+- la interfaz distingue “evidencia insuficiente” de “intervención inefectiva”;
+- toda solicitud, ejecución, confirmación y control queda registrada para formar
+  la muestra real.
+
+La implementación se divide en bloques acumulativos:
+
+1. modelo de solicitud, máquina de estados y permisos;
+2. validación gerencial y seguimiento desde la sucursal;
+3. bandeja zonal y ejecución individual;
+4. confirmación o rechazo en góndola y apertura del tramo sólo al confirmar;
+5. exportación, impresión y ejecución por lote.
 
 ---
 

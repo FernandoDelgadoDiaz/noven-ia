@@ -69,4 +69,5 @@ Implementación en `src/lib/riesgo.ts`. Reglas de negocio completas, incluido el
 
 No hay agentes autónomos: la capa de IA es analítica, no ejecuta el ciclo agentic descrito en `PRODUCT_VISION.md`.
 
-El proveedor está **pendiente de decisión** — ítem 1.5 de `docs/PRE_PRODUCTION_HARDENING_PLAN.md`.
+OpenAI es el proveedor aprobado y desplegado para este análisis; los límites,
+retención y condiciones de reevaluación están registrados en `ai/decisions.md`.

@@ -95,3 +95,27 @@ Contra eso, mover datos productivos a un proyecto nuevo tiene costo real: un pro
 3. **Desafío 5S vuelve a estar activo.** Es la condición ya registrada el 2026-09-01, y se conserva sin cambios: reactivar sobre el proyecto de NoVen no es una opción.
 
 Hasta que ocurra alguno, esto es una decisión tomada y no un pendiente. Si se revisa, se revisa por uno de esos tres hechos, no por acumulación de tiempo.
+
+## Construir el circuito RAG centralizado antes de reunir la muestra — 2026-09-08
+
+**Decisión:** implementar desde ahora el circuito trazable de solicitud,
+validación, ejecución centralizada, confirmación en góndola y control posterior.
+La muestra de veinte a treinta sugerencias aceptadas y medidas no es una
+precondición para construir esa infraestructura.
+
+**Motivo:** la evidencia no se inventa; se construye con la operación. Sin un
+flujo que separe y registre cada acto no existe una forma confiable de producir
+los antecedentes que luego permitan evaluar el motor. Esperar la muestra fuera
+del circuito dejaría los hechos sin trazabilidad o impediría que ocurrieran.
+
+**Guardarraíl hasta reunir evidencia suficiente:** el porcentaje informado sale
+únicamente del motor determinístico vigente. Ningún antecedente aislado puede
+alterar la sugerencia, y no se puede afirmar efectividad histórica, recalibrar
+umbrales ni aumentar autonomía antes de contar con la muestra real acordada. La
+UI debe distinguir evidencia insuficiente de una intervención medida e
+inefectiva.
+
+**Secuencia:** modelo y máquina de estados; validación gerencial; bandeja y
+ejecución zonal; confirmación o rechazo en góndola; exportación, impresión y
+operación por lote. La solicitud no crea ni inicia una intervención: el tramo
+empieza únicamente después de confirmar que el cambio está aplicado.
