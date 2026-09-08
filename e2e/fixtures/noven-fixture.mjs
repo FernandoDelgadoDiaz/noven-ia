@@ -101,6 +101,8 @@ function jsonHeaders(extra = {}) {
 export async function installNovenFixture(page, options = {}) {
   const {
     profileActive = true,
+    interventions = [],
+    observations = [],
     accesses = [
       {
         id: IDS.accessOrg,
@@ -197,6 +199,12 @@ export async function installNovenFixture(page, options = {}) {
     }
     if (table === 'v_acciones_operativas_historial') {
       return route.fulfill({ status: 200, headers: jsonHeaders(), body: '[]' })
+    }
+    if (table === 'intervenciones_rag') {
+      return route.fulfill({ status: 200, headers: jsonHeaders(), body: JSON.stringify(interventions) })
+    }
+    if (table === 'vencimiento_observaciones') {
+      return route.fulfill({ status: 200, headers: jsonHeaders(), body: JSON.stringify(observations) })
     }
 
     return route.fulfill({ status: 200, headers: jsonHeaders(), body: '[]' })
