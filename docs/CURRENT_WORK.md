@@ -36,12 +36,13 @@ el siguiente agente debe considerarlo no transferido.
 
 ### Base productiva
 
-- `master`: `d4f6358` al corte de este documento.
+- `master`: `cfd9782` al corte funcional de C2B.
 - Bloque 5a · salidas de stock que no son venta: mergeado en PR #164.
 - Escalón cero implícito: mergeado en PR #166.
 - Bloque A · tramo y tipo de intervención: mergeado en PR #167.
 - Especificación del circuito RAG centralizado: mergeada en PR #168.
 - Bloque B · medición por tramo: mergeado en PR #169.
+- Bloque C2B · interfaz operativa de intervenciones: mergeado en PR #175.
 
 Los SHA son evidencia del corte, no una invitación a trabajar sobre una base
 vieja. Siempre hay que volver a consultar el `master` remoto.
@@ -83,8 +84,8 @@ vieja. Siempre hay que volver a consultar el `master` remoto.
   migración y cero duplicados vigentes por tipo.
 - El ledger productivo registró `20260908110244` frente al archivo Git
   `20260908103000`; la divergencia está inventariada y no debe normalizarse.
-- C2B fue rebasado sobre `master` después de cerrar y documentar C2A. Debe pasar
-  CI propio antes de habilitar la interfaz de operador.
+- C2B fue rebasado sobre `master` después de cerrar y documentar C2A, pasó su CI
+  propio y quedó publicado sin agregar migraciones ni tocar datos productivos.
 
 ## Decisiones de producto ya fijadas
 
@@ -136,15 +137,19 @@ operativas (bloque C2)".
   Git `20260906230000` está documentado en `history-manifest.json` y el ledger no
   fue normalizado.
 
-### Trabajo en curso de Codex · C2B
+### C2B · interfaz operativa de intervenciones · cerrado
 
-- Rama: `feat/c2b-ui-intervenciones-v2`, rebasada sobre `master` `d4f6358`. La
-  rama remota anterior `feat/c2b-ui-intervenciones` queda reemplazada y no debe
+- Rama cerrada: `feat/c2b-ui-intervenciones-v2`. La rama remota anterior
+  `feat/c2b-ui-intervenciones` queda reemplazada y ninguna de las dos debe
   recibir trabajo nuevo.
+- PR: [#175](https://github.com/FernandoDelgadoDiaz/noven-ia/pull/175).
+- Estado: mergeado en `master` como `cfd9782`. El CI del PR (run
+  `34247711407`) y el CI posterior del push a `master` (run `34248257950`)
+  terminaron completos en verde.
 - C2A ya está mergeado, aplicado y documentado; C2B no queda apilado sobre una
   rama pendiente.
-- El diff contra `master` contiene once archivos: interfaz, hooks, contratos,
-  fixtures E2E y este registro. No contiene migraciones ni fingerprints.
+- El cambio contiene once archivos: interfaz, hooks, contratos, fixtures E2E y
+  este registro. No contiene migraciones ni fingerprints.
 - El modal conserva stock, vencimiento y cantidad como acción principal, agrupa
   RAG y oferta central bajo **Intervenciones** y usa las RPC explícitas por tipo.
 - La tarjeta puede mostrar simultáneamente RAG, oferta central y la última
@@ -164,14 +169,20 @@ operativas (bloque C2)".
   verde. El ancla `expected-fingerprint.json` sigue intacta con SHA-256
   `0da259b3b5d37dc241d9358d8ed883614a856dc8fc71fdd62a3f80ffe79de0b2`.
 - No agrega migraciones, roles, bandejas ni el circuito zonal futuro.
+- Despliegue productivo verificado en `https://noven-ia.netlify.app`: producción
+  sirve exactamente los mismos artefactos aprobados en el deploy preview del PR
+  #175 (`index-BivikMc6.js` e `index-tzOks5gh.css`). La ruta pública `/login`
+  respondió correctamente. No se usaron credenciales ni se hicieron acciones
+  operativas para esta comprobación.
 
 ### 3 · Construir C2 · oferta central en las pantallas actuales
 
 - C2A cerró el bloqueo de las operaciones por tipo en PR #173.
-- C2B adapta el modal y la tarjeta actuales, sin inferencia ni fechas
-  retroactivas, y conecta la declaración de transferencia sin contarla como
-  venta.
-- Falta publicar C2B, obtener CI completo verde, mergear y verificar el deploy.
+- C2B cerró en PR #175: adapta el modal y la tarjeta actuales, sin inferencia ni
+  fechas retroactivas, y conecta la declaración de transferencia sin contarla
+  como venta.
+- CI, merge y despliegue productivo verificados. C2 queda cerrado dentro del
+  alcance acordado para las pantallas operativas actuales.
 
 ### 4 · Reunir evidencia antes del circuito zonal
 
@@ -194,7 +205,6 @@ Después de cerrar A, B y C y superar la condición de evidencia:
 
 ## Pendientes concretos
 
-- C2B: cerrar CI, merge y verificación del deploy de la interfaz mínima.
 - Reunir evidencia real de veinte a treinta sugerencias aceptadas y medidas.
 - Construir las bandejas del gerente y de la administrativa sólo después de esa
   evidencia.
@@ -205,6 +215,14 @@ Después de cerrar A, B y C y superar la condición de evidencia:
 
 ### 2026-09-08 · Codex
 
+- Cerró C2B en PR #175 como `cfd9782`. El run `34247711407` del PR y el run
+  `34248257950` del push a `master` pasaron la suite completa, incluidos los 115
+  contratos, baseline/replay, Supabase local, Gates 1–3 y Playwright.
+- Verificó el despliegue de C2B en Netlify sin iniciar sesión ni modificar datos:
+  producción y el preview aprobado del PR #175 sirven el mismo bundle JavaScript
+  `index-BivikMc6.js` y la misma hoja `index-tzOks5gh.css`.
+- C2B fue únicamente una publicación de interfaz y contratos; no agregó ni
+  aplicó migraciones y no produjo escrituras de negocio en producción.
 - Rebasó C2B sobre `master` `d4f6358` una vez cerrados C2A y su registro de
   ledger. La rama conserva once archivos de interfaz, contratos y continuidad,
   sin migraciones ni cambios de esquema.
