@@ -43,11 +43,13 @@ Fecha de corte: **2026-09-08**.
 - Base revisada: `origin/master` en `1f2a9b8`.
 - Último CI de esa base: run `34250337992`, completo en verde.
 - Rama activa: `docs/current-work-operational-rule`.
+- Head remoto: `17b6443` al abrir el PR.
 - Propietario de la rama: Codex hasta merge o relevo explícito.
 - Alcance de la rama: continuidad pública, reconciliación de estados y decisión
   de iniciar el circuito RAG. No contiene código productivo ni migraciones.
-- Publicación: autorizada por el responsable en versión reducida. PR todavía no
-  abierto al momento de este corte.
+- Publicación: autorizada por el responsable en versión reducida. PR
+  [#177](https://github.com/FernandoDelgadoDiaz/noven-ia/pull/177) abierto contra
+  `master`; CI pendiente.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -129,13 +131,12 @@ Ejecutadas y repetidas el 2026-09-08 después de reducir el checkpoint público:
 
 ## Próximo paso ejecutable
 
-1. Publicar `docs/current-work-operational-rule` y abrir un PR contra `master`.
-2. Esperar el CI completo; no mergear con gates fallidos.
-3. Mergear la reconciliación y comprobar el CI posterior de `master`.
-4. Cerrar PR #160 como reemplazado, conservando su historial.
-5. Crear desde el nuevo `master` una rama pequeña para el bloque 1 del circuito:
+1. Esperar el CI completo del PR #177; no mergear con gates fallidos.
+2. Mergear la reconciliación y comprobar el CI posterior de `master`.
+3. Cerrar PR #160 como reemplazado, conservando su historial.
+4. Crear desde el nuevo `master` una rama pequeña para el bloque 1 del circuito:
    modelo de solicitud, estados y permisos.
-6. Diseñar migración y contratos sin aplicar SQL en producción dentro de ese
+5. Diseñar migración y contratos sin aplicar SQL en producción dentro de ese
    primer PR.
 
 ## Protocolo de relevo
@@ -164,3 +165,6 @@ Ejecutadas y repetidas el 2026-09-08 después de reducir el checkpoint público:
   versión reducida; se retiraron datos operativos y hallazgos sensibles sin
   eliminar estados, pruebas, decisiones ni próximos pasos.
 - La validación local quedó verde según “Pruebas de la rama activa”.
+- Publicó la rama reducida mediante la conexión autorizada de GitHub y abrió el
+  PR #177 contra `master`. El cliente Git local no tenía credenciales; no se
+  cambió la configuración ni se intentó eludir la autenticación.
