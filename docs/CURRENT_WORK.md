@@ -4,7 +4,7 @@
 qué quedó terminado y cuál es el siguiente paso. Debe actualizarse en el mismo
 PR que cambie alguno de esos estados.
 
-Fecha de corte: **2026-09-07**.
+Fecha de corte: **2026-09-08**.
 
 ## Qué documento responde cada pregunta
 
@@ -36,7 +36,7 @@ el siguiente agente debe considerarlo no transferido.
 
 ### Base productiva
 
-- `master`: `367d35a` al corte de este documento.
+- `master`: `8191a9e` al corte de este documento.
 - Bloque 5a · salidas de stock que no son venta: mergeado en PR #164.
 - Escalón cero implícito: mergeado en PR #166.
 - Bloque A · tramo y tipo de intervención: mergeado en PR #167.
@@ -46,27 +46,30 @@ el siguiente agente debe considerarlo no transferido.
 Los SHA son evidencia del corte, no una invitación a trabajar sobre una base
 vieja. Siempre hay que volver a consultar el `master` remoto.
 
-### Trabajo en curso de Claude Code · C1
+### Trabajo en curso de Codex · C1
 
 - Rama: `feat/convivencia-rag-oferta-central`.
-- Head visible al corte: `494d573`.
-- Estado: dos commits por delante de `master`, todavía no mergeados.
+- Head recibido de Claude Code: `494d573`.
+- Propiedad: Codex la asumió el 2026-09-08; Claude Code no debe modificarla
+  mientras este estado siga vigente.
+- Estado: corrección y expectativa móvil transmitidas; PR #171 abierto y
+  pendiente de CI completo. Todavía no hay cambios productivos.
 - Alcance: permitir un RAG y una oferta central simultáneos sin que uno cierre al
   otro; separar sus tramos; mostrar una sola medición combinada y marcarla como
   no atribuible cuando se superponen.
 - C1 no crea ofertas centrales, no cambia la UI y no agrega el circuito zonal.
-- Mientras Claude Code no esté trabajando, la rama queda congelada. Otro agente
-  puede revisarla, pero no debe modificarla sin asumir expresamente su propiedad.
+- La primera expectativa móvil de C1 queda descartada: describía
+  `v_intervencion_tramos` sin `security_invoker=true`. No debe copiarse ni
+  commitearse aunque su workflow haya terminado verde.
 
-### Trabajo de Codex · contrato UX previo a C2
+### Contrato UX previo a C2 · cerrado
 
 - Rama: `docs/c2-ux-operator-contract`.
 - Alcance: fijar cómo se incorporan los nuevos estados conservando la tarjeta del
   Dashboard y el modal de control actuales.
 - Cambios productivos o de base: ninguno; sólo documentación.
 - PR: [#170](https://github.com/FernandoDelgadoDiaz/noven-ia/pull/170).
-- Estado autocontenido: mientras este archivo exista sólo en la rama, #170 sigue
-  pendiente; cuando esta versión esté en `master`, el contrato UX queda cerrado.
+- Estado: mergeado en `master` como `8191a9e`, con CI completo verde.
 
 ## Decisiones de producto ya fijadas
 
@@ -101,14 +104,19 @@ operativas (bloque C2)".
 ### 1 · Cerrar el contrato UX
 
 - PR [#170](https://github.com/FernandoDelgadoDiaz/noven-ia/pull/170).
-- Esperar CI completo verde y mergear. Si esta versión del documento se está
-  leyendo desde `master`, este paso ya está cerrado.
+- Cerrado en `master` como `8191a9e`, con CI completo verde.
 - No modifica producción.
 
 ### 2 · Terminar y revisar C1
 
 - Revisar la rama `feat/convivencia-rag-oferta-central` contra el `master` más
   reciente y contra el contrato UX.
+- Restaurar `security_invoker=true` en las dos vistas reemplazadas por C1. La
+  primera regeneración demostró que `v_intervencion_tramos` lo perdía.
+- Regenerar la expectativa móvil después del arreglo; el artefacto del run
+  `34062416239` no es válido para merge porque captura el esquema inseguro.
+- Artefacto válido: run `34176477330`, sobre `85a82b8`; checksum ZIP
+  `6dd14df41f1fcbe17fa5ae7bf2cd47f47d2bc20493c07761478c669214c7f7f2`.
 - Confirmar que cada escritura, finalización, instrumentación y tramo esté
   acotado por tipo.
 - Abrir PR pequeño, ejecutar CI completo y mergear sólo en verde.
@@ -150,7 +158,8 @@ Después de cerrar A, B y C y superar la condición de evidencia:
 
 ## Pendientes concretos
 
-- C1: revisión, PR, CI, merge y posterior aplicación controlada.
+- C1: terminar la corrección de `security_invoker`, regenerar la expectativa,
+  revisar el nuevo diff estructural, abrir PR, CI, merge y aplicación controlada.
 - C2: esquema de operaciones por tipo, interfaz mínima y pruebas.
 - Resolver técnicamente la presentación de transferencia como acción visible sin
   confundirla con una intervención de precio ni con una venta.
@@ -161,6 +170,61 @@ Después de cerrar A, B y C y superar la condición de evidencia:
   `docs/PRE_PRODUCTION_HARDENING_PLAN.md`.
 
 ## Registro de actividad
+
+### 2026-09-08 · Codex
+
+- Mergeó el contrato UX en PR #170 como `8191a9e`; CI completo verde y ninguna
+  modificación de producción.
+- Asumió expresamente la rama C1 desde `494d573` porque Claude Code quedó fuera
+  de actividad hasta el siguiente relevo.
+- Descargó el artefacto `expectativa-replay-regenerada` del run `34062416239` y
+  verificó el ZIP contra su digest SHA-256 publicado. Traía exactamente
+  `expected-replay-fingerprint.json` y `replay-expectation.json`.
+- El diff estructural reveló una regresión crítica: C1 hacía
+  `CREATE OR REPLACE VIEW public.v_intervencion_tramos` sin restaurar
+  `security_invoker=true`; la reloption pasaba de `["security_invoker=true"]` a
+  `null`. El trabajo se detuvo y Fernando fue avisado antes de PR o producción.
+- Tras autorización para continuar, agregó el `ALTER VIEW` faltante y amplió el
+  contrato de C1 para exigir `security_invoker=true` en las dos vistas que la
+  migración reemplaza.
+- Revalidó producción en modo de sólo lectura antes de transmitir la corrección:
+  C1 no figura en el ledger, sigue vigente el índice anterior por
+  `vencimiento_id`, y ambas vistas productivas conservan
+  `security_invoker=true`. No ejecutó DDL ni modificó filas.
+- Completó las precondiciones de datos de C1 en producción mediante consultas de
+  sólo lectura: existen 20 intervenciones, todas de tipo `rag`; 15 permanecen
+  vigentes y no hay grupos duplicados vigentes por `(vencimiento_id, tipo)`.
+- Transmitió la corrección de seguridad a la rama como `638d288`. Para continuar
+  ejecutó nuevamente `Regenerar expectativa del replay` después de documentar
+  las precondiciones como `85a82b8`.
+- Validó el run nuevo `34176477330`: terminó verde sobre el head exacto
+  `85a82b8`. Su artefacto `expectativa-replay-regenerada` pesa 36.521 bytes,
+  coincide byte a byte con el SHA-256 publicado y contiene únicamente
+  `expected-replay-fingerprint.json` y `replay-expectation.json`.
+- El diff contra `master` es el esperado y no tiene cambios de opciones, ACL,
+  RLS ni policies: modifica dos funciones y dos vistas, quita el índice único
+  vigente por vencimiento y agrega el índice único vigente por
+  `(vencimiento_id, tipo)`.
+- Con la expectativa nueva: `npm test` pasa 113/113, `npm run lint` pasa con cero
+  errores y el warning preexistente de `ScannerModal.tsx`, y `npm run build`
+  pasa. El checksum del ancla permanece
+  `0da259b3b5d37dc241d9358d8ed883614a856dc8fc71fdd62a3f80ffe79de0b2`.
+- Antes del commit final revalidó `master` en `8191a9e`, la rama en `85a82b8`,
+  únicamente los PR #160 y #118 abiertos, y producción sin C1 en el ledger,
+  con el índice anterior y ambas vistas todavía en `security_invoker=true`.
+- Transmitió la expectativa móvil y este registro como `9b4bf61` y abrió el PR
+  #171. GitHub detectó un único conflicto add/add en `CURRENT_WORK.md` porque C1
+  nació antes del merge de #170; lo resolvió conservando la versión de C1, que
+  ya incluye íntegramente el contenido de `master` más el seguimiento posterior.
+  No hubo conflicto en código, migraciones ni fingerprints.
+- La expectativa del run viejo quedó descartada y el fallo transitorio 112/113
+  de `migration-replay-moving-expectation` quedó resuelto exclusivamente con el
+  artefacto nuevo; no se regeneró localmente ni se modificó el ancla.
+- El contrato C1 pasa y una mutación que elimina el `ALTER VIEW` nuevo falla en
+  la aserción correcta, demostrando que la regresión vuelve a ser detectable.
+- Un merge accidental ocurrió sólo en un worktree local ajeno a C1; se restauró
+  el ref exacto y se dejó una referencia local recuperable. Nunca se transmitió
+  a GitHub ni afectó producción.
 
 ### 2026-09-07 · Codex
 

@@ -544,6 +544,41 @@ que el inicio del tramo coincide con el momento en que se decide el descuento.
 **Condición para arrancarlo:** A, B y C cerrados, y veinte a treinta sugerencias
 aceptadas con su tramo medido.
 
+### Fuera de numeración · Deuda que BLOQUEA el bloque C2 — PENDIENTE
+
+**`registrar_control_vencimiento_dashboard_invoker_v1` finaliza "la intervención
+viva" del vencimiento sin filtrar por tipo.** Es el camino que usa el botón
+"Finalizar RAG vigente":
+
+```sql
+WHERE r.vencimiento_id = p_vencimiento_id
+  AND r.finalizado_at IS NULL
+ORDER BY r.aplicado_at DESC, r.created_at DESC, r.id DESC
+LIMIT 1
+```
+
+**Hoy no puede equivocarse porque sólo existen intervenciones de tipo `rag`.** El
+día que C2 cree la primera oferta central, esa función va a poder finalizar la
+intervención equivocada: el operador aprieta "Finalizar RAG" y se cierra la
+oferta central, o al revés, según cuál se haya aplicado último.
+
+**Es la misma forma exacta que el `UPDATE` sin filtro de tipo que se arregló en
+C1:** una función que hoy no puede fallar porque el caso no existe, y que falla
+en silencio en cuanto exista. La diferencia es que aquélla se arregló antes de
+levantar el índice, y ésta queda para C2 porque acotarla exige decidir **qué
+tipo finaliza cada botón** — decisión que pertenece a la UX.
+
+**C2 NO PUEDE MERGEARSE SIN RESOLVER ESTO.** No es una mejora deseable ni un
+pendiente: es la condición para que el primer caso real no se rompa. Y arreglarlo
+implica además decidir si se sigue usando el canal de comandos dentro de la nota
+(`p_porcentaje_rag = 0` más `p_nota = 'FINALIZAR_RAG|motivo|…'`) o si esa
+operación pasa a una RPC con firma propia.
+
+**Anotado aparte, sin bloquear nada:** ese canal de comandos —una operación que
+depende de partir texto libre, invisible en la firma de la RPC— es deuda propia.
+No se toca en C1 ni en C2 salvo que C2 decida reemplazarlo, porque tocarlo pone
+en riesgo el camino diario del operador, que es el criterio que no se negocia.
+
 ## 6. Verificación del estado actual
 
 Qué corre y qué prueba, al 2026-09-02:
