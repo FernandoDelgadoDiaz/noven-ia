@@ -50,10 +50,9 @@ Fecha de corte: **2026-09-09**.
   administración zonal de precios, bandeja estrictamente zonal y ejecución
   individual— sin confirmación en góndola, operación por lote ni aplicación de
   SQL en producción.
-- Publicación: expectativa revisada y checkpoint publicados como `e042124`; PR
-  #180 continúa en draft contra `master`. El CI `34377626774` confirmó replay,
-  suite, lint y build, pero detectó una colisión entre fixtures en el gate vivo.
-  La corrección está local y queda pendiente publicarla y repetir el CI completo.
+- Publicación: corrección del gate publicada como `80e2f57`; PR #180 abierto y
+  listo para revisión contra `master`. El CI `34378399796` terminó completo en
+  verde. No se mergeó ni se aplicó SQL en producción.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -78,8 +77,9 @@ base permanente.
 ### En ejecución
 
 **Circuito de validación y ejecución centralizada de RAG.** A, B, C y los
-bloques 1 y 2 ya están cerrados. El bloque 3 está en ejecución en
-`feat/rag-centralizado-bandeja-zonal`.
+bloques 1 y 2 ya están cerrados. La implementación del bloque 3 está completa y
+lista para revisión en `feat/rag-centralizado-bandeja-zonal`; se considera
+cerrada sólo después del merge explícitamente autorizado.
 
 Orden acordado:
 
@@ -239,6 +239,10 @@ Rama activa, bloque 3:
   contrato del gate exige ahora explícitamente esa reutilización. Contrato
   específico, suite 118/118 y diff-check quedaron verdes; lint no tiene errores
   y conserva el warning preexistente.
+- La corrección se publicó como `80e2f57`. El CI `34378399796` terminó completo
+  en verde: replay estructural, aislamiento vivo 1–4, cuota, exposición y los
+  recorridos críticos de Playwright incluidos. El PR #180 salió de draft y está
+  listo para revisión.
 - Los dos recorridos Playwright nuevos tienen sintaxis validada, pero no se
   ejecutaron localmente porque el runner aislado sólo se instala en CI.
 - Hallazgo corregido: la hora de ejecución se toma después de adquirir el lock,
@@ -251,11 +255,11 @@ Rama activa, bloque 3:
 
 ## Próximo paso ejecutable
 
-1. Validar y publicar la corrección del fixture en
-   `feat/rag-centralizado-bandeja-zonal`.
-2. Exigir suite completa, cuarto gate vivo, cuota, exposición y Playwright
-   verdes antes de sacar el PR #180 de draft. No aplicar SQL en producción ni
-   mergear sin autorización explícita.
+1. Revisar el PR #180 y obtener autorización explícita antes de mergear. No
+   aplicar SQL en producción como parte de ese merge.
+2. Después del merge, crear una rama nueva para el bloque 4: confirmación o
+   rechazo en góndola por gerente, supervisor u operador asignado a la familia,
+   iniciando la intervención sólo al confirmar.
 
 ## Protocolo de relevo
 
@@ -468,3 +472,7 @@ Rama activa, bloque 3:
   ni producto. Contrato específico, suite 118/118 y diff-check quedaron verdes;
   lint no tiene errores y conserva el warning preexistente. Queda pendiente
   publicarla y repetir el CI completo.
+- Publicó la corrección como `80e2f57`. El CI `34378399796` completó en verde
+  replay, aislamiento vivo 1–4, cuota, exposición y Playwright, además de suite,
+  lint y build. Sacó el PR #180 de draft; el único pendiente del bloque es la
+  revisión y decisión explícita de merge. No se aplicó SQL en producción.
