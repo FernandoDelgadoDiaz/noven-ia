@@ -49,7 +49,8 @@ Fecha de corte: **2026-09-09**.
 - Alcance de la rama: bloque 1 del circuito RAG centralizado —modelo de
   solicitud, máquina de estados, nuevo rol y permisos— sin interfaz ni
   aplicación de SQL en producción.
-- Publicación: rama local, todavía sin commit remoto ni PR.
+- Publicación: rama remota creada; primer corte publicado como `d62cd83`. Aún
+  no hay PR.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -135,19 +136,19 @@ Rama técnica actual:
 - contrato específico del bloque 1: verde;
 - `npm run build`: verde;
 - `npm run lint`: cero errores y el warning preexistente de `ScannerModal.tsx`;
-- `npm test`: 115 de 116 archivos verdes; el único rojo es el gate esperado de
-  expectativa móvil, porque la nueva migración todavía debe pasar por el replay
-  descartable y registrar su fingerprint;
+- `npm test`: 116 de 116 archivos verdes;
 - `git diff --check`: verde;
-- replay SQL real: pendiente; este entorno no dispone de Docker/Postgres local.
+- replay SQL descartable: verde en el run manual `34303953570`, ejecutado sobre
+  `d62cd83`; artefacto `10085981195` incorporado tras revisar el cambio
+  estructural.
 
 ## Próximo paso ejecutable
 
-1. Publicar el primer commit de la rama y regenerar la expectativa móvil en el
-   Supabase descartable de CI.
-2. Revisar el diff estructural, incorporar sólo los dos artefactos de expectativa
-   y corregir cualquier incompatibilidad SQL que revele el replay.
-3. Ejecutar suite completa, abrir el PR pequeño y esperar CI verde.
+1. Publicar el commit que incorpora los dos artefactos de expectativa y este
+   checkpoint.
+2. Abrir el PR pequeño contra `master` y esperar su CI completo en verde.
+3. Corregir en la misma rama cualquier incompatibilidad que revele el CI; no
+   mergear con gates rojos.
 4. No aplicar SQL en producción dentro de este bloque.
 
 ## Protocolo de relevo
@@ -223,3 +224,14 @@ Rama técnica actual:
   deliberado que exige regenerar la expectativa del replay por la nueva
   migración. Docker/Postgres local no están disponibles, por lo que el replay
   descartable queda como próximo gate remoto.
+- Publicó el primer corte de la rama como `d62cd83` y Fernando ejecutó el
+  workflow manual de regeneración exclusivamente sobre esa rama.
+- El replay descartable terminó en verde en el run `34303953570`. Su diff
+  estructural agregó sólo la superficie prevista del bloque: dos tablas, una
+  vista, sus funciones, triggers, RLS, políticas, índices y restricciones; no
+  eliminó tablas, vistas, funciones, políticas ni columnas existentes.
+- Incorporó exclusivamente `expected-replay-fingerprint.json` y
+  `replay-expectation.json` desde el artefacto `10085981195`; el fingerprint del
+  ancla permaneció intacto.
+- Verificación posterior al replay: `npm test` 116/116, build y diff-check
+  verdes; lint sin errores y con el warning preexistente de `ScannerModal.tsx`.
