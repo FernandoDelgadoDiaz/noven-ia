@@ -54,7 +54,8 @@ Fecha de corte: **2026-09-09**.
   El corte funcional es `90d2736` y la expectativa revisada del replay quedó
   publicada en `97cd37a`. El ajuste E2E quedó publicado en `43404eb`; tanto su
   CI como el del checkpoint `b71e6bd` terminaron completos en verde. La
-  descripción del PR refleja este estado y el merge no está autorizado todavía.
+  descripción del PR refleja este estado. El checkpoint final `653ee6a` también
+  quedó verde; el merge no está autorizado todavía.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -175,12 +176,13 @@ Rama técnica actual:
   aislamiento, cuota y exposición.
 - CI del checkpoint `b71e6bd`: run `34340919978` completo en verde con los
   mismos gates. El PR #179 dejó de ser draft después de este resultado.
+- CI del checkpoint final `653ee6a`: run `34341380605` completo en verde,
+  incluido Playwright.
 
 ## Próximo paso ejecutable
 
-1. Publicar este estado final en el PR #179 y comprobar su CI.
-2. Esperar la decisión explícita de merge; no aplicar SQL en producción dentro
-   de este bloque.
+1. Esperar la decisión explícita de merge del PR #179.
+2. No aplicar SQL en producción dentro de este bloque.
 
 ## Protocolo de relevo
 
@@ -347,3 +349,5 @@ Rama técnica actual:
   en verde. Sacó el PR #179 de draft y actualizó su descripción para retirar el
   replay ya resuelto. El PR está listo para revisión, sin merge ni SQL aplicado
   en producción.
+- Publicó el estado final como `653ee6a`; el run `34341380605` terminó completo
+  en verde. El único pendiente del bloque es la decisión explícita de merge.
