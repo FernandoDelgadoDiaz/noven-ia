@@ -51,8 +51,9 @@ Fecha de corte: **2026-09-09**.
   góndola ni aplicación de SQL en producción.
 - Publicación: rama remota publicada; PR draft #179 abierto contra `master`.
   El corte funcional es `90d2736` y la expectativa revisada del replay quedó
-  publicada en `97cd37a`. El CI posterior validó todos los gates salvo un E2E
-  obsoleto; su ajuste está listo para publicar y volver a validar.
+  publicada en `97cd37a`. El ajuste E2E quedó publicado en `43404eb` y su CI
+  completo terminó en verde; falta publicar este cierre documental antes de
+  sacar el PR de draft.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -168,12 +169,15 @@ Rama técnica actual:
 - Verificación local posterior al ajuste E2E: contrato específico y suite
   completa 117/117 en verde; build y diff-check verdes; lint con cero errores y
   el warning preexistente de `ScannerModal.tsx:143`.
+- CI final del corte funcional `43404eb`: run `34340514382` completo en verde,
+  incluido el recorrido Playwright corregido y todos los gates de replay,
+  aislamiento, cuota y exposición.
 
 ## Próximo paso ejecutable
 
-1. Publicar el ajuste E2E y este checkpoint en el PR #179.
-2. Esperar el CI completo en verde; si queda verde, sacar el PR de draft y
-   dejar el merge sujeto a decisión explícita.
+1. Publicar este cierre documental en el PR #179 y comprobar su CI.
+2. Sacar el PR de draft cuando el head quede verde y dejar el merge sujeto a
+   decisión explícita.
 3. No aplicar SQL en producción dentro de este bloque.
 
 ## Protocolo de relevo
@@ -334,3 +338,6 @@ Rama técnica actual:
   de control ni efectuar escrituras directas. Contrato específico, 117/117
   pruebas, build y diff-check quedaron verdes; lint quedó sin errores y con su
   warning preexistente.
+- Publicó el ajuste E2E como `43404eb`. El run `34340514382` terminó completo en
+  verde, incluido Playwright; el defecto era exclusivamente la expectativa
+  obsoleta del test y no la nueva operación de solicitud.
