@@ -488,6 +488,8 @@ async function gate1(environment, token) {
     `cross-store direct PATCH was not rejected: ${responseSummary(directMutation.response, directMutation.raw)}`,
   )
 
+  // Gate 4 ya sembró el vencimiento activo que respalda la solicitud. Reusarlo
+  // mantiene la unicidad activa y conserva en Gate 1 una escritura real en A1.
   const allowedRpc = await requestJson(
     `${environment.apiUrl}/rest/v1/rpc/guardar_vencimiento_y_stock_scanner_v1`,
     {
@@ -501,7 +503,7 @@ async function gate1(environment, token) {
         p_fecha_vencimiento: '2030-12-31',
         p_lote: 'GATE-A1',
         p_stock_actual: 12,
-        p_vencimiento_id: null,
+        p_vencimiento_id: IDS.expiryA1,
       },
     },
   )

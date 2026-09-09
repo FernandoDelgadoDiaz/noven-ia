@@ -50,10 +50,10 @@ Fecha de corte: **2026-09-09**.
   administración zonal de precios, bandeja estrictamente zonal y ejecución
   individual— sin confirmación en góndola, operación por lote ni aplicación de
   SQL en producción.
-- Publicación: corte funcional `a0688ae` y checkpoint `f59cff5` publicados; PR
-  draft #180 abierto contra `master`. El replay descartable terminó en verde en
-  el run `34376604368`; su expectativa revisada está incorporada localmente y
-  queda pendiente publicarla y exigir el CI completo resultante.
+- Publicación: expectativa revisada y checkpoint publicados como `e042124`; PR
+  #180 continúa en draft contra `master`. El CI `34377626774` confirmó replay,
+  suite, lint y build, pero detectó una colisión entre fixtures en el gate vivo.
+  La corrección está local y queda pendiente publicarla y repetir el CI completo.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -230,6 +230,15 @@ Rama activa, bloque 3:
 - Verificación local posterior: `npm test` 118/118, build y `git diff --check`
   verdes; lint sin errores y con el warning preexistente de
   `ScannerModal.tsx:143`.
+- El CI `34377626774` pasó replay, suite, lint y build, y falló al iniciar el
+  gate vivo: el fixture zonal ya sembraba un vencimiento activo y el Gate 1
+  intentaba crear un segundo vencimiento activo para el mismo producto y
+  sucursal. Cuota, exposición y Playwright no llegaron a ejecutarse.
+- Se corrigió el fixture para reutilizar ese vencimiento en la escritura válida
+  del operador, conservando tanto la unicidad como la prueba real de permiso. El
+  contrato del gate exige ahora explícitamente esa reutilización. Contrato
+  específico, suite 118/118 y diff-check quedaron verdes; lint no tiene errores
+  y conserva el warning preexistente.
 - Los dos recorridos Playwright nuevos tienen sintaxis validada, pero no se
   ejecutaron localmente porque el runner aislado sólo se instala en CI.
 - Hallazgo corregido: la hora de ejecución se toma después de adquirir el lock,
@@ -242,11 +251,11 @@ Rama activa, bloque 3:
 
 ## Próximo paso ejecutable
 
-1. Publicar las dos expectativas revisadas y este checkpoint en
+1. Validar y publicar la corrección del fixture en
    `feat/rag-centralizado-bandeja-zonal`.
-2. Exigir suite completa, cuarto gate vivo, exposición y Playwright verdes antes
-   de sacar el PR #180 de draft. No aplicar SQL en producción ni mergear sin
-   autorización explícita.
+2. Exigir suite completa, cuarto gate vivo, cuota, exposición y Playwright
+   verdes antes de sacar el PR #180 de draft. No aplicar SQL en producción ni
+   mergear sin autorización explícita.
 
 ## Protocolo de relevo
 
@@ -450,3 +459,12 @@ Rama activa, bloque 3:
   118/118 pruebas, build y diff-check verdes; lint sin errores y con el warning
   preexistente de `ScannerModal.tsx:143`. Queda pendiente publicar este corte y
   exigir todos los gates del nuevo CI antes de habilitar revisión.
+- Publicó la expectativa y el checkpoint como `e042124`. El CI `34377626774`
+  validó replay, pruebas, lint y build, y luego encontró una colisión interna del
+  fixture: Gate 1 intentaba crear un vencimiento activo que Gate 4 ya había
+  sembrado para la misma identidad. Los gates posteriores quedaron sin ejecutar.
+- Ajustó Gate 1 para actualizar el vencimiento sembrado y agregó una aserción de
+  contrato que impide reintroducir la colisión. La corrección no cambia esquema
+  ni producto. Contrato específico, suite 118/118 y diff-check quedaron verdes;
+  lint no tiene errores y conserva el warning preexistente. Queda pendiente
+  publicarla y repetir el CI completo.
