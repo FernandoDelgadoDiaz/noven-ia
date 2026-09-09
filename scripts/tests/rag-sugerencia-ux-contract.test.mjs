@@ -52,10 +52,10 @@ for (const [nombre, fuente] of [['la tarjeta de Control', modal], ['la línea de
     `${nombre} no puede tener la escala hardcodeada: es política de la organización`)
 }
 
-// --- 3. Human-in-the-loop ---------------------------------------------------
+// --- 3. Validación gerencial sin cambio directo -----------------------------
 //
-// El usuario aplica, elige otro porcentaje autorizado, o ignora. Nada se
-// aplica solo.
+// El porcentaje deja de ser una entrada del browser. Gerencia valida el único
+// escalón calculado; la operación central y la verificación ocurren después.
 
 // Se recorta al bloque JSX de la sugerencia y nada más.
 //
@@ -66,21 +66,22 @@ for (const [nombre, fuente] of [['la tarjeta de Control', modal], ['la línea de
 const inicioBloque = modal.indexOf('>Sugerencia por urgencia<')
 assert.ok(inicioBloque !== -1, 'la tarjeta debe renderizar la etiqueta "Sugerencia por urgencia"')
 const bloqueSugerencia = modal.slice(inicioBloque, modal.indexOf('Finalizar RAG vigente', inicioBloque))
-assert.ok(bloqueSugerencia.length > 0 && bloqueSugerencia.length < 3000,
+assert.ok(bloqueSugerencia.length > 0 && bloqueSugerencia.length < 6000,
   'el bloque de la sugerencia se recortó mal: revisá los anclajes')
 
-// El botón sólo carga el valor en el campo; no guarda ni registra nada.
-assert.match(bloqueSugerencia, /setRagPorcentaje\(String\(sugerencia\.hasta\)\)/,
-  'el botón de la sugerencia sólo propone el valor en el campo editable')
-assert.doesNotMatch(bloqueSugerencia, /handleGuardar|supabase\.rpc|registrar_control/,
-  'la sugerencia NUNCA aplica sola: el botón no guarda')
-
-// El campo sigue siendo editable, que es "elegir otro porcentaje".
-assert.match(modal, /onChange=\{\(e\) => setRagPorcentaje\(e\.target\.value\)\}/,
-  'el operador tiene que poder escribir otro porcentaje')
+assert.match(bloqueSugerencia, /Informar \$\{sugerencia\.hasta\}%/,
+  'gerencia valida con la acción Informar NN%')
+assert.match(bloqueSugerencia, /handleSolicitarCambioRag/,
+  'la acción debe crear una solicitud, no modificar la intervención')
+assert.match(bloqueSugerencia, /Requiere gerente o supervisor/,
+  'la operadora ve la sugerencia pero no puede validarla')
+assert.doesNotMatch(modal, /setRagPorcentaje|type="number"[^>]+rag/i,
+  'el porcentaje RAG no puede ser editable')
+assert.doesNotMatch(modal, /\bUsar \{sugerencia\.hasta\}%|elegir otro porcentaje/,
+  'la UI no debe conservar lenguaje del flujo directo anterior')
 
 // Ignorar es no hacer nada: no puede haber un temporizador ni un auto-apply.
-for (const automatismo of [/setTimeout\([^)]*setRagPorcentaje/, /useEffect\([^)]*setRagPorcentaje\(String\(sugerencia/]) {
+for (const automatismo of [/setTimeout\([^)]*handleSolicitarCambioRag/, /useEffect\([^)]*handleSolicitarCambioRag/]) {
   assert.doesNotMatch(modal, automatismo,
     'la sugerencia no puede aplicarse sola por paso del tiempo ni por efecto')
 }
@@ -140,34 +141,16 @@ for (const campo of ['Vel. necesaria', 'Cobertura', 'Días comerciales']) {
   assert.ok(modal.includes(campo), `la tarjeta debe mostrar "${campo}" cuando hay déficit`)
 }
 
-// --- 7. La instrumentación se escribe ---------------------------------------
-//
-// Sin esto no se puede confrontar la regla contra la realidad en seis meses.
+// --- 7. La evidencia nace con la solicitud ----------------------------------
 
-assert.match(modal, /instrumentar_sugerencia_rag/,
-  'al guardar un RAG hay que registrar qué se sugirió y qué se hizo')
-for (const origen of ['sugerida_aceptada', 'sugerida_rechazada', 'manual']) {
-  assert.ok(modal.includes(`'${origen}'`), `falta distinguir el origen ${origen}`)
-}
-
-// Un fallo de instrumentación no puede voltear un control ya registrado: es
-// evidencia, no parte de la operación.
-// Se recorta hacia ADELANTE desde la llamada. Mirar hacia atrás alcanzaba el
-// setError del fallo real del control —que sí corresponde— y hacía fallar la
-// aserción por código que no es el que se está evaluando.
-const inicioInstr = modal.indexOf("supabase.rpc('instrumentar_sugerencia_rag'")
-assert.ok(inicioInstr !== -1, 'la instrumentación tiene que llamarse al guardar')
-const bloqueInstr = modal.slice(inicioInstr, modal.indexOf('onGuardado()', inicioInstr))
-const bloqueFalloInstr = bloqueInstr.match(/if \(instrError\) \{([\s\S]*?)\n\s*\}/)?.[1]
-
-assert.ok(bloqueFalloInstr, 'el fallo de instrumentación debe tratarse explícitamente')
-
-assert.match(bloqueFalloInstr, /console\.error/,
-  'un fallo de instrumentación se loguea')
-assert.doesNotMatch(bloqueFalloInstr, /setError\(/,
-  'un fallo de instrumentación no puede voltear un control ya registrado: es evidencia, no operación')
-assert.doesNotMatch(bloqueFalloInstr, /\breturn\b/,
-  'un fallo de instrumentación no puede cortar el flujo: el control ya quedó registrado')
+assert.match(modal, /supabase\.rpc\('solicitar_cambio_rag'/,
+  'la validación llama una RPC acotada')
+assert.match(modal, /p_vencimiento_id: vencimiento\.id/,
+  'el browser sólo aporta la identidad del vencimiento')
+assert.doesNotMatch(modal, /instrumentar_sugerencia_rag/,
+  'la evidencia no se instrumenta en una segunda llamada falible del browser')
+assert.match(modal, /p_porcentaje_rag: null/,
+  'registrar un control no puede abrir ni cambiar el RAG')
 
 // --- 8. La escala se lee acotada por RLS, no filtrada a mano ----------------
 
@@ -178,4 +161,4 @@ assert.match(hook, /setEscala\(\[\]\)/,
   'sin escala la lista queda vacía y el motor no sugiere: no hay default')
 
 console.log('✓ La sugerencia vive en la tarjeta existente, con un solo motor para los dos lugares')
-console.log('✓ Human-in-the-loop: propone en el campo, nunca aplica sola, y se declara como urgencia')
+console.log('✓ Human-in-the-loop: gerencia informa el escalón y nunca cambia el precio desde el browser')

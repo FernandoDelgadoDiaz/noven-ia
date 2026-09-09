@@ -9,12 +9,14 @@ import { useAccionesOperativas } from '@/hooks/useAccionesOperativas'
 import { useProblemasActivos } from '@/hooks/useProblemasActivos'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
 import { usePuedeOperarSucursal } from '@/hooks/usePuedeOperarSucursal'
+import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
 import { calcularCostoEnRiesgo, calcularUnidadesExpuestas, formatearPesos, formatearUnidades } from '@/lib/economia-riesgo'
 import { saludoDashboard } from '@/lib/saludo-dashboard'
 import AlertaItem from '@/components/dashboard/AlertaItem'
 import EditarVencimientoModal from '@/components/dashboard/EditarVencimientoModal'
 import AccionOperativaModal from '@/components/dashboard/AccionOperativaModal'
 import RadarZonalBell from '@/components/dashboard/RadarZonalBell'
+import BandejaRagSucursal from '@/components/dashboard/BandejaRagSucursal'
 import type { VencimientoConRiesgo } from '@/types/index'
 
 const ORDEN_RIESGO: Record<string, number> = {
@@ -47,6 +49,7 @@ export default function Dashboard() {
   const { data, loading, error, refetch, sinFamilias } = useVencimientos(sucursalId)
   const { user } = useAuth()
   const { perfil } = useUsuarioRol()
+  const { accesos, legacyMode } = useAccesosMultitenant()
   const {
     vendidos,
     donaciones,
@@ -69,6 +72,13 @@ export default function Dashboard() {
   const [costosLoading, setCostosLoading] = useState(false)
 
   const [familiaNombres, setFamiliaNombres] = useState<Record<string, string>>({})
+  const puedeValidarRag = legacyMode
+    ? perfil?.rol === 'admin' || perfil?.rol === 'supervisor'
+    : Boolean(sucursalId) && accesos.some((acceso) =>
+      acceso.activo
+      && acceso.sucursal_id === sucursalId
+      && (acceso.rol === 'gerente_sucursal' || acceso.rol === 'supervisor'),
+    )
   const familiaIdsEnData = useMemo(() => {
     const set = new Set<string>()
     data.forEach((v) => { if (v.producto.familia_id) set.add(v.producto.familia_id) })
@@ -316,6 +326,13 @@ export default function Dashboard() {
                 </button>
               </div>
             )}
+
+            <BandejaRagSucursal
+              visible={puedeValidarRag}
+              vencimientos={data}
+              costosSinIva={costosSinIva}
+              onAbrir={setVencimientoEditando}
+            />
 
             <section aria-label="Resumen de riesgos" className="space-y-3">
               <div className="grid grid-cols-2 gap-3">

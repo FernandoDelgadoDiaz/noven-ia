@@ -258,6 +258,31 @@ export interface SeguimientoRagActual {
   estado_seguimiento_rag: EstadoSeguimientoRag
 }
 
+export type EstadoSolicitudCambioRag =
+  | 'solicitada'
+  | 'ejecutada_no_habilitada'
+  | 'lista_confirmacion'
+  | 'confirmada'
+  | 'no_aplicada'
+
+export interface SolicitudCambioRagActual {
+  id: string
+  organizacion_id: string
+  zona_id: string
+  sucursal_id: string
+  producto_id: string
+  vencimiento_id: string
+  solicitada_por: string
+  porcentaje_rag_vigente: number | null
+  porcentaje_solicitado: number
+  creada_at: string
+  ultimo_evento: 'solicitada' | 'ejecutada' | 'confirmada' | 'no_aplicada'
+  ultimo_actor_id: string
+  ultimo_evento_at: string
+  habilitada_desde: string | null
+  estado_actual: EstadoSolicitudCambioRag
+}
+
 export interface Vencimiento {
   id: string
   producto_id: string

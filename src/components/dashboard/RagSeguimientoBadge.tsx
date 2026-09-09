@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { Activity, AlertTriangle, CheckCircle2, Clock3 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useEscalaRag } from '@/hooks/useEscalaRag'
+import { useSolicitudCambioRag } from '@/hooks/useSolicitudCambioRag'
+import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
+import { useSucursalActual } from '@/hooks/useSucursalActual'
+import { useUsuarioRol } from '@/hooks/useUsuarioRol'
 import { coberturaComoPorcentaje, evaluarSugerencia } from '@/lib/ragCobertura'
+import type { EstadoSolicitudCambioRag } from '@/types/index'
 
 interface SeguimientoRagRow {
   vencimiento_id: string
@@ -100,9 +105,49 @@ function presentacion(row: SeguimientoRagRow): Presentacion {
   }
 }
 
+const SOLICITUD_PRESENTACION: Record<EstadoSolicitudCambioRag, Omit<Presentacion, 'Icono'>> = {
+  solicitada: {
+    titulo: 'Pendiente de ejecución zonal',
+    detalle: 'La sucursal informó el cambio. El precio todavía no fue modificado.',
+    className: 'bg-amber-50 text-amber-900 border-amber-200',
+  },
+  ejecutada_no_habilitada: {
+    titulo: 'Ejecutada · disponible mañana',
+    detalle: 'El cambio fue ejecutado y todavía no está habilitado para verificar en góndola.',
+    className: 'bg-sky-50 text-sky-800 border-sky-200',
+  },
+  lista_confirmacion: {
+    titulo: 'Lista para verificar en góndola',
+    detalle: 'Gerente, supervisor u operadora asignada a la familia pueden validar lo observado.',
+    className: 'bg-violet-50 text-violet-800 border-violet-200',
+  },
+  confirmada: {
+    titulo: 'Confirmada en góndola',
+    detalle: 'La ejecución central ya fue validada en la sucursal.',
+    className: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  },
+  no_aplicada: {
+    titulo: 'No aplicada en góndola',
+    detalle: 'La solicitud queda pendiente de una nueva ejecución zonal.',
+    className: 'bg-rose-50 text-rose-800 border-rose-200',
+  },
+}
+
 export default function RagSeguimientoBadge({ vencimientoId, activo }: RagSeguimientoBadgeProps) {
   const [row, setRow] = useState<SeguimientoRagRow | null>(null)
   const { escala } = useEscalaRag()
+  const { solicitud } = useSolicitudCambioRag(vencimientoId)
+  const { sucursalId } = useSucursalActual()
+  const { accesos, legacyMode } = useAccesosMultitenant()
+  const { rol: rolLegacy } = useUsuarioRol()
+  const solicitudAbierta = solicitud?.estado_actual !== 'confirmada' ? solicitud : null
+  const puedeValidarSugerencia = legacyMode
+    ? rolLegacy === 'admin' || rolLegacy === 'supervisor'
+    : Boolean(sucursalId) && accesos.some((acceso) =>
+      acceso.activo
+      && acceso.sucursal_id === sucursalId
+      && (acceso.rol === 'gerente_sucursal' || acceso.rol === 'supervisor'),
+    )
 
   useEffect(() => {
     let cancelado = false
@@ -125,7 +170,12 @@ export default function RagSeguimientoBadge({ vencimientoId, activo }: RagSeguim
     return () => { cancelado = true }
   }, [activo, vencimientoId])
 
-  const info = useMemo(() => row ? presentacion(row) : null, [row])
+  const info = useMemo(() => {
+    if (solicitudAbierta) {
+      return { ...SOLICITUD_PRESENTACION[solicitudAbierta.estado_actual], Icono: Clock3 }
+    }
+    return row ? presentacion(row) : null
+  }, [row, solicitudAbierta])
 
   // La sugerencia se calcula con el mismo motor determinístico que usa la
   // pantalla de Control: una sola fuente para el número que ve el operador.
@@ -157,12 +207,13 @@ export default function RagSeguimientoBadge({ vencimientoId, activo }: RagSeguim
             {info.detalle}
             {muestraCobertura && ` · cobertura ${coberturaComoPorcentaje(sugerencia.cobertura)}`}
           </p>
-          {sugerencia?.hay && (
+          {sugerencia?.hay && !solicitudAbierta && (
             <p className="text-[10px] leading-snug mt-1 font-semibold">
               Sugerencia por urgencia: {sugerencia.desde}% → {sugerencia.hasta}%
               {sugerencia.topeInsuficiente
                 ? ' · tope de escala, puede no alcanzar'
                 : sugerencia.saltoPuedeNoAlcanzar && ' · el déficit es grande, este escalón puede no alcanzar'}
+              {' · '}{puedeValidarSugerencia ? 'Informar al abrir el producto' : 'Requiere gerente o supervisor'}
             </p>
           )}
         </div>

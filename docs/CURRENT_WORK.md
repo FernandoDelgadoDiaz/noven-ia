@@ -40,16 +40,17 @@ Fecha de corte: **2026-09-09**.
 
 ## Corte Git verificado
 
-- Base revisada: `origin/master` en `63fea6d`, merge del PR #177.
-- CI del PR #177: runs `34281365574` y `34281819683`, completos en verde.
+- Base revisada: `origin/master` en `5a92df3`, merge del PR #178.
+- CI final del PR #178: run `34305619467`, completo en verde.
 - El conector disponible no enumera runs disparados por push a `master`; la
   validación local y el CI de la nueva rama siguen siendo obligatorios.
-- Rama activa: `feat/rag-centralizado-modelo-estados`.
+- Rama activa: `feat/rag-centralizado-validacion-sucursal`.
 - Propietario de la rama: Codex hasta merge o relevo explícito.
-- Alcance de la rama: bloque 1 del circuito RAG centralizado —modelo de
-  solicitud, máquina de estados, nuevo rol y permisos— sin interfaz ni
-  aplicación de SQL en producción.
-- Publicación: rama remota en `b3760ef`; PR #178 abierto contra `master`.
+- Alcance de la rama: bloque 2 del circuito RAG centralizado —validación
+  gerencial y seguimiento desde la sucursal— sin bandeja zonal, confirmación en
+  góndola ni aplicación de SQL en producción.
+- Publicación: implementación local completa, todavía sin commit remoto ni PR;
+  falta regenerar la expectativa del replay antes de habilitar el merge.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -71,9 +72,9 @@ base permanente.
 
 ### En ejecución
 
-**Circuito de validación y ejecución centralizada de RAG.** A, B y C ya están
-cerrados. La implementación por bloques está autorizada; el bloque 1 está en
-ejecución en `feat/rag-centralizado-modelo-estados`.
+**Circuito de validación y ejecución centralizada de RAG.** A, B, C y el bloque
+1 ya están cerrados. El bloque 2 está en ejecución en
+`feat/rag-centralizado-validacion-sucursal`.
 
 Orden acordado:
 
@@ -133,23 +134,26 @@ Resumen reconciliado; el detalle y las condiciones de salida permanecen en
 
 Rama técnica actual:
 
-- contrato específico del bloque 1: verde;
+- contrato específico del bloque 2: verde;
+- prueba de mutación: verde; al retirar temporalmente el bloqueo que serializa
+  solicitudes, el contrato falló por la causa esperada y el código fue
+  restaurado antes de repetirlo en verde;
+- contratos UX, allowlist RPC y frontera de seguridad: verdes;
 - `npm run build`: verde;
 - `npm run lint`: cero errores y el warning preexistente de `ScannerModal.tsx`;
-- `npm test`: 116 de 116 archivos verdes;
+- `npm test`: 116 de 117 archivos verdes. El único fallo es el gate deliberado
+  de expectativa móvil del replay por la migración nueva;
 - `git diff --check`: verde;
-- replay SQL descartable: verde en el run manual `34303953570`, ejecutado sobre
-  `d62cd83`; artefacto `10085981195` incorporado tras revisar el cambio
-  estructural.
-- CI completo del PR #178: run `34304501281` en verde sobre `b3760ef`, con
-  contratos, lint, build, replay, aislamiento, cuota, exposición y Playwright.
+- replay SQL descartable del bloque 2: pendiente; no se ejecutó SQL contra
+  producción.
 
 ## Próximo paso ejecutable
 
-1. Revisar el PR #178 y decidir su merge; el bloque 1 quedó técnicamente verde.
-2. Después del merge, actualizar `master` y abrir una rama nueva para el bloque
-   2: validación gerencial y seguimiento desde la sucursal.
-3. No iniciar el bloque 2 sobre esta rama ni mezclar su interfaz con el modelo.
+1. Revisar el diff reducido, crear commit y publicar la rama del bloque 2.
+2. Ejecutar el replay descartable, revisar su diff estructural e incorporar
+   únicamente la expectativa móvil generada.
+3. Repetir suite, build, lint y diff-check; abrir un PR pequeño y esperar CI
+   completo en verde antes de decidir merge.
 4. No aplicar SQL en producción dentro de este bloque.
 
 ## Protocolo de relevo
@@ -247,3 +251,32 @@ Rama técnica actual:
   asignado a la familia del producto. El permiso ya estaba implementado en la
   migración del bloque 1 y ahora queda explícito en el contrato para la interfaz
   del bloque 4.
+- El CI final del PR #178 terminó en verde en el run `34305619467`; el PR fue
+  mergeado por squash en `master` como `5a92df3`.
+- Creó `feat/rag-centralizado-validacion-sucursal` desde ese merge e inició el
+  bloque 2. El alcance excluye bandeja zonal, ejecución administrativa,
+  confirmación en góndola y cualquier escritura productiva.
+- Implementó `solicitar_cambio_rag(p_vencimiento_id)`: la RPC recibe sólo la
+  identidad del vencimiento, resuelve permiso y alcance en servidor, recalcula
+  el siguiente escalón, crea el snapshot y su evento inicial de forma atómica e
+  idempotente, sin abrir una intervención.
+- Cerró el atajo anterior: registrar un control ya no admite un porcentaje RAG
+  y la instrumentación separada dejó de ser una RPC del navegador. La evidencia
+  nace con la operación que crea la solicitud.
+- Reemplazó el porcentaje editable por `Informar NN%` para gerente/supervisor y
+  `Requiere gerente o supervisor` para operador. La tarjeta muestra pendiente
+  de ejecución, ejecutada sin habilitar, lista para verificar, confirmada o no
+  aplicada; solicitar nunca se presenta como cambio de precio.
+- Agregó la bandeja de validación del gerente dentro del Dashboard existente.
+  Reúne sugerencias y solicitudes de la sucursal y ordena primero por urgencia y
+  después por dinero en riesgo, sin inventar un score compuesto.
+- Conservó el contrato del bloque 4: la verificación futura en góndola podrá
+  hacerla gerente, supervisor u operador asignado a la familia. Este bloque sólo
+  muestra el estado; todavía no expone las acciones de confirmación/rechazo.
+- Añadió contratos del bloque y actualizó allowlist y frontera browser. La
+  prueba de mutación retiró temporalmente la serialización, comprobó el fallo
+  esperado y restauró el código; contrato, build, lint y diff-check quedaron
+  verdes.
+- La suite completa quedó en 116/117: sólo falla la expectativa móvil porque la
+  nueva migración aún no pasó por el replay descartable. No se consultó ni
+  modificó producción.

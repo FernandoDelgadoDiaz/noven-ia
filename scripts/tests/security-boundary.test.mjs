@@ -17,10 +17,12 @@ const ACTIVE_BROWSER_FILES = [
   'src/pages/HistorialSeguro.tsx',
   'src/components/dashboard/EditarVencimientoModalSeguro.tsx',
   'src/components/dashboard/AccionOperativaModal.tsx',
+  'src/components/dashboard/BandejaRagSucursal.tsx',
   'src/hooks/useProductos.ts',
   'src/hooks/useVencimientos.ts',
   'src/hooks/useVencimientosLista.ts',
   'src/hooks/useAccionesOperativas.ts',
+  'src/hooks/useSolicitudCambioRag.ts',
 ]
 
 const PROTECTED_TABLES = [
@@ -31,6 +33,8 @@ const PROTECTED_TABLES = [
   'acciones_operativas',
   'vencimiento_observaciones',
   'intervenciones_rag',
+  'solicitudes_cambio_rag',
+  'solicitud_cambio_rag_eventos',
   'usuarios',
   'usuario_familias',
   'usuario_familias_sucursal',
