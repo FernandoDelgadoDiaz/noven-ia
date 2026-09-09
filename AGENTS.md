@@ -21,7 +21,7 @@ Los reportes Glaciar se parsean con código propio en `src/lib/importar-*.ts`. N
 
 Públicas: `/login`, `/activar`.
 
-Autenticadas: `/dashboard`, `/scanner`, `/vencimientos`, `/historial`, `/analisis`, `/problemas`, `/importar`, `/importar/familia`, `/importar/masivo`, `/importar/pendientes`, `/importar/pendientes/aprender`, `/admin`, `/admin/accesos`.
+Autenticadas: `/dashboard`, `/scanner`, `/vencimientos`, `/historial`, `/analisis`, `/problemas`, `/rag/zona`, `/importar`, `/importar/familia`, `/importar/masivo`, `/importar/pendientes`, `/importar/pendientes/aprender`, `/admin`, `/admin/accesos`.
 
 Definidas en `src/router/index.tsx`, que es la referencia.
 

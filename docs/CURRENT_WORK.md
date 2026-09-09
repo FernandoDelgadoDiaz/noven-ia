@@ -50,8 +50,8 @@ Fecha de corte: **2026-09-09**.
   administración zonal de precios, bandeja estrictamente zonal y ejecución
   individual— sin confirmación en góndola, operación por lote ni aplicación de
   SQL en producción.
-- Publicación: rama remota creada desde `f0fd20f`; todavía no hay corte funcional
-  ni PR del bloque 3.
+- Publicación: la rama remota conserva el checkpoint inicial `af92dbf`; el corte
+  funcional está validado localmente y pendiente de publicación y PR.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -187,15 +187,52 @@ Resumen reconciliado; el detalle y las condiciones de salida permanecen en
   administrativa. Si falta, Accesos y jerarquía debe ofrecer invitarlo o
   continuar; queda una advertencia o pendiente de cobertura, nunca un bloqueo.
 
+Rama activa, bloque 3:
+
+- Alta de `administrativa_precios_zonal` implementada en Accesos y jerarquía,
+  Function e invitaciones. Organización y zona son obligatorias; sucursal y
+  familias están prohibidas. La cobertura activa o pendiente de gerencia y
+  precios se muestra por zona.
+- Si falta gerente zonal, la interfaz ofrece invitarlo o continuar. El servidor
+  no consulta ni exige esa cobertura para registrar o activar a la
+  administrativa.
+- `/rag/zona` implementa la bandeja de propósito único. La cuenta pura no recibe
+  Dashboard, selector de sucursal, Scanner, vencimientos, análisis, problemas,
+  importación, administración local ni la invitación a push operativo.
+- La bandeja lista sólo solicitudes de zonas activas de la cuenta y conserva los
+  ejecutados durante veinticuatro horas. La ejecución es individual, bloquea la
+  solicitud, revalida organización y zona y es idempotente.
+- Ejecutar agrega el evento con habilitación para el día operativo argentino
+  siguiente. No abre una intervención ni expone confirmación en góndola,
+  exportación, impresión u operación por lote.
+- Se amplió el gate vivo sobre Supabase efímero con dos administrativas de zonas
+  distintas: debe probar aislamiento, rechazo entre zonas, ausencia de DML
+  directo, idempotencia y ausencia de intervención.
+- Verificación local: contrato específico y contrato de aislamiento verdes;
+  prueba de mutación verde al debilitar temporalmente la igualdad de zona y
+  restaurarla; build y `git diff --check` verdes; lint sin errores y con el
+  warning preexistente de `ScannerModal.tsx:143`.
+- `npm test`: 117/118 archivos verdes. El único fallo es el gate deliberado de
+  expectativa móvil, porque la migración nueva aún no pasó por el replay
+  descartable.
+- Los dos recorridos Playwright nuevos tienen sintaxis validada, pero no se
+  ejecutaron localmente porque el runner aislado sólo se instala en CI.
+- Hallazgo corregido: la hora de ejecución se toma después de adquirir el lock,
+  para que una espera concurrente no cree un evento anterior al ya confirmado.
+- Hallazgo descartado: una salida truncada pareció mostrar un cierre SQL
+  duplicado; la inspección numerada del archivo verificó que no existía.
+- La CLI de Supabase no está instalada en este entorno y el intento de obtenerla
+  por `npx` no fue autorizado. La migración usa un nombre fechado generado en
+  UTC; no se consultó ni modificó ninguna base.
+
 ## Próximo paso ejecutable
 
-1. Extender Accesos y jerarquía y su Function para crear
-   `administrativa_precios_zonal` con organización y zona obligatorias.
-2. Mostrar la falta de gerente zonal como invitación o pendiente no bloqueante.
-3. Implementar la bandeja de solicitudes de la zona y la ejecución individual,
-   sin confirmación en góndola ni operación por lote.
-4. Agregar contratos, validar localmente y pasar el replay descartable antes de
-   habilitar el merge. No aplicar SQL en producción.
+1. Publicar el corte funcional reducido y abrir el PR draft del bloque 3.
+2. Ejecutar el workflow manual de replay sobre
+   `feat/rag-centralizado-bandeja-zonal`, revisar su diff estructural e incorporar
+   exclusivamente las dos expectativas regeneradas.
+3. Exigir suite completa, gate vivo, exposición y Playwright verdes antes de
+   habilitar revisión o merge. No aplicar SQL en producción.
 
 ## Protocolo de relevo
 
@@ -378,3 +415,7 @@ Resumen reconciliado; el detalle y las condiciones de salida permanecen en
 - Creó `feat/rag-centralizado-bandeja-zonal` desde ese merge e inició el bloque
   3. La rama excluye confirmación en góndola, exportación, impresión, ejecución
   por lote y cualquier escritura en producción.
+- Implementó el alta zonal no bloqueante, la bandeja exclusiva y la ejecución
+  individual del bloque 3. Añadió contratos, mutación, recorridos Playwright y
+  un cuarto gate vivo sobre Supabase descartable. El corte local queda listo
+  para publicar; el replay y su expectativa continúan pendientes.

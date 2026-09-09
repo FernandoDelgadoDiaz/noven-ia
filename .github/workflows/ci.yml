@@ -97,7 +97,7 @@ jobs:
             echo "NOVEN_REPLAY_DB_URL=${DB_URL}"
           } >> "${GITHUB_ENV}"
 
-      - name: Live isolation Gates 1-3
+      - name: Live isolation Gates 1-4
         shell: bash
         run: |
           set -euo pipefail

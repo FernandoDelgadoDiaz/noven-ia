@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Building2, Check, ChevronDown, ChevronRight, Copy, Link2, Loader2, Mail, MapPinned, Plus, Shield, Store, Users, X } from 'lucide-react'
+import { AlertTriangle, Building2, Check, ChevronDown, ChevronRight, Copy, Link2, Loader2, Mail, MapPinned, Plus, Shield, Store, Users, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
-type RolInvitable = 'gerente_zonal' | 'gerente_sucursal'
+type RolInvitable = 'gerente_zonal' | 'administrativa_precios_zonal' | 'gerente_sucursal'
 type Canal = 'link' | 'email'
 
 interface RegionItem { id: string; codigo: string; nombre: string; organizacion_id: string }
 interface ZonaItem { id: string; codigo: string; nombre: string; region_id: string; organizacion_id: string }
 interface SucursalItem { id: string; codigo: string; nombre: string; zona_id: string; organizacion_id: string }
+interface CoberturaPersona { usuario_id?: string; invitacion_id?: string; nombre: string }
+interface CoberturaZonal {
+  zona_id: string
+  gerentes_zonales: CoberturaPersona[]
+  gerentes_zonales_pendientes: CoberturaPersona[]
+  administrativas_precios: CoberturaPersona[]
+  administrativas_precios_pendientes: CoberturaPersona[]
+}
 interface Contexto {
   success: boolean
   error?: string
@@ -15,6 +23,7 @@ interface Contexto {
   regiones?: RegionItem[]
   zonas?: ZonaItem[]
   sucursales?: SucursalItem[]
+  cobertura_zonal?: CoberturaZonal[]
 }
 
 interface ResultadoInvitacion {
@@ -93,7 +102,7 @@ export default function AdminAccesos() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">Accesos y jerarquía</h1>
-            <p className="text-sm text-muted-foreground mt-1">Gerentes zonales y gerentes de sucursal</p>
+            <p className="text-sm text-muted-foreground mt-1">Responsables por organización, zona y sucursal</p>
           </div>
           <button
             type="button"
@@ -177,7 +186,10 @@ export default function AdminAccesos() {
                                 <div className="h-8 w-8 rounded-lg bg-white border border-border/60 flex items-center justify-center shrink-0">
                                   <Shield className="h-4 w-4 text-brand" />
                                 </div>
-                                <p className="flex-1 min-w-0 text-sm font-medium text-foreground">{zona.nombre}</p>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-foreground">{zona.nombre}</p>
+                                  <CoberturaResumen cobertura={(contexto.cobertura_zonal ?? []).find((item) => item.zona_id === zona.id)} />
+                                </div>
                                 <div className="text-right shrink-0 mr-1">
                                   <p className="text-sm font-bold tabular-nums text-foreground">{sucursalesZona.length}</p>
                                   <p className="text-[10px] text-muted-foreground">sucursales</p>
@@ -216,7 +228,7 @@ export default function AdminAccesos() {
       </main>
 
       {modal && contexto && (
-        <ModalInvitacion contexto={contexto} onClose={() => setModal(false)} />
+        <ModalInvitacion contexto={contexto} onClose={() => { setModal(false); void cargar() }} />
       )}
     </div>
   )
@@ -232,9 +244,25 @@ function Resumen({ titulo, valor, Icono }: { titulo: string; valor: number; Icon
   )
 }
 
+function nombresCobertura(activos: CoberturaPersona[] = [], pendientes: CoberturaPersona[] = []): string {
+  if (activos.length > 0) return activos.map((persona) => persona.nombre).join(', ')
+  if (pendientes.length > 0) return `${pendientes.map((persona) => persona.nombre).join(', ')} (invitación pendiente)`
+  return 'Sin asignar'
+}
+
+function CoberturaResumen({ cobertura }: { cobertura?: CoberturaZonal }) {
+  if (!cobertura) return <p className="text-[11px] text-muted-foreground mt-0.5">Cobertura sin cargar</p>
+  return (
+    <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+      Gerencia: {nombresCobertura(cobertura.gerentes_zonales, cobertura.gerentes_zonales_pendientes)} · Precios: {nombresCobertura(cobertura.administrativas_precios, cobertura.administrativas_precios_pendientes)}
+    </p>
+  )
+}
+
 function ModalInvitacion({ contexto, onClose }: { contexto: Contexto; onClose: () => void }) {
   const zonas = useMemo(() => contexto.zonas ?? [], [contexto.zonas])
   const sucursales = useMemo(() => contexto.sucursales ?? [], [contexto.sucursales])
+  const coberturas = useMemo(() => contexto.cobertura_zonal ?? [], [contexto.cobertura_zonal])
   const puedeZonal = Boolean(contexto.puede_crear_zonal)
   const [nombre, setNombre] = useState('')
   const [email, setEmail] = useState('')
@@ -246,14 +274,25 @@ function ModalInvitacion({ contexto, onClose }: { contexto: Contexto; onClose: (
   const [error, setError] = useState<string | null>(null)
   const [resultado, setResultado] = useState<ResultadoInvitacion | null>(null)
   const [copiado, setCopiado] = useState(false)
+  const [continuarSinGerente, setContinuarSinGerente] = useState(false)
 
   const sucursalesFiltradas = useMemo(
     () => zonaId ? sucursales.filter((s) => s.zona_id === zonaId) : [],
     [sucursales, zonaId],
   )
 
+  const zonaSeleccionada = zonas.find((zona) => zona.id === zonaId)
+  const coberturaSeleccionada = coberturas.find((item) => item.zona_id === zonaId)
+  const hayGerenciaZonal = Boolean(
+    coberturaSeleccionada
+    && (
+      coberturaSeleccionada.gerentes_zonales.length > 0
+      || coberturaSeleccionada.gerentes_zonales_pendientes.length > 0
+    ),
+  )
+
   const alcanceNombre = useMemo(() => {
-    if (rol === 'gerente_zonal') return zonas.find((z) => z.id === zonaId)?.nombre ?? ''
+    if (rol !== 'gerente_sucursal') return zonas.find((z) => z.id === zonaId)?.nombre ?? ''
     const s = sucursales.find((x) => x.id === sucursalId)
     return s ? `Sucursal ${s.codigo}` : ''
   }, [rol, zonas, zonaId, sucursales, sucursalId])
@@ -261,12 +300,17 @@ function ModalInvitacion({ contexto, onClose }: { contexto: Contexto; onClose: (
   function cambiarRol(next: RolInvitable) {
     setRol(next)
     setSucursalId('')
+    setContinuarSinGerente(false)
     if (zonas.length === 1) setZonaId(zonas[0].id)
     else setZonaId('')
   }
 
   async function guardar() {
     setError(null)
+    if (rol === 'administrativa_precios_zonal' && !hayGerenciaZonal && !continuarSinGerente) {
+      setError('Elegí si querés invitar primero al gerente zonal o continuar sin esa cobertura.')
+      return
+    }
     setGuardando(true)
     try {
       const data = await request({
@@ -274,7 +318,7 @@ function ModalInvitacion({ contexto, onClose }: { contexto: Contexto; onClose: (
         nombre,
         email,
         rol,
-        zonaId: rol === 'gerente_zonal' ? zonaId : null,
+        zonaId: rol === 'gerente_zonal' || rol === 'administrativa_precios_zonal' ? zonaId : null,
         sucursalId: rol === 'gerente_sucursal' ? sucursalId : null,
         canal,
       }) as ResultadoInvitacion
@@ -288,7 +332,11 @@ function ModalInvitacion({ contexto, onClose }: { contexto: Contexto; onClose: (
 
   async function copiar() {
     if (!resultado?.link) return
-    const rolTexto = rol === 'gerente_zonal' ? 'Gerente Zonal' : 'Gerente de Sucursal'
+    const rolTexto = rol === 'gerente_zonal'
+      ? 'Gerente Zonal'
+      : rol === 'administrativa_precios_zonal'
+        ? 'Administración Zonal de Precios'
+        : 'Gerente de Sucursal'
     const texto = `Hola ${nombre}, te invito a ingresar a Noven IA como ${rolTexto}${alcanceNombre ? ` · ${alcanceNombre}` : ''}. Abrí este enlace para activar tu cuenta y crear tu contraseña:\n${resultado.link}`
     await navigator.clipboard.writeText(texto)
     setCopiado(true)
@@ -296,7 +344,12 @@ function ModalInvitacion({ contexto, onClose }: { contexto: Contexto; onClose: (
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/35 flex items-end md:items-center justify-center md:p-4">
+    <div
+      className="fixed inset-0 z-50 bg-black/35 flex items-end md:items-center justify-center md:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Nueva invitación"
+    >
       <div className="bg-white w-full md:max-w-lg rounded-t-3xl md:rounded-3xl shadow-elevated max-h-[92vh] overflow-y-auto">
         <div className="sticky top-0 bg-white px-5 py-4 border-b border-border flex items-center justify-between z-10">
           <div>
@@ -330,34 +383,73 @@ function ModalInvitacion({ contexto, onClose }: { contexto: Contexto; onClose: (
           ) : (
             <>
               <div>
-                <label className="text-xs font-bold uppercase tracking-wide text-foreground">Nombre y apellido</label>
-                <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="mt-1.5 w-full h-11 px-3 rounded-xl bg-surface-base border border-border focus:outline-none focus:border-brand" />
+                <label htmlFor="invite-name" className="text-xs font-bold uppercase tracking-wide text-foreground">Nombre y apellido</label>
+                <input id="invite-name" value={nombre} onChange={(e) => setNombre(e.target.value)} className="mt-1.5 w-full h-11 px-3 rounded-xl bg-surface-base border border-border focus:outline-none focus:border-brand" />
               </div>
               <div>
-                <label className="text-xs font-bold uppercase tracking-wide text-foreground">Email</label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1.5 w-full h-11 px-3 rounded-xl bg-surface-base border border-border focus:outline-none focus:border-brand" placeholder="persona@empresa.com" />
+                <label htmlFor="invite-email" className="text-xs font-bold uppercase tracking-wide text-foreground">Email</label>
+                <input id="invite-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1.5 w-full h-11 px-3 rounded-xl bg-surface-base border border-border focus:outline-none focus:border-brand" placeholder="persona@empresa.com" />
               </div>
 
               <div>
                 <label className="text-xs font-bold uppercase tracking-wide text-foreground">Rol</label>
-                <div className="grid grid-cols-2 gap-2 mt-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1.5">
                   {puedeZonal && <RolButton activo={rol === 'gerente_zonal'} label="Gerente zonal" onClick={() => cambiarRol('gerente_zonal')} />}
+                  {puedeZonal && <RolButton activo={rol === 'administrativa_precios_zonal'} label="Administración de precios" onClick={() => cambiarRol('administrativa_precios_zonal')} />}
                   <RolButton activo={rol === 'gerente_sucursal'} label="Gerente sucursal" onClick={() => cambiarRol('gerente_sucursal')} />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-bold uppercase tracking-wide text-foreground">Zona</label>
-                <select value={zonaId} onChange={(e) => { setZonaId(e.target.value); setSucursalId('') }} className="mt-1.5 w-full h-11 px-3 rounded-xl bg-surface-base border border-border">
+                <label htmlFor="invite-zone" className="text-xs font-bold uppercase tracking-wide text-foreground">Zona</label>
+                <select id="invite-zone" value={zonaId} onChange={(e) => { setZonaId(e.target.value); setSucursalId(''); setContinuarSinGerente(false) }} className="mt-1.5 w-full h-11 px-3 rounded-xl bg-surface-base border border-border">
                   <option value="">Seleccionar zona</option>
                   {zonas.map((z) => <option key={z.id} value={z.id}>{z.nombre}</option>)}
                 </select>
               </div>
 
+              {zonaId && (
+                <div className="rounded-xl border border-border bg-surface-base px-4 py-3">
+                  <p className="text-xs font-bold text-foreground">Red de {zonaSeleccionada?.nombre ?? 'la zona'}</p>
+                  <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                    <p><span className="font-semibold text-foreground">Gerencia zonal:</span> {nombresCobertura(coberturaSeleccionada?.gerentes_zonales, coberturaSeleccionada?.gerentes_zonales_pendientes)}</p>
+                    <p><span className="font-semibold text-foreground">Administración de precios:</span> {nombresCobertura(coberturaSeleccionada?.administrativas_precios, coberturaSeleccionada?.administrativas_precios_pendientes)}</p>
+                  </div>
+                </div>
+              )}
+
+              {rol === 'administrativa_precios_zonal' && zonaId && !hayGerenciaZonal && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-amber-900">La zona todavía no tiene gerente zonal</p>
+                      <p className="text-xs text-amber-800 mt-1">Podés completar esa cobertura ahora o crear igualmente la administración de precios.</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+                    <button
+                      type="button"
+                      onClick={() => { setNombre(''); setEmail(''); cambiarRol('gerente_zonal') }}
+                      className="h-10 rounded-xl border border-amber-300 bg-white text-amber-900 text-xs font-semibold"
+                    >
+                      Invitar gerente zonal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setContinuarSinGerente(true)}
+                      className={`h-10 rounded-xl border text-xs font-semibold ${continuarSinGerente ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-amber-300 bg-white text-amber-900'}`}
+                    >
+                      {continuarSinGerente ? 'Continuaré sin gerente zonal' : 'Continuar sin gerente zonal'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {rol === 'gerente_sucursal' && (
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-wide text-foreground">Sucursal</label>
-                  <select value={sucursalId} onChange={(e) => setSucursalId(e.target.value)} disabled={!zonaId} className="mt-1.5 w-full h-11 px-3 rounded-xl bg-surface-base border border-border disabled:opacity-50">
+                  <label htmlFor="invite-store" className="text-xs font-bold uppercase tracking-wide text-foreground">Sucursal</label>
+                  <select id="invite-store" value={sucursalId} onChange={(e) => setSucursalId(e.target.value)} disabled={!zonaId} className="mt-1.5 w-full h-11 px-3 rounded-xl bg-surface-base border border-border disabled:opacity-50">
                     <option value="">Seleccionar sucursal</option>
                     {sucursalesFiltradas.map((s) => <option key={s.id} value={s.id}>{s.codigo} · {s.nombre}</option>)}
                   </select>

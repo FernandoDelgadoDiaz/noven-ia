@@ -11,7 +11,7 @@ interface InvitacionItem {
   id: string
   email: string
   nombre: string
-  rol: 'gerente_zonal' | 'gerente_sucursal' | 'supervisor' | 'operador'
+  rol: 'gerente_zonal' | 'administrativa_precios_zonal' | 'gerente_sucursal' | 'supervisor' | 'operador'
   canal: Canal
   estado: 'pendiente' | 'vencida'
   created_at: string
@@ -32,6 +32,7 @@ interface ApiResult {
 
 const ROL_LABEL: Record<InvitacionItem['rol'], string> = {
   gerente_zonal: 'Gerente zonal',
+  administrativa_precios_zonal: 'Administración zonal de precios',
   gerente_sucursal: 'Gerente de sucursal',
   supervisor: 'Supervisor',
   operador: 'Operador',
@@ -175,7 +176,7 @@ export default function InvitationManagementDock() {
               <div className="flex-1 min-w-0">
                 <h2 className="font-bold text-lg text-foreground">Invitaciones pendientes</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {tipo === 'local' ? 'Supervisor y Operador de esta sucursal.' : 'Gerentes dentro de tu jerarquía.'}
+                  {tipo === 'local' ? 'Supervisor y Operador de esta sucursal.' : 'Roles dentro de tu jerarquía.'}
                 </p>
               </div>
               <button type="button" onClick={() => setAbierto(false)} className="h-9 w-9 rounded-lg hover:bg-muted flex items-center justify-center"><X className="h-5 w-5" /></button>

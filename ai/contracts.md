@@ -80,6 +80,20 @@ por la fecha operativa; la fuente persistida sigue siendo el evento `ejecutada`.
   modificar un RAG por una ruta lateral.
 - `instrumentar_sugerencia_rag` deja de tener `EXECUTE` para `authenticated`:
   el snapshot nace atómicamente con la solicitud, no en una segunda llamada.
+- `administrativa_precios_zonal` se invita desde Accesos y jerarquía con una
+  organización y zona concretas; nunca recibe sucursal ni familias. La falta de
+  gerente zonal se muestra como cobertura pendiente, pero no impide registrar
+  ni activar la invitación.
+- `listar_bandeja_rag_zonal()` resuelve `auth.uid()` en servidor y devuelve sólo
+  solicitudes de zonas donde la cuenta tiene ese rol activo. Incluye pendientes
+  sin límite de antigüedad y ejecutadas durante veinticuatro horas.
+- `ejecutar_solicitud_cambio_rag(p_solicitud_id)` recibe sólo la identidad de la
+  solicitud, bloquea su fila y vuelve a validar rol, organización y zona. Agrega
+  un único evento `ejecutada`, devuelve el existente ante reintentos y fija la
+  habilitación en el día operativo argentino siguiente; no abre intervenciones.
+- La cuenta cuyo único acceso es `administrativa_precios_zonal` entra a
+  `/rag/zona` y no recibe Dashboard, selector de sucursal, Scanner, vencimientos,
+  análisis, problemas, importación, administración local ni Radar operativo.
 - La bandeja de sucursal existe sólo para gerente/supervisor y ordena por días
   comerciales ascendentes y luego dinero en riesgo descendente. No usa un score
   compuesto. El operador conserva lectura del estado en la tarjeta.
