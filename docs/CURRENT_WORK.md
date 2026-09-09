@@ -49,8 +49,7 @@ Fecha de corte: **2026-09-09**.
 - Alcance de la rama: bloque 1 del circuito RAG centralizado —modelo de
   solicitud, máquina de estados, nuevo rol y permisos— sin interfaz ni
   aplicación de SQL en producción.
-- Publicación: rama remota creada; primer corte publicado como `d62cd83`. Aún
-  no hay PR.
+- Publicación: rama remota en `bf48afc`; PR #178 abierto contra `master`.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -144,11 +143,10 @@ Rama técnica actual:
 
 ## Próximo paso ejecutable
 
-1. Publicar el commit que incorpora los dos artefactos de expectativa y este
-   checkpoint.
-2. Abrir el PR pequeño contra `master` y esperar su CI completo en verde.
-3. Corregir en la misma rama cualquier incompatibilidad que revele el CI; no
+1. Esperar el CI completo del PR #178 y revisar todos sus gates.
+2. Corregir en la misma rama cualquier incompatibilidad que revele el CI; no
    mergear con gates rojos.
+3. Con CI verde, dejar el bloque 1 listo para revisión y decisión de merge.
 4. No aplicar SQL en producción dentro de este bloque.
 
 ## Protocolo de relevo
@@ -235,3 +233,6 @@ Rama técnica actual:
   ancla permaneció intacto.
 - Verificación posterior al replay: `npm test` 116/116, build y diff-check
   verdes; lint sin errores y con el warning preexistente de `ScannerModal.tsx`.
+- Publicó la expectativa y el checkpoint como `bf48afc` y abrió el PR #178
+  contra `master`. El CI completo del PR queda como gate activo; no se aplicó
+  SQL en producción.
