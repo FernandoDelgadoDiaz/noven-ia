@@ -242,7 +242,7 @@ test.describe('Noven · escrituras críticas Scanner', () => {
     expect(fixture.directTableWrites).toEqual([])
   })
 
-  test('un control urgente registra un nuevo porcentaje RAG dentro de la RPC de control', async ({ page }) => {
+  test('gerencia informa la sugerencia por una RPC separada sin cambiar el RAG desde el control', async ({ page }) => {
     await page.clock.setFixedTime(new Date('2026-08-31T12:00:00Z'))
 
     const fixture = await installScannerWriteFixture(page, {
@@ -251,30 +251,26 @@ test.describe('Noven · escrituras críticas Scanner', () => {
       activeControlDate: '2026-09-12',
       productStock: 30,
       productVmd: 2,
+      ragPorcentaje: 20,
+      ragSuggestion: true,
     })
     await login(page)
     await buscarProductoScanner(page)
 
     const dialog = page.getByRole('dialog', { name: 'Control de vencimiento' })
     await expect(dialog).toBeVisible()
-    const rag = dialog.getByPlaceholder('Ej. 30')
-    await expect(rag).toBeVisible()
-    await expect(rag).toBeEnabled()
-    await rag.fill('30')
-    await dialog.getByRole('button', { name: 'Registrar control' }).click()
+    const informar = dialog.getByRole('button', { name: 'Informar 30%' })
+    await expect(informar).toBeVisible()
+    await expect(informar).toBeEnabled()
+    await informar.click()
 
-    await expect(page.getByRole('heading', { name: 'Registrar vencimiento' })).toBeVisible()
-    await expect.poll(() => fixture.rpcCalls.filter((call) => call.name === 'registrar_control_vencimiento_dashboard').length).toBe(1)
+    await expect.poll(() => fixture.rpcCalls.filter((call) => call.name === 'solicitar_cambio_rag').length).toBe(1)
 
-    const call = fixture.rpcCalls.find((item) => item.name === 'registrar_control_vencimiento_dashboard')
+    const call = fixture.rpcCalls.find((item) => item.name === 'solicitar_cambio_rag')
     expect(call?.body).toEqual({
       p_vencimiento_id: SCANNER_IDS.control,
-      p_cantidad_comprometida: 20,
-      p_fecha_vencimiento: '2026-09-12',
-      p_stock_actual: 30,
-      p_porcentaje_rag: 30,
-      p_nota: null,
     })
+    expect(fixture.rpcCalls.filter((item) => item.name === 'registrar_control_vencimiento_dashboard')).toHaveLength(0)
     expect(fixture.directTableWrites).toEqual([])
   })
 

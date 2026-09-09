@@ -77,6 +77,7 @@ export async function installScannerWriteFixture(page, options = {}) {
     productVmd = 2,
     diasDonacion = 10,
     ragPorcentaje = null,
+    ragSuggestion = false,
     ofertaCentralActiva = false,
     controlObservationId = null,
     salidaContext = null,
@@ -146,6 +147,11 @@ export async function installScannerWriteFixture(page, options = {}) {
         return route.fulfill({ status: 200, headers: jsonHeaders(), body: JSON.stringify(response) })
       }
 
+      if (rpc === 'solicitar_cambio_rag') {
+        rpcCalls.push({ name: rpc, body })
+        return route.fulfill({ status: 200, headers: jsonHeaders(), body: JSON.stringify('99999999-9999-4999-8999-999999999999') })
+      }
+
       if (rpc === 'contexto_salida_control') {
         rpcCalls.push({ name: rpc, body })
         return route.fulfill({ status: 200, headers: jsonHeaders(), body: JSON.stringify(salidaContext ? [salidaContext] : []) })
@@ -167,6 +173,22 @@ export async function installScannerWriteFixture(page, options = {}) {
 
     const table = path.split('/rest/v1/')[1]?.split('/')[0] ?? ''
 
+    if (table === 'rag_escala_descuento') {
+      return route.fulfill({
+        status: 200,
+        headers: jsonHeaders(),
+        body: JSON.stringify([
+          { escalon: 1, porcentaje: 20 },
+          { escalon: 2, porcentaje: 30 },
+          { escalon: 3, porcentaje: 50 },
+        ]),
+      })
+    }
+
+    if (table === 'v_solicitudes_cambio_rag_actual') {
+      return route.fulfill({ status: 200, headers: jsonHeaders(), body: '[]' })
+    }
+
     if (table === 'v_vencimientos_operativos' && eqValue(url, 'producto_id') === SCANNER_IDS.product) {
       return route.fulfill({
         status: 200,
@@ -183,11 +205,15 @@ export async function installScannerWriteFixture(page, options = {}) {
             rag_aplicado_at: ragPorcentaje == null ? null : '2026-08-28T12:30:00Z',
             cantidad_base_rag: ragPorcentaje == null ? null : activeControlQuantity,
             cantidad_observada: activeControlQuantity,
-            unidades_vendidas_observadas: null,
-            velocidad_observada: null,
-            velocidad_necesaria: null,
-            dias_comerciales_restantes: 0,
-            estado_seguimiento_rag: ragPorcentaje == null ? 'sin_rag' : 'pendiente_control_operador',
+            unidades_vendidas_observadas: ragSuggestion ? 0.5 : null,
+            velocidad_observada: ragSuggestion ? 0.5 : null,
+            velocidad_necesaria: ragSuggestion ? 2 : null,
+            dias_observados: ragSuggestion ? 1 : null,
+            dias_desde_ultimo_rag: ragSuggestion ? 1 : null,
+            dias_comerciales_restantes: ragSuggestion ? 2 : 0,
+            estado_seguimiento_rag: ragSuggestion
+              ? 'insuficiente'
+              : ragPorcentaje == null ? 'sin_rag' : 'pendiente_control_operador',
             hay_oferta_central: ofertaCentralActiva,
             intervenciones_abiertas: Number(ragPorcentaje != null) + Number(ofertaCentralActiva),
             medicion_atribuible: !(ragPorcentaje != null && ofertaCentralActiva),

@@ -50,9 +50,9 @@ Fecha de corte: **2026-09-09**.
   gerencial y seguimiento desde la sucursal— sin bandeja zonal, confirmación en
   góndola ni aplicación de SQL en producción.
 - Publicación: rama remota publicada; PR draft #179 abierto contra `master`.
-  El corte funcional es `90d2736` y los commits posteriores actualizan este
-  checkpoint. El replay está verificado y su expectativa incorporada localmente;
-  falta publicar este corte y obtener el CI final antes de habilitar el merge.
+  El corte funcional es `90d2736` y la expectativa revisada del replay quedó
+  publicada en `97cd37a`. El CI posterior validó todos los gates salvo un E2E
+  obsoleto; su ajuste está listo para publicar y volver a validar.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -156,12 +156,24 @@ Rama técnica actual:
   `master` y no sobre la rama del PR #179. Regeneró sin la migración nueva y el
   gate rechazó el resultado; no hay expectativa válida para incorporar.
 - CI previos del PR #179 fallaron por el gate esperado de expectativa móvil. Se
-  reemplazarán como evidencia por el CI que dispare la expectativa ya revisada.
+  reemplazaron como evidencia del replay por el run posterior `34339575079`.
+- CI `34339575079`: replay, contratos, lint, build, aislamiento, cuota,
+  clasificación de exposición y preparación de Playwright quedaron verdes. El
+  único fallo fue un E2E que todavía buscaba el porcentaje editable retirado por
+  este bloque e intentaba enviarlo dentro de la RPC de control.
+- El E2E fue actualizado para pulsar `Informar 30%`, comprobar una única llamada
+  a `solicitar_cambio_rag(p_vencimiento_id)` y comprobar que esa acción no llama
+  a `registrar_control_vencimiento_dashboard` ni escribe tablas directamente.
+  El fixture y el contrato estático cubren la nueva ruta.
+- Verificación local posterior al ajuste E2E: contrato específico y suite
+  completa 117/117 en verde; build y diff-check verdes; lint con cero errores y
+  el warning preexistente de `ScannerModal.tsx:143`.
 
 ## Próximo paso ejecutable
 
-1. Publicar la expectativa móvil y este checkpoint en el PR #179.
-2. Esperar el CI completo en verde, sacar el PR de draft y decidir el merge.
+1. Publicar el ajuste E2E y este checkpoint en el PR #179.
+2. Esperar el CI completo en verde; si queda verde, sacar el PR de draft y
+   dejar el merge sujeto a decisión explícita.
 3. No aplicar SQL en producción dentro de este bloque.
 
 ## Protocolo de relevo
@@ -313,3 +325,12 @@ Rama técnica actual:
   móvil desactualizada ya identificada localmente. No se interpreta como un
   defecto funcional: exige ejecutar y revisar el replay descartable antes de
   continuar.
+- Publicó la expectativa revisada del replay en el corte remoto `97cd37a`. El CI
+  resultante, run `34339575079`, dejó verdes todos los gates de base de datos,
+  seguridad, contratos, build y lint; sólo falló el Playwright que conservaba la
+  interacción anterior con un porcentaje editable.
+- Actualizó ese recorrido para representar la operación vigente: gerencia
+  informa la sugerencia mediante `solicitar_cambio_rag`, sin reutilizar la RPC
+  de control ni efectuar escrituras directas. Contrato específico, 117/117
+  pruebas, build y diff-check quedaron verdes; lint quedó sin errores y con su
+  warning preexistente.

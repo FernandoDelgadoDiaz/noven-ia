@@ -10,6 +10,8 @@ const modal = read('src/components/dashboard/EditarVencimientoModalSeguro.tsx')
 const badge = read('src/components/dashboard/RagSeguimientoBadge.tsx')
 const bandeja = read('src/components/dashboard/BandejaRagSucursal.tsx')
 const hook = read('src/hooks/useSolicitudCambioRag.ts')
+const e2e = read('e2e/critical-flows.spec.mjs')
+const e2eFixture = read('e2e/fixtures/scanner-write-fixture.mjs')
 
 const impl = migration.match(
   /CREATE OR REPLACE FUNCTION noven_private\.solicitar_cambio_rag_impl\([\s\S]*?\n\$\$;/,
@@ -68,6 +70,15 @@ assert.match(hook, /error: error\.message/,
   'un error real no se disfraza como ausencia de solicitud')
 assert.match(hook, /disponible: false/,
   'el despliegue gradual tolera que la vista todavía no exista')
+
+assert.match(e2e, /getByRole\('button', \{ name: 'Informar 30%' \}\)/,
+  'el recorrido E2E valida la nueva acción gerencial')
+assert.match(e2e, /call\.name === 'solicitar_cambio_rag'/)
+assert.match(e2e, /registrar_control_vencimiento_dashboard'\)\)\.toHaveLength\(0\)/,
+  'el recorrido prueba que informar no reutiliza la RPC de control')
+assert.doesNotMatch(e2e, /getByPlaceholder\('Ej\. 30'\)/,
+  'el E2E no puede reintroducir el porcentaje editable anterior')
+assert.match(e2eFixture, /rpc === 'solicitar_cambio_rag'/)
 
 console.log('✓ Validación sucursal: solicitud server-side, idempotente y sin cambio directo de precio')
 console.log('✓ UI: gerencia informa; operadora ve restricción y seguimiento del estado')
