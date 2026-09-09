@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { IDS, installNovenFixture, login } from './fixtures/noven-fixture.mjs'
 import { SCANNER_IDS, installScannerWriteFixture } from './fixtures/scanner-write-fixture.mjs'
+import { RAG_ZONAL_IDS, installRagZonalFixture } from './fixtures/rag-zonal-fixture.mjs'
 import {
   INVITATION_IDS,
   installActivationFixture,
@@ -350,7 +351,87 @@ test.describe('Noven · escrituras críticas Scanner', () => {
   })
 })
 
+test.describe('Noven · bandeja RAG zonal', () => {
+  test('la administrativa pura entra a su zona y ejecuta una solicitud por RPC', async ({ page }) => {
+    const fixture = await installRagZonalFixture(page)
+
+    await page.goto('/login')
+    await page.getByLabel('Email').fill('admin@noven.test')
+    await page.getByLabel('Contraseña').fill('e2e-password')
+    await page.getByRole('button', { name: 'Ingresar' }).click()
+    await page.waitForURL('**/rag/zona')
+
+    await expect(page.getByRole('heading', { name: 'Bandeja zonal RAG' })).toBeVisible()
+    await expect(page.getByText('Santa Cruz Sur', { exact: true })).toBeVisible()
+    await expect(page.getByText('PRODUCTO RAG ZONAL E2E')).toBeVisible()
+    await expect(page.getByText('20% → 30%')).toBeVisible()
+    await expect(page.locator('select[aria-label="Seleccionar sucursal de trabajo"]:visible')).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Scanner' })).toHaveCount(0)
+
+    page.once('dialog', (dialog) => dialog.accept())
+    await page.getByRole('button', { name: 'Marcar como ejecutada' }).click()
+
+    await expect.poll(() => fixture.rpcCalls.filter((call) => call.name === 'ejecutar_solicitud_cambio_rag').length).toBe(1)
+    expect(fixture.rpcCalls.find((call) => call.name === 'ejecutar_solicitud_cambio_rag')?.body).toEqual({
+      p_solicitud_id: RAG_ZONAL_IDS.request,
+    })
+    expect(fixture.directTableWrites).toEqual([])
+    await expect(page.getByText('EJECUTADA')).toBeVisible()
+    await expect(page.getByText(/La sucursal podrá verificarla en góndola desde 10\/09\/2026/)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Marcar como ejecutada' })).toHaveCount(0)
+
+    await page.goto('/dashboard')
+    await page.waitForURL('**/rag/zona')
+  })
+})
+
 test.describe('Noven · invitaciones seguras', () => {
+  test('la administración zonal de precios puede crearse aunque falte gerente zonal', async ({ page }) => {
+    await installNovenFixture(page)
+    const hierarchyCalls = []
+    await page.route('**/api/admin/write/accesos', async (route) => {
+      const body = route.request().postDataJSON() ?? {}
+      hierarchyCalls.push(body)
+      return route.fulfill({
+        status: 201,
+        headers: { 'content-type': 'application/json; charset=utf-8' },
+        body: JSON.stringify({
+          success: true,
+          invitacion: { estado: 'pendiente' },
+          canal: 'link',
+          link: 'https://noven-ia.netlify.app/activar#e2e-precios-zonal',
+        }),
+      })
+    })
+    await login(page)
+    await page.goto('/admin/accesos')
+
+    await page.getByRole('button', { name: 'Nueva invitación' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Nueva invitación' })
+    await dialog.getByLabel('Nombre y apellido').fill('Administrativa E2E')
+    await dialog.getByLabel('Email').fill('precios.zonal@noven.test')
+    await dialog.getByRole('button', { name: 'Administración de precios' }).click()
+
+    await expect(dialog.getByText('La zona todavía no tiene gerente zonal')).toBeVisible()
+    await dialog.getByRole('button', { name: 'Crear invitación' }).click()
+    await expect(dialog.getByText('Elegí si querés invitar primero al gerente zonal o continuar sin esa cobertura.')).toBeVisible()
+    expect(hierarchyCalls).toHaveLength(0)
+
+    await dialog.getByRole('button', { name: 'Continuar sin gerente zonal' }).click()
+    await dialog.getByRole('button', { name: 'Crear invitación' }).click()
+    await expect(dialog.getByText('Invitación creada')).toBeVisible()
+    expect(hierarchyCalls).toEqual([{
+      accion: 'invitar',
+      nombre: 'Administrativa E2E',
+      email: 'precios.zonal@noven.test',
+      rol: 'administrativa_precios_zonal',
+      zonaId: IDS.zona,
+      sucursalId: null,
+      canal: 'link',
+    }])
+  })
+
   test('crear operador, regenerar y anular conserva el scope local y cambia el enlace', async ({ page }) => {
     const fixture = await installInvitationFixture(page)
     await login(page)

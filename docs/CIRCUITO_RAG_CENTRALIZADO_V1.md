@@ -31,8 +31,20 @@ empieza a medirse.
 
 ## Los tiempos reales, que definen todo el diseño
 
-- El pedido tiene que estar **antes del mediodía**.
-- La administrativa procesa **entre las dos y las cuatro** de la tarde.
+- Cada zona configura su ventana de recepción. Para `Santa Cruz Sur` es de
+  **08:00 a 12:00**, evaluada en horario argentino por el servidor.
+- Una solicitud cargada antes de las **08:00** se guarda para la jornada de ese
+  mismo día y aparece al abrir la ventana. No se rechaza ni se deriva al día
+  siguiente.
+- Dentro de esa ventana, cada solicitud aparece **en tiempo real** en la
+  bandeja zonal. El orden de llegada no define su posición: la bandeja la ubica
+  siempre dentro de su sucursal y mantiene el orden operacional acordado.
+- Desde que se cumple el corte de las **12:00**, la solicitud se registra pero
+  queda asignada a la jornada siguiente. La administrativa no la ve ese día;
+  aparece al abrir la ventana del día siguiente.
+- Al cumplirse el corte de las **12:00**, la administrativa revisa la jornada
+  completa, exporta por sucursal o por zona y carga los cambios en el sistema de
+  la cadena.
 - El cambio impacta en góndola **al día siguiente**.
 
 Ese desfasaje de un día es el que obliga a separar tres momentos que hoy están
@@ -54,10 +66,12 @@ El operador ve todo esto pero no puede apretar. Su tarjeta muestra la sugerencia
 con el botón deshabilitado y el texto "Requiere validación del gerente o
 supervisor". Ve el estado, no la acción.
 
-**3 · La administrativa ejecuta.** Ve la solicitud en su bandeja zonal, la carga
-manualmente en el sistema de la cadena y marca **ejecutado** en NoVen. En la
-pantalla de la sucursal no cambia nada todavía, porque el precio en góndola sigue
-siendo el viejo.
+**3 · La administrativa ejecuta.** Durante la ventana recibe las solicitudes en
+tiempo real, agrupadas y ordenadas por sucursal. Puede exportar una sucursal o
+la jornada completa, carga los cambios manualmente en el sistema de la cadena y
+recién entonces marca **Activo** en NoVen. Ese control genera internamente el
+evento `ejecutada`. En la pantalla de la sucursal no se habilita todavía la
+confirmación, porque el precio en góndola sigue siendo el viejo.
 
 **4 · Al día siguiente se habilita.** El botón pasa a verde y se puede apretar.
 Las dos condiciones son necesarias: **ejecutado por la administrativa** *y*
@@ -246,7 +260,18 @@ sobre datos viejos. El motor no sugiere sin observación nueva.
 Bandeja operacional, no dashboard analítico. Sólo solicitudes ya validadas de su
 zona.
 
-**Orden:** sucursal → sector/familia → fin de acción ascendente.
+**Jornada por zona:** la hora de inicio y el corte son configuración de la zona,
+no constantes del navegador. En `Santa Cruz Sur`, las solicitudes registradas
+desde las 08:00 y antes del corte de las 12:00 entran en tiempo real a la jornada
+visible. Las anteriores a las 08:00 quedan en espera para esa misma jornada y se
+muestran al abrir la ventana. Las registradas desde el corte quedan en espera y
+sólo aparecen en la jornada siguiente. Cambiar la hora del dispositivo no puede
+adelantar ni atrasar esa asignación.
+
+**Orden estable:** código de sucursal ascendente → sector/familia → fin de acción
+ascendente. Una solicitud nueva se inserta dentro del grupo de su sucursal;
+nunca se agrega al final sólo porque llegó después que las demás. La
+administrativa puede recorrer varios locales sin que se mezclen sus pedidos.
 
 **Columnas:** sucursal, sector/familia, código, producto, RAG actual, nueva RAG,
 vencimiento del producto, fin de acción, stock comprometido, validado por, fecha
@@ -260,11 +285,14 @@ de validación, estado.
   congelados, dos en perecederos. **La fuente de verdad es la política existente,
   nunca constantes duplicadas en la pantalla nueva.**
 
-**Exportar e imprimir**, porque la carga en el sistema de la cadena es manual y
-necesita la lista en mano. El Excel respeta filtros, orden y agrupación de la
-pantalla. No un CSV renombrado.
+**Exportar Excel** de dos maneras: una sucursal seleccionada o el total de la
+jornada visible de la zona. Ambos archivos respetan columnas, filtros, orden y
+agrupación de la pantalla. El total conserva bloques consecutivos por sucursal.
+Es un `.xlsx` real, no un CSV renombrado, y nunca incorpora solicitudes diferidas
+a la jornada siguiente.
 
-**Marcar como ejecutadas**, de a una o varias. Idempotente. La administrativa
+**Marcar Activo** sólo después de cargar el cambio en el sistema de la cadena.
+La transición es idempotente y se persiste como `ejecutada`. La administrativa
 sólo confirma la ejecución: **no puede modificar** el porcentaje propuesto, el
 producto, el vencimiento, la sucursal ni el validador.
 
@@ -281,7 +309,8 @@ zonal** y no debe ganar por accidente Scanner, escritura de vencimientos,
 controles, análisis gerencial, importación, administración local ni Radar
 operativo.
 
-Su única capacidad es consultar y ejecutar solicitudes ya validadas de su zona.
+Su única capacidad es consultar, exportar y activar solicitudes ya validadas de
+su zona y de la jornada que le corresponde.
 
 Se da de alta desde Accesos y jerarquía, no desde la administración local de una
 sucursal.
@@ -319,9 +348,9 @@ la originó, con FK nullable y sin tocar las intervenciones históricas.
 
 Tiene que poder reconstruirse:
 
-qué sugirió NoVen → quién validó y cuándo → qué RAG estaba vigente → qué se
-solicitó → quién ejecutó y cuándo → cuándo entró en vigencia → cuándo se confirmó
-en góndola → qué pasó después.
+qué sugirió NoVen → quién validó y cuándo → a qué jornada zonal fue asignado →
+qué RAG estaba vigente → qué se solicitó → quién lo marcó activo y cuándo →
+cuándo entró en vigencia → cuándo se confirmó en góndola → qué pasó después.
 
 **Nada se sobrescribe.**
 
@@ -366,9 +395,12 @@ La implementación se divide en bloques acumulativos:
 
 1. modelo de solicitud, máquina de estados y permisos;
 2. validación gerencial y seguimiento desde la sucursal;
-3. bandeja zonal y ejecución individual;
+3. bandeja zonal:
+   - **3A:** base y ejecución individual;
+   - **3B:** jornada configurable, corte de visibilidad y exportación Excel por
+     sucursal o por zona;
 4. confirmación o rechazo en góndola y apertura del tramo sólo al confirmar;
-5. exportación, impresión y ejecución por lote.
+5. impresión y operación por lote que no haya quedado cubierta en 3B.
 
 ---
 

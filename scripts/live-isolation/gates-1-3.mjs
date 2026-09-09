@@ -24,6 +24,8 @@ const IDS = Object.freeze({
   productStoreA2: '17000000-0000-4000-8000-000000000002',
   productStoreA3: '17000000-0000-4000-8000-000000000003',
   productStoreB1: '17000000-0000-4000-8000-000000000004',
+  expiryA1: '18000000-0000-4000-8000-000000000001',
+  ragRequestA1: '19000000-0000-4000-8000-000000000001',
 })
 
 const USERS = Object.freeze({
@@ -53,6 +55,24 @@ const USERS = Object.freeze({
     scopeRole: 'gerente_zonal',
     storeId: null,
     zoneId: IDS.zoneA1,
+  },
+  priceAdminA1: {
+    email: 'gate4.prices.a1@example.com',
+    password: 'Noven-Live-Gate-Prices-A1-2026!',
+    name: 'Gate Price Admin A1',
+    legacyRole: 'supervisor',
+    scopeRole: 'administrativa_precios_zonal',
+    storeId: null,
+    zoneId: IDS.zoneA1,
+  },
+  priceAdminA2: {
+    email: 'gate4.prices.a2@example.com',
+    password: 'Noven-Live-Gate-Prices-A2-2026!',
+    name: 'Gate Price Admin A2',
+    legacyRole: 'supervisor',
+    scopeRole: 'administrativa_precios_zonal',
+    storeId: null,
+    zoneId: IDS.zoneA2,
   },
 })
 
@@ -388,6 +408,49 @@ async function installFixtures(environment) {
       activo: true,
     },
   ])
+  await insertRows(environment, 'rag_escala_descuento', [
+    { organizacion_id: IDS.orgA, escalon: 1, porcentaje: 20 },
+    { organizacion_id: IDS.orgA, escalon: 2, porcentaje: 30 },
+  ])
+  await insertRows(environment, 'vencimientos', [{
+    id: IDS.expiryA1,
+    producto_id: IDS.productA,
+    sucursal_id: IDS.storeA1,
+    usuario_id: users.managerA1.id,
+    cantidad: 12,
+    fecha_vencimiento: '2030-12-31',
+    fecha_carga: '2030-12-01',
+    activo: true,
+  }])
+  await insertRows(environment, 'solicitudes_cambio_rag', [{
+    id: IDS.ragRequestA1,
+    organizacion_id: IDS.orgA,
+    zona_id: IDS.zoneA1,
+    sucursal_id: IDS.storeA1,
+    producto_id: IDS.productA,
+    vencimiento_id: IDS.expiryA1,
+    solicitada_por: users.managerA1.id,
+    porcentaje_rag_vigente: 20,
+    porcentaje_solicitado: 30,
+    cobertura_al_sugerir: 0.5,
+    escalones_sugeridos: 1,
+    velocidad_observada: 0.5,
+    velocidad_necesaria: 1,
+    dias_comerciales_restantes: 10,
+    cantidad_comprometida: 12,
+    vmd_glaciar: 1,
+    fecha_vencimiento: '2030-12-31',
+    fin_accion: '2030-12-21',
+    producto_codigo: '1000001',
+    producto_descripcion: 'Gate Product A',
+    sector_nombre: 'Sector A',
+    familia_nombre: 'Family A',
+  }])
+  await insertRows(environment, 'solicitud_cambio_rag_eventos', [{
+    solicitud_id: IDS.ragRequestA1,
+    tipo: 'solicitada',
+    actor_id: users.managerA1.id,
+  }])
 
   return users
 }
@@ -425,6 +488,8 @@ async function gate1(environment, token) {
     `cross-store direct PATCH was not rejected: ${responseSummary(directMutation.response, directMutation.raw)}`,
   )
 
+  // Gate 4 ya sembró el vencimiento activo que respalda la solicitud. Reusarlo
+  // mantiene la unicidad activa y conserva en Gate 1 una escritura real en A1.
   const allowedRpc = await requestJson(
     `${environment.apiUrl}/rest/v1/rpc/guardar_vencimiento_y_stock_scanner_v1`,
     {
@@ -438,7 +503,7 @@ async function gate1(environment, token) {
         p_fecha_vencimiento: '2030-12-31',
         p_lote: 'GATE-A1',
         p_stock_actual: 12,
-        p_vencimiento_id: null,
+        p_vencimiento_id: IDS.expiryA1,
       },
     },
   )
@@ -537,6 +602,114 @@ async function gate3(environment, token) {
   console.log('✓ Gate 3: gerente zonal A1 ve A1/A2 y queda fuera de Zona A2/Org B')
 }
 
+async function gate4(environment, tokens, users) {
+  const managerList = await requestJson(
+    `${environment.apiUrl}/rest/v1/rpc/listar_bandeja_rag_zonal`,
+    { apikey: environment.anonKey, token: tokens.managerA1, method: 'POST', body: {} },
+  )
+  assert.equal(
+    managerList.response.status,
+    403,
+    `manager entered price-admin tray: ${responseSummary(managerList.response, managerList.raw)}`,
+  )
+
+  const zoneA2List = assertOk('price admin A2 tray', await requestJson(
+    `${environment.apiUrl}/rest/v1/rpc/listar_bandeja_rag_zonal`,
+    { apikey: environment.anonKey, token: tokens.priceAdminA2, method: 'POST', body: {} },
+  ))
+  assert.deepEqual(zoneA2List.zonas.map((zone) => zone.id), [IDS.zoneA2])
+  assert.deepEqual(zoneA2List.solicitudes, [])
+
+  const blockedExecution = await requestJson(
+    `${environment.apiUrl}/rest/v1/rpc/ejecutar_solicitud_cambio_rag`,
+    {
+      apikey: environment.anonKey,
+      token: tokens.priceAdminA2,
+      method: 'POST',
+      body: { p_solicitud_id: IDS.ragRequestA1 },
+    },
+  )
+  assert.equal(
+    blockedExecution.response.status,
+    403,
+    `cross-zone execution was not rejected: ${responseSummary(blockedExecution.response, blockedExecution.raw)}`,
+  )
+
+  const zoneA1List = assertOk('price admin A1 tray', await requestJson(
+    `${environment.apiUrl}/rest/v1/rpc/listar_bandeja_rag_zonal`,
+    { apikey: environment.anonKey, token: tokens.priceAdminA1, method: 'POST', body: {} },
+  ))
+  assert.deepEqual(zoneA1List.zonas.map((zone) => zone.id), [IDS.zoneA1])
+  assert.deepEqual(zoneA1List.solicitudes.map((request) => request.id), [IDS.ragRequestA1])
+  assert.equal(zoneA1List.solicitudes[0].requiere_ejecucion, true)
+
+  const directEvent = await requestJson(
+    `${environment.apiUrl}/rest/v1/solicitud_cambio_rag_eventos`,
+    {
+      apikey: environment.anonKey,
+      token: tokens.priceAdminA1,
+      method: 'POST',
+      prefer: 'return=representation',
+      body: {
+        solicitud_id: IDS.ragRequestA1,
+        tipo: 'ejecutada',
+        actor_id: users.priceAdminA1.id,
+        habilitada_desde: '2030-01-01',
+      },
+    },
+  )
+  assert.equal(
+    directEvent.response.status,
+    403,
+    `direct event INSERT was not rejected: ${responseSummary(directEvent.response, directEvent.raw)}`,
+  )
+
+  const firstExecution = assertOk('price admin A1 execution', await requestJson(
+    `${environment.apiUrl}/rest/v1/rpc/ejecutar_solicitud_cambio_rag`,
+    {
+      apikey: environment.anonKey,
+      token: tokens.priceAdminA1,
+      method: 'POST',
+      body: { p_solicitud_id: IDS.ragRequestA1 },
+    },
+  ))
+  const repeatedExecution = assertOk('price admin A1 repeated execution', await requestJson(
+    `${environment.apiUrl}/rest/v1/rpc/ejecutar_solicitud_cambio_rag`,
+    {
+      apikey: environment.anonKey,
+      token: tokens.priceAdminA1,
+      method: 'POST',
+      body: { p_solicitud_id: IDS.ragRequestA1 },
+    },
+  ))
+  assert.equal(repeatedExecution, firstExecution, 'retry returned a different event')
+
+  const events = await selectAsService(
+    environment,
+    'solicitud_cambio_rag_eventos',
+    `select=id,tipo,actor_id,habilitada_desde&solicitud_id=eq.${IDS.ragRequestA1}&order=id.asc`,
+  )
+  assert.equal(events.length, 2, 'double click created more than one execution event')
+  assert.deepEqual(events.map((event) => event.tipo), ['solicitada', 'ejecutada'])
+  assert.equal(events[1].actor_id, users.priceAdminA1.id)
+  assert.match(events[1].habilitada_desde ?? '', /^\d{4}-\d{2}-\d{2}$/)
+
+  const interventions = await selectAsService(
+    environment,
+    'intervenciones_rag',
+    `select=id&solicitud_cambio_rag_id=eq.${IDS.ragRequestA1}`,
+  )
+  assert.deepEqual(interventions, [], 'execution opened a RAG intervention')
+
+  const afterExecution = assertOk('price admin A1 tray after execution', await requestJson(
+    `${environment.apiUrl}/rest/v1/rpc/listar_bandeja_rag_zonal`,
+    { apikey: environment.anonKey, token: tokens.priceAdminA1, method: 'POST', body: {} },
+  ))
+  assert.equal(afterExecution.solicitudes[0].requiere_ejecucion, false)
+
+  console.log('✓ Gate 4: administrativa ejecuta sólo su zona, sin DML directo, duplicados ni intervención')
+}
+
 export async function runGates(env = process.env) {
   const environment = requireDisposableLocalEnvironment(env)
   const rootProbe = await requestJson(
@@ -552,12 +725,15 @@ export async function runGates(env = process.env) {
     operatorA1: await signIn(environment, users.operatorA1),
     managerA1: await signIn(environment, users.managerA1),
     zoneManagerA1: await signIn(environment, users.zoneManagerA1),
+    priceAdminA1: await signIn(environment, users.priceAdminA1),
+    priceAdminA2: await signIn(environment, users.priceAdminA2),
   }
-  console.log('✓ Auth local emitió JWT reales para operador, gerente local y gerente zonal')
+  console.log('✓ Auth local emitió JWT reales para roles locales y zonales')
 
   await gate1(environment, tokens.operatorA1)
   await gate2(environment, tokens.managerA1)
   await gate3(environment, tokens.zoneManagerA1)
+  await gate4(environment, tokens, users)
 }
 
 const isCli = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])

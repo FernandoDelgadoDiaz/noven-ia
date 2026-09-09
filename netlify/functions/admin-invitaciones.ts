@@ -6,7 +6,7 @@ import { logServerError } from './_observability'
 
 type Canal = 'link' | 'email'
 type TipoListado = 'jerarquia' | 'local'
-type RolInvitacion = 'gerente_zonal' | 'gerente_sucursal' | 'supervisor' | 'operador'
+type RolInvitacion = 'gerente_zonal' | 'administrativa_precios_zonal' | 'gerente_sucursal' | 'supervisor' | 'operador'
 
 interface ListBody {
   accion: 'listar'
@@ -276,14 +276,20 @@ async function handleAdminInvitaciones(event: HandlerEvent): Promise<HandlerResp
   let registro: unknown
   let registroError: { message: string } | null = null
 
-  if (detalle.rol === 'gerente_zonal' || detalle.rol === 'gerente_sucursal') {
+  if (
+    detalle.rol === 'gerente_zonal'
+    || detalle.rol === 'administrativa_precios_zonal'
+    || detalle.rol === 'gerente_sucursal'
+  ) {
     const result = await supabase.rpc('registrar_invitacion_acceso_v1', {
       p_actor_id: sesion.uid,
       p_usuario_id: nuevaAuth.usuarioId,
       p_email: detalle.email,
       p_nombre: detalle.nombre,
       p_rol: detalle.rol,
-      p_zona_id: detalle.rol === 'gerente_zonal' ? detalle.zona_id : null,
+      p_zona_id: detalle.rol === 'gerente_zonal' || detalle.rol === 'administrativa_precios_zonal'
+        ? detalle.zona_id
+        : null,
       p_sucursal_id: detalle.rol === 'gerente_sucursal' ? detalle.sucursal_id : null,
       p_canal: detalle.canal,
     })

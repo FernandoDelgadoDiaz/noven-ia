@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { createBrowserRouter } from 'react-router-dom'
 import AppLayout from '../components/layout/AppLayout'
 import PrivateRoute from '../components/auth/PrivateRoute'
 import OperationalRoute from '../components/auth/OperationalRoute'
@@ -7,6 +7,9 @@ import AnalysisRoute from '../components/auth/AnalysisRoute'
 import CatalogWriteRoute from '../components/auth/CatalogWriteRoute'
 import AdminRoute from '../components/auth/AdminRoute'
 import AccessAdminRoute from '../components/auth/AccessAdminRoute'
+import RagZonalRoute from '../components/auth/RagZonalRoute'
+import StandardAppRoute from '../components/auth/StandardAppRoute'
+import DefaultAuthenticatedRoute from '../components/auth/DefaultAuthenticatedRoute'
 import ErrorBoundary from '../components/ErrorBoundary'
 import RouteSkeleton from '../components/ui/RouteSkeleton'
 
@@ -28,6 +31,7 @@ const PendientesCatalogo = lazy(() => import('../pages/PendientesCatalogo'))
 const AprenderPendientesCsv = lazy(() => import('../pages/AprenderPendientesCsv'))
 const Admin = lazy(() => import('../pages/Admin'))
 const AdminAccesos = lazy(() => import('../pages/AdminAccesos'))
+const BandejaRagZonal = lazy(() => import('../pages/BandejaRagZonal'))
 
 const suspenseProps = { fallback: <RouteSkeleton /> }
 
@@ -41,10 +45,10 @@ export const router = createBrowserRouter([
       {
         element: <AppLayout />,
         children: [
-          { index: true, element: <Navigate to="/dashboard" replace /> },
+          { index: true, element: <DefaultAuthenticatedRoute /> },
           {
             path: 'dashboard',
-            element: <ErrorBoundary><Suspense {...suspenseProps}><Dashboard /></Suspense></ErrorBoundary>,
+            element: <StandardAppRoute><ErrorBoundary><Suspense {...suspenseProps}><Dashboard /></Suspense></ErrorBoundary></StandardAppRoute>,
           },
           {
             // Scanner es una herramienta de escritura local: zonal queda fuera.
@@ -58,11 +62,11 @@ export const router = createBrowserRouter([
           },
           {
             path: 'vencimientos',
-            element: <ErrorBoundary><Suspense {...suspenseProps}><Vencimientos /></Suspense></ErrorBoundary>,
+            element: <StandardAppRoute><ErrorBoundary><Suspense {...suspenseProps}><Vencimientos /></Suspense></ErrorBoundary></StandardAppRoute>,
           },
           {
             path: 'historial',
-            element: <ErrorBoundary><Suspense {...suspenseProps}><Historial /></Suspense></ErrorBoundary>,
+            element: <StandardAppRoute><ErrorBoundary><Suspense {...suspenseProps}><Historial /></Suspense></ErrorBoundary></StandardAppRoute>,
           },
           {
             // El análisis gerencial es capacidad de conducción: zonal, gerente
@@ -78,13 +82,13 @@ export const router = createBrowserRouter([
           },
           {
             path: 'problemas',
-            element: <ErrorBoundary><Suspense {...suspenseProps}><Problemas /></Suspense></ErrorBoundary>,
+            element: <StandardAppRoute><ErrorBoundary><Suspense {...suspenseProps}><Problemas /></Suspense></ErrorBoundary></StandardAppRoute>,
           },
           {
             // La bandeja mantiene lectura zonal; la propia página oculta acciones
             // cuando el ítem no cae en una sucursal gestionable por el actor.
             path: 'importar/pendientes',
-            element: <ErrorBoundary><Suspense {...suspenseProps}><PendientesCatalogo /></Suspense></ErrorBoundary>,
+            element: <StandardAppRoute><ErrorBoundary><Suspense {...suspenseProps}><PendientesCatalogo /></Suspense></ErrorBoundary></StandardAppRoute>,
           },
           {
             // Escrituras de importación/catálogo: gerente o supervisor local exacto.
@@ -115,6 +119,15 @@ export const router = createBrowserRouter([
               {
                 path: 'admin',
                 element: <ErrorBoundary><Suspense {...suspenseProps}><Admin /></Suspense></ErrorBoundary>,
+              },
+            ],
+          },
+          {
+            element: <RagZonalRoute />,
+            children: [
+              {
+                path: 'rag/zona',
+                element: <ErrorBoundary><Suspense {...suspenseProps}><BandejaRagZonal /></Suspense></ErrorBoundary>,
               },
             ],
           },

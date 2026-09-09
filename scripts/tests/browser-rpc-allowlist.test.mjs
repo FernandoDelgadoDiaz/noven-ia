@@ -32,6 +32,9 @@ const ALLOWED_BROWSER_RPCS = new Set([
   // El click abre una oferta central desde el stock ya conocido; no recibe ni
   // permite retrotraer fecha de inicio.
   'informar_oferta_central',
+  // Lectura dedicada: devuelve sólo las zonas activas del rol de precios y las
+  // solicitudes operables de esas zonas.
+  'listar_bandeja_rag_zonal',
   'listar_familias_scanner',
   'listar_mis_alertas_zonales_v1',
   'modo_imagen_producto_operador',
@@ -40,6 +43,9 @@ const ALLOWED_BROWSER_RPCS = new Set([
   // El browser identifica el vencimiento; rol, alcance, porcentaje y snapshot
   // se resuelven dentro de la implementación server-side.
   'solicitar_cambio_rag',
+  // La administrativa identifica una solicitud; actor, zona, estado y fecha de
+  // habilitación se resuelven en servidor y el doble click es idempotente.
+  'ejecutar_solicitud_cambio_rag',
   'vincular_ean_producto_scanner',
 ])
 
@@ -81,7 +87,7 @@ assert.deepEqual(
   `RPC aprobadas pero sin caller browser: ${aprobadasSinCaller.join(', ')}. Revisar si corresponde revocar EXECUTE.`,
 )
 
-assert.equal(usados.size, 21, 'La superficie browser esperada debe permanecer en 21 RPC explícitas')
+assert.equal(usados.size, 23, 'La superficie browser esperada debe permanecer en 23 RPC explícitas')
 assert.equal(usados.has('listar_resumen_radar_zonal_v1'), false, 'El resumen Radar huérfano no debe volver al navegador')
 
 console.log(`✓ Allowlist browser RPC: ${usados.size} entradas explícitas y sin superficie huérfana`)

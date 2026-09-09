@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, ScanLine, Calendar, BrainCircuit, FileUp, Users, LogOut, Bell, X, Network, ShieldAlert } from 'lucide-react'
+import { LayoutDashboard, ScanLine, Calendar, BrainCircuit, FileUp, Users, LogOut, Bell, X, Network, ShieldAlert, Tags } from 'lucide-react'
 import { useUsuarioRol } from '@/hooks/useUsuarioRol'
 import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
 import { useNovenAccessContext } from '@/hooks/useNovenAccessContext'
@@ -38,6 +38,12 @@ const ACCESS_ADMIN_NAV_ITEM: NavItem = {
   Icon: Network,
 }
 
+const RAG_ZONAL_NAV_ITEM: NavItem = {
+  to: '/rag/zona',
+  label: 'RAG zonal',
+  Icon: Tags,
+}
+
 const MOBILE_NAV_LEFT: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { to: '/vencimientos', label: 'Vencimientos', Icon: Calendar },
@@ -56,6 +62,14 @@ export default function AppLayout() {
   const { puedeGestionar: gestionaCatalogo } = usePuedeGestionarCatalogoSucursal()
   const { puedeVerAnalisis } = usePuedeVerAnalisis()
   const navigate = useNavigate()
+  const accesosActivos = accesos.filter((acceso) => acceso.activo)
+  const administraPreciosZona = !legacyMode && accesosActivos.some((acceso) =>
+    acceso.rol === 'administrativa_precios_zonal'
+    && Boolean(acceso.zona_id)
+    && acceso.sucursal_id === null,
+  )
+  const esSoloAdministrativaPrecios = administraPreciosZona
+    && accesosActivos.every((acceso) => acceso.rol === 'administrativa_precios_zonal')
 
   // Las capacidades multirrol se acumulan, pero cada una conserva SU alcance.
   // Un rol jerárquico no convierte a la cuenta en gerente operativo de otras sucursales.
@@ -78,7 +92,10 @@ export default function AppLayout() {
   const [pushDismissed, setPushDismissed] = useState(
     () => typeof localStorage !== 'undefined' && localStorage.getItem('push_dismissed') === 'true',
   )
-  const mostrarBannerPush = soportado && permiso === 'default' && !pushDismissed
+  const mostrarBannerPush = !esSoloAdministrativaPrecios
+    && soportado
+    && permiso === 'default'
+    && !pushDismissed
 
   function descartarBannerPush() {
     localStorage.setItem('push_dismissed', 'true')
@@ -92,8 +109,9 @@ export default function AppLayout() {
   }
 
   const navItems: NavItem[] = [
-    ...BASE_NAV_ITEMS.filter((item) => (item.to !== '/scanner' || puedeOperar)
+    ...(esSoloAdministrativaPrecios ? [] : BASE_NAV_ITEMS).filter((item) => (item.to !== '/scanner' || puedeOperar)
       && (item.to !== '/analisis' || puedeVerAnalisis)),
+    ...(administraPreciosZona ? [RAG_ZONAL_NAV_ITEM] : []),
     ...(gestionaCatalogo ? [IMPORT_NAV_ITEM] : []),
     ...(administraSucursal ? [ADMIN_NAV_ITEM] : []),
     ...(administraJerarquia ? [ACCESS_ADMIN_NAV_ITEM] : []),
@@ -102,11 +120,13 @@ export default function AppLayout() {
   // Si la cuenta gerente 091 tiene además la capacidad jerárquica, Accesos se
   // mantiene disponible sin alterar el alcance operativo local de la 091.
   const mobileNavRight: NavItem[] = [
-    ...MOBILE_NAV_RIGHT_BASE.filter((item) => item.to !== '/analisis' || puedeVerAnalisis),
+    ...(esSoloAdministrativaPrecios ? [] : MOBILE_NAV_RIGHT_BASE).filter((item) => item.to !== '/analisis' || puedeVerAnalisis),
+    ...(administraPreciosZona && !esSoloAdministrativaPrecios ? [RAG_ZONAL_NAV_ITEM] : []),
     ...(gestionaCatalogo ? [IMPORT_NAV_ITEM] : []),
     ...(administraSucursal ? [ADMIN_NAV_ITEM] : []),
     ...(administraJerarquia && !administraSucursal ? [ACCESS_ADMIN_NAV_ITEM] : []),
   ]
+  const mobileNavLeft = esSoloAdministrativaPrecios ? [RAG_ZONAL_NAV_ITEM] : MOBILE_NAV_LEFT
 
   return (
     <div className="flex min-h-screen bg-surface-base">
@@ -126,7 +146,7 @@ export default function AppLayout() {
         </div>
 
         <div className="mx-5 h-px bg-border/60" />
-        <SucursalContextSelector />
+        {!esSoloAdministrativaPrecios && <SucursalContextSelector />}
 
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto" aria-label="Menú principal">
           {navItems.map(({ to, label, Icon, isMain }) => (
@@ -177,7 +197,7 @@ export default function AppLayout() {
 
       <div className="flex-1 md:ml-[230px] flex flex-col min-h-screen">
         <div className="md:hidden bg-white border-b border-border/50">
-          <SucursalContextSelector mobile />
+          {!esSoloAdministrativaPrecios && <SucursalContextSelector mobile />}
           {administraJerarquia && administraSucursal && (
             <div className="px-3 pb-2">
               <NavLink
@@ -239,7 +259,7 @@ export default function AppLayout() {
       >
         <div className="h-full flex items-center">
           <div className="flex flex-1 items-center justify-around h-full">
-            {MOBILE_NAV_LEFT.map(({ to, label, Icon }) => (
+            {mobileNavLeft.map(({ to, label, Icon }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -264,29 +284,31 @@ export default function AppLayout() {
 
           {puedeOperar && <div className="w-16 shrink-0" aria-hidden="true" />}
 
-          <div className="flex flex-1 items-center justify-around h-full">
-            {mobileNavRight.map(({ to, label, Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  [
-                    'flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-all duration-150 select-none active:scale-[0.94]',
-                    isActive ? 'text-brand bg-brand-light' : 'text-muted-foreground hover:text-foreground hover:bg-muted',
-                  ].join(' ')
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <Icon className={`h-5 w-5 transition-colors ${isActive ? 'text-brand' : 'text-muted-foreground'}`} />
-                    <span className={`text-[10px] leading-none transition-colors ${isActive ? 'text-brand font-semibold' : 'text-muted-foreground font-medium'}`}>
-                      {label}
-                    </span>
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </div>
+          {!esSoloAdministrativaPrecios && (
+            <div className="flex flex-1 items-center justify-around h-full">
+              {mobileNavRight.map(({ to, label, Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) =>
+                    [
+                      'flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-all duration-150 select-none active:scale-[0.94]',
+                      isActive ? 'text-brand bg-brand-light' : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+                    ].join(' ')
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <Icon className={`h-5 w-5 transition-colors ${isActive ? 'text-brand' : 'text-muted-foreground'}`} />
+                      <span className={`text-[10px] leading-none transition-colors ${isActive ? 'text-brand font-semibold' : 'text-muted-foreground font-medium'}`}>
+                        {label}
+                      </span>
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          )}
         </div>
       </nav>
 

@@ -5,7 +5,7 @@ import { adminActionMatchesLane, adminLaneForPath } from './_lib/admin-routing'
 import { getCorsHeaders } from './_auth'
 import { logServerError } from './_observability'
 
-type RolInvitable = 'gerente_zonal' | 'gerente_sucursal'
+type RolInvitable = 'gerente_zonal' | 'administrativa_precios_zonal' | 'gerente_sucursal'
 type CanalInvitacion = 'link' | 'email'
 
 interface ListBody {
@@ -141,13 +141,13 @@ async function handleAdminAccesos(event: HandlerEvent): Promise<HandlerResponse>
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return jsonResponse(event, 400, { success: false, error: 'El email no es válido' })
   }
-  if (!rol || !['gerente_zonal', 'gerente_sucursal'].includes(rol)) {
+  if (!rol || !['gerente_zonal', 'administrativa_precios_zonal', 'gerente_sucursal'].includes(rol)) {
     return jsonResponse(event, 400, { success: false, error: 'Rol inválido' })
   }
   if (!['link', 'email'].includes(canal)) {
     return jsonResponse(event, 400, { success: false, error: 'Canal inválido' })
   }
-  if (rol === 'gerente_zonal' && !zonaId) {
+  if (rol !== 'gerente_sucursal' && !zonaId) {
     return jsonResponse(event, 400, { success: false, error: 'Seleccioná una zona' })
   }
   if (rol === 'gerente_sucursal' && !sucursalId) {
@@ -178,9 +178,9 @@ async function handleAdminAccesos(event: HandlerEvent): Promise<HandlerResponse>
       .map((s) => [s.id, s]),
   )
 
-  if (rol === 'gerente_zonal') {
+  if (rol === 'gerente_zonal' || rol === 'administrativa_precios_zonal') {
     if (!contexto.puede_crear_zonal) {
-      return jsonResponse(event, 403, { success: false, error: 'Solo el administrador de organización puede crear gerentes zonales.' })
+      return jsonResponse(event, 403, { success: false, error: 'Solo el administrador de organización puede crear roles zonales.' })
     }
     if (!zonaId || !zonasPermitidas.has(zonaId)) {
       return jsonResponse(event, 403, { success: false, error: 'No tenés permiso para asignar esa zona.' })
@@ -236,7 +236,7 @@ async function handleAdminAccesos(event: HandlerEvent): Promise<HandlerResponse>
     p_email: email,
     p_nombre: nombre,
     p_rol: rol,
-    p_zona_id: rol === 'gerente_zonal' ? zonaId : null,
+    p_zona_id: rol === 'gerente_zonal' || rol === 'administrativa_precios_zonal' ? zonaId : null,
     p_sucursal_id: rol === 'gerente_sucursal' ? sucursalId : null,
     p_canal: canal,
   })

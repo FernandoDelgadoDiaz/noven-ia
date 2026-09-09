@@ -15,10 +15,11 @@
     "20260906230000_convivencia_rag_oferta_central_v1.sql",
     "20260908103000_intervenciones_explicitas_por_tipo_v1.sql",
     "20260909020007_circuito_rag_centralizado_modelo_estados_v1.sql",
-    "20260909092814_rag_centralizado_validacion_sucursal_v1.sql"
+    "20260909092814_rag_centralizado_validacion_sucursal_v1.sql",
+    "20260909144530_rag_centralizado_bandeja_zonal_v1.sql"
   ],
-  "forward_migrations_sha256": "3e00c0cf92ffcb53adac0e962da8bb13fb9a022fee53b824b285bcf12fc1c840",
-  "replay_fingerprint_sha256": "8c2838f3378dbd38179e2100b780cbddf0fec9723049da9893f061df14d209ad",
+  "forward_migrations_sha256": "707c2682e18f52b7a45636834aa04b984d6e212260788b456c0efb4a25df90d7",
+  "replay_fingerprint_sha256": "ae0cdf7359729a3de2d1847158ef570d47fb13f23d986fc11f551fe03924f362",
   "anchor_fingerprint_sha256": "837771691ffc6e2276c66a26f9ae010c872f12ea33b118406d48b2ad6fca38af",
   "anchor_materialized_at": "2026-09-01",
   "anchor_materialized_from": "catalogo productivo meqvjabgyrgwkxpclqxp (PR #129)",

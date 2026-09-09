@@ -67,11 +67,12 @@ Regla de trabajo vigente: un PR por ítem, rama → PR → CI verde → merge. N
 ### 1.1 · Suite live de aislamiento multitenant — HECHO
 
 - PR #126 (merge `157b354`).
-- `scripts/live-isolation/gates-1-3.mjs` crea tres usuarios sintéticos vía Auth Admin local, obtiene **JWT reales** por password grant y ejecuta lecturas y escrituras contra PostgREST y RPC reales sobre un Supabase local descartable. Sin mocks ni interceptores.
+- `scripts/live-isolation/gates-1-3.mjs` crea usuarios sintéticos vía Auth Admin local, obtiene **JWT reales** por password grant y ejecuta lecturas y escrituras contra PostgREST y RPC reales sobre un Supabase local descartable. Sin mocks ni interceptores.
 - Gates verificados:
   - **Gate 1 — operador A1:** lee sólo su sucursal y su familia asignada; ejecuta la RPC atómica dentro de alcance; PATCH y RPC fuera de alcance reciben 403 y no mutan datos (confirmado con service-role local).
   - **Gate 2 — gerente de sucursal A1:** lee sólo su sucursal; no lee A2 ni otra organización.
   - **Gate 3 — gerente zonal A1:** lee A1 y A2 de su zona; no lee la zona A2 ni la organización B.
+  - **Gate 4 — administración zonal de precios:** lista y ejecuta sólo solicitudes de su zona; otra zona recibe rechazo, la repetición es idempotente y ejecutar no abre una intervención.
 - Guard duro que rechaza cualquier host no local o HTTPS; el stack se detiene siempre al finalizar.
 - Corre en CI como paso propio (`Live isolation Gates 1-3`).
 - Contrato: `scripts/tests/live-isolation-gates-contract.test.mjs`.

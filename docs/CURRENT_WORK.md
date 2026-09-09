@@ -40,22 +40,22 @@ Fecha de corte: **2026-09-09**.
 
 ## Corte Git verificado
 
-- Base revisada: `origin/master` en `5a92df3`, merge del PR #178.
-- CI final del PR #178: run `34305619467`, completo en verde.
+- Base revisada: `origin/master` en `f0fd20f`, squash merge del PR #179.
+- CI final del PR #179: run `34343884360`, completo en verde.
 - El conector disponible no enumera runs disparados por push a `master`; la
   validación local y el CI de la nueva rama siguen siendo obligatorios.
-- Rama activa: `feat/rag-centralizado-validacion-sucursal`.
+- Rama activa: `feat/rag-centralizado-bandeja-zonal`.
 - Propietario de la rama: Codex hasta merge o relevo explícito.
-- Alcance de la rama: bloque 2 del circuito RAG centralizado —validación
-  gerencial y seguimiento desde la sucursal— sin bandeja zonal, confirmación en
-  góndola ni aplicación de SQL en producción.
-- Publicación: rama remota publicada; PR #179 abierto y listo para revisión
-  contra `master`.
-  El corte funcional es `90d2736` y la expectativa revisada del replay quedó
-  publicada en `97cd37a`. El ajuste E2E quedó publicado en `43404eb`; tanto su
-  CI como el del checkpoint `b71e6bd` terminaron completos en verde. La
-  descripción del PR refleja este estado. El checkpoint final `653ee6a` también
-  quedó verde; el merge no está autorizado todavía.
+- Alcance de la rama: bloque 3 del circuito RAG centralizado —alta de la
+  administración zonal de precios, bandeja estrictamente zonal y ejecución
+  individual— sin confirmación en góndola, operación por lote ni aplicación de
+  SQL en producción.
+- Publicación: corrección del gate publicada como `80e2f57`; PR #180 abierto y
+  listo para revisión contra `master`. El CI `34378399796` terminó completo en
+  verde. El checkpoint final `b8600ec` también terminó completo en verde en el
+  run `34396862327`. La definición documental de 3B se publicó como `d73fc07` y
+  quedó verde en el run `34398753480`. No se mergeó ni se aplicó SQL en
+  producción.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -74,21 +74,27 @@ base permanente.
 | C1 · convivencia RAG/oferta central | PR #171 |
 | C2A · operaciones explícitas por tipo | PR #173 |
 | C2B · interfaz operativa | PR #175; cierre documental #176 |
+| RAG centralizado · modelo y permisos | PR #178 |
+| RAG centralizado · validación y seguimiento en sucursal | PR #179 |
 
 ### En ejecución
 
-**Circuito de validación y ejecución centralizada de RAG.** A, B, C y el bloque
-1 ya están cerrados. El bloque 2 está en ejecución en
-`feat/rag-centralizado-validacion-sucursal`.
+**Circuito de validación y ejecución centralizada de RAG.** A, B, C y los
+bloques 1 y 2 ya están cerrados. La implementación del bloque 3 está completa y
+lista para revisión en `feat/rag-centralizado-bandeja-zonal`; se considera
+cerrada sólo después del merge explícitamente autorizado.
 
 Orden acordado:
 
 1. modelo de solicitud, máquina de estados y permisos;
 2. validación gerencial y seguimiento desde la sucursal;
-3. bandeja zonal y ejecución individual;
+3. bandeja zonal:
+   - **3A:** base y ejecución individual;
+   - **3B:** jornada configurable, corte de visibilidad y exportación Excel por
+     sucursal o por toda la zona;
 4. confirmación o rechazo en góndola por gerente, supervisor u operador
    asignado a la familia, iniciando el tramo sólo al confirmar;
-5. exportación, impresión y operación por lote.
+5. impresión y operación por lote restante.
 
 ### Decisión de evidencia · 2026-09-08
 
@@ -137,7 +143,7 @@ Resumen reconciliado; el detalle y las condiciones de salida permanecen en
 - CI del PR #177: contratos, lint, build, replay, aislamiento, cuota, exposición
   y Playwright completos en verde en los runs `34281365574` y `34281819683`.
 
-Rama técnica actual:
+Último bloque cerrado:
 
 - contrato específico del bloque 2: verde;
 - prueba de mutación: verde; al retirar temporalmente el bloqueo que serializa
@@ -189,12 +195,96 @@ Rama técnica actual:
   administrativa. Si falta, Accesos y jerarquía debe ofrecer invitarlo o
   continuar; queda una advertencia o pendiente de cobertura, nunca un bloqueo.
 
+Rama activa, bloque 3:
+
+- Alta de `administrativa_precios_zonal` implementada en Accesos y jerarquía,
+  Function e invitaciones. Organización y zona son obligatorias; sucursal y
+  familias están prohibidas. La cobertura activa o pendiente de gerencia y
+  precios se muestra por zona.
+- Si falta gerente zonal, la interfaz ofrece invitarlo o continuar. El servidor
+  no consulta ni exige esa cobertura para registrar o activar a la
+  administrativa.
+- `/rag/zona` implementa la bandeja de propósito único. La cuenta pura no recibe
+  Dashboard, selector de sucursal, Scanner, vencimientos, análisis, problemas,
+  importación, administración local ni la invitación a push operativo.
+- La bandeja lista sólo solicitudes de zonas activas de la cuenta y conserva los
+  ejecutados durante veinticuatro horas. La ejecución es individual, bloquea la
+  solicitud, revalida organización y zona y es idempotente.
+- Ejecutar agrega el evento con habilitación para el día operativo argentino
+  siguiente. No abre una intervención ni expone confirmación en góndola,
+  exportación, impresión u operación por lote.
+- Se amplió el gate vivo sobre Supabase efímero con dos administrativas de zonas
+  distintas: debe probar aislamiento, rechazo entre zonas, ausencia de DML
+  directo, idempotencia y ausencia de intervención.
+- Verificación local: contrato específico y contrato de aislamiento verdes;
+  prueba de mutación verde al debilitar temporalmente la igualdad de zona y
+  restaurarla; build y `git diff --check` verdes; lint sin errores y con el
+  warning preexistente de `ScannerModal.tsx:143`.
+- Los CI iniciales `34370271789` y `34370439782` fallaron únicamente en la suite
+  por el gate deliberado de expectativa móvil todavía desactualizada.
+- Replay descartable verde en el run `34376604368`, sobre `f59cff5`. El
+  artefacto `10114175577` coincidió con el digest SHA-256 publicado y contenía
+  exactamente las dos expectativas permitidas; el ancla permaneció intacta.
+- El diff estructural agregó las dos implementaciones y los dos wrappers del
+  bloque, modificó sólo las dos restricciones y las cinco funciones de
+  invitaciones/contexto previstas, y agregó únicamente sus permisos de
+  ejecución para roles autenticados de servidor y aplicación. No eliminó
+  objetos ni cambió tablas, columnas, vistas, RLS, políticas, índices o
+  triggers.
+- Se incorporaron exclusivamente `expected-replay-fingerprint.json` y
+  `replay-expectation.json` dentro de `baseline-v1`.
+- Verificación local posterior: `npm test` 118/118, build y `git diff --check`
+  verdes; lint sin errores y con el warning preexistente de
+  `ScannerModal.tsx:143`.
+- El CI `34377626774` pasó replay, suite, lint y build, y falló al iniciar el
+  gate vivo: el fixture zonal ya sembraba un vencimiento activo y el Gate 1
+  intentaba crear un segundo vencimiento activo para el mismo producto y
+  sucursal. Cuota, exposición y Playwright no llegaron a ejecutarse.
+- Se corrigió el fixture para reutilizar ese vencimiento en la escritura válida
+  del operador, conservando tanto la unicidad como la prueba real de permiso. El
+  contrato del gate exige ahora explícitamente esa reutilización. Contrato
+  específico, suite 118/118 y diff-check quedaron verdes; lint no tiene errores
+  y conserva el warning preexistente.
+- La corrección se publicó como `80e2f57`. El CI `34378399796` terminó completo
+  en verde: replay estructural, aislamiento vivo 1–4, cuota, exposición y los
+  recorridos críticos de Playwright incluidos. El PR #180 salió de draft y está
+  listo para revisión.
+- El checkpoint final `b8600ec` repitió todos los gates en verde en el run
+  `34396862327`.
+- Requisito operativo confirmado para el bloque 3B: cada zona configura su
+  ventana de recepción; `Santa Cruz Sur` usa 08:00–12:00. Dentro de la ventana,
+  las solicitudes aparecen en tiempo real pero siempre agrupadas y ordenadas
+  por sucursal, no por orden de llegada. Desde el corte quedan registradas para
+  la jornada siguiente y no son visibles ese día.
+- Las solicitudes cargadas antes de las 08:00 se guardan para la jornada del
+  mismo día y aparecen a las 08:00. No se rechazan ni se difieren al día
+  siguiente.
+- La administrativa debe poder exportar un `.xlsx` real de una sucursal o del
+  total visible de la zona, respetando el mismo orden. Después de cargar los
+  cambios en el sistema de la cadena vuelve a la bandeja y usa **Marcar Activo**;
+  el evento interno continúa siendo `ejecutada`.
+- El PR #180 conserva su alcance como base 3A y no implementa todavía ventana,
+  diferimiento ni exportación. No presentar el circuito zonal como terminado
+  hasta cerrar 3B.
+- Los dos recorridos Playwright nuevos tienen sintaxis validada, pero no se
+  ejecutaron localmente porque el runner aislado sólo se instala en CI.
+- Hallazgo corregido: la hora de ejecución se toma después de adquirir el lock,
+  para que una espera concurrente no cree un evento anterior al ya confirmado.
+- Hallazgo descartado: una salida truncada pareció mostrar un cierre SQL
+  duplicado; la inspección numerada del archivo verificó que no existía.
+- La CLI de Supabase no está instalada en este entorno y el intento de obtenerla
+  por `npx` no fue autorizado. La migración usa un nombre fechado generado en
+  UTC; no se consultó ni modificó ninguna base.
+
 ## Próximo paso ejecutable
 
-1. Esperar la decisión explícita de merge del PR #179.
-2. Tras el merge, iniciar el bloque 3 incluyendo el alta zonal explícita del rol
-   y su bandeja limitada a las sucursales de esa zona.
-3. No aplicar SQL en producción dentro de este bloque.
+1. Revisar el PR #180 y obtener autorización explícita antes de mergear su base
+   3A. No aplicar SQL en producción como parte de ese merge.
+2. Después del merge, crear una rama nueva para el bloque 3B: configuración de
+   ventana por zona, asignación de jornada, visibilidad en tiempo real dentro de
+   08:00–12:00 para `Santa Cruz Sur`, espera hasta las 08:00 para cargas previas,
+   diferimiento desde el corte y exportación Excel por sucursal o total de zona.
+3. Recién después de 3B avanzar al bloque 4 de confirmación o rechazo en góndola.
 
 ## Protocolo de relevo
 
@@ -372,3 +462,53 @@ Rama técnica actual:
   `34342774425`. Fernando corrigió una condición de UX: el sistema debe pedir la
   cobertura del gerente zonal, pero permitir continuar sin ella al crear la
   administrativa; se registró como aviso pendiente y no como dependencia dura.
+- Publicó esa corrección como `f44404b`; el run `34343884360` terminó completo
+  en verde. El PR #179 fue mergeado por squash en `master` como `f0fd20f`.
+- Creó `feat/rag-centralizado-bandeja-zonal` desde ese merge e inició el bloque
+  3. La rama excluye confirmación en góndola, exportación, impresión, ejecución
+  por lote y cualquier escritura en producción.
+- Implementó el alta zonal no bloqueante, la bandeja exclusiva y la ejecución
+  individual del bloque 3. Añadió contratos, mutación, recorridos Playwright y
+  un cuarto gate vivo sobre Supabase descartable. El corte local queda listo
+  para publicar; el replay y su expectativa continúan pendientes.
+- Publicó el corte funcional reducido como `a0688ae` y abrió el PR draft #180.
+  El run inicial `34370271789` quedó en cola; el PR permanece bloqueado hasta
+  ejecutar y revisar el replay descartable sobre la rama correcta.
+- El checkpoint `f59cff5` generó el CI `34370439782`; tanto ese run como el
+  inicial fallaron sólo en el gate previsto de expectativa móvil.
+- Fernando ejecutó el replay sobre la rama correcta. El run `34376604368`
+  terminó en verde sobre `f59cff5`; todos sus pasos de regeneración, protección
+  del ancla, limitación del diff y suite completa pasaron.
+- Verificó byte a byte el digest del artefacto `10114175577` y comprobó que
+  contiene exclusivamente las dos expectativas móviles. La revisión por clave
+  confirmó cuatro funciones nuevas, los cambios esperados de invitaciones y
+  contexto, permisos acotados y cero objetos eliminados o cambios fuera del
+  alcance.
+- Incorporó sólo esos dos archivos. La validación local posterior quedó en
+  118/118 pruebas, build y diff-check verdes; lint sin errores y con el warning
+  preexistente de `ScannerModal.tsx:143`. Queda pendiente publicar este corte y
+  exigir todos los gates del nuevo CI antes de habilitar revisión.
+- Publicó la expectativa y el checkpoint como `e042124`. El CI `34377626774`
+  validó replay, pruebas, lint y build, y luego encontró una colisión interna del
+  fixture: Gate 1 intentaba crear un vencimiento activo que Gate 4 ya había
+  sembrado para la misma identidad. Los gates posteriores quedaron sin ejecutar.
+- Ajustó Gate 1 para actualizar el vencimiento sembrado y agregó una aserción de
+  contrato que impide reintroducir la colisión. La corrección no cambia esquema
+  ni producto. Contrato específico, suite 118/118 y diff-check quedaron verdes;
+  lint no tiene errores y conserva el warning preexistente. Queda pendiente
+  publicarla y repetir el CI completo.
+- Publicó la corrección como `80e2f57`. El CI `34378399796` completó en verde
+  replay, aislamiento vivo 1–4, cuota, exposición y Playwright, además de suite,
+  lint y build. Sacó el PR #180 de draft; el único pendiente del bloque es la
+  revisión y decisión explícita de merge. No se aplicó SQL en producción.
+- El checkpoint final `b8600ec` quedó completo en verde en el run
+  `34396862327`.
+- Fernando precisó el ciclo de recepción zonal: 08:00–12:00 para `Santa Cruz
+  Sur`; dentro de la ventana, ingreso en tiempo real con orden estable por
+  sucursal; desde el corte, visibilidad diferida hasta la jornada siguiente.
+  También exige exportar Excel por sucursal o por toda la zona y mostrar
+  **Marcar Activo** sólo después de la carga externa. Se incorporó al contrato
+  como bloque 3B, previo a la validación en góndola y todavía sin implementar.
+- Fernando confirmó el borde previo a la apertura: una solicitud cargada antes
+  de las 08:00 se conserva para la jornada de ese mismo día y aparece a las
+  08:00. No se rechaza ni se envía a la jornada siguiente.
