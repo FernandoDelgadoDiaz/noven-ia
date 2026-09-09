@@ -49,11 +49,12 @@ Fecha de corte: **2026-09-09**.
 - Alcance de la rama: bloque 2 del circuito RAG centralizado —validación
   gerencial y seguimiento desde la sucursal— sin bandeja zonal, confirmación en
   góndola ni aplicación de SQL en producción.
-- Publicación: rama remota publicada; PR draft #179 abierto contra `master`.
+- Publicación: rama remota publicada; PR #179 abierto y listo para revisión
+  contra `master`.
   El corte funcional es `90d2736` y la expectativa revisada del replay quedó
-  publicada en `97cd37a`. El ajuste E2E quedó publicado en `43404eb` y su CI
-  completo terminó en verde; falta publicar este cierre documental antes de
-  sacar el PR de draft.
+  publicada en `97cd37a`. El ajuste E2E quedó publicado en `43404eb`; tanto su
+  CI como el del checkpoint `b71e6bd` terminaron completos en verde. La
+  descripción del PR refleja este estado y el merge no está autorizado todavía.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -172,13 +173,14 @@ Rama técnica actual:
 - CI final del corte funcional `43404eb`: run `34340514382` completo en verde,
   incluido el recorrido Playwright corregido y todos los gates de replay,
   aislamiento, cuota y exposición.
+- CI del checkpoint `b71e6bd`: run `34340919978` completo en verde con los
+  mismos gates. El PR #179 dejó de ser draft después de este resultado.
 
 ## Próximo paso ejecutable
 
-1. Publicar este cierre documental en el PR #179 y comprobar su CI.
-2. Sacar el PR de draft cuando el head quede verde y dejar el merge sujeto a
-   decisión explícita.
-3. No aplicar SQL en producción dentro de este bloque.
+1. Publicar este estado final en el PR #179 y comprobar su CI.
+2. Esperar la decisión explícita de merge; no aplicar SQL en producción dentro
+   de este bloque.
 
 ## Protocolo de relevo
 
@@ -341,3 +343,7 @@ Rama técnica actual:
 - Publicó el ajuste E2E como `43404eb`. El run `34340514382` terminó completo en
   verde, incluido Playwright; el defecto era exclusivamente la expectativa
   obsoleta del test y no la nueva operación de solicitud.
+- Publicó el checkpoint `b71e6bd`; su run `34340919978` también terminó completo
+  en verde. Sacó el PR #179 de draft y actualizó su descripción para retirar el
+  replay ya resuelto. El PR está listo para revisión, sin merge ni SQL aplicado
+  en producción.
