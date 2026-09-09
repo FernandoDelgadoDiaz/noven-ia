@@ -50,9 +50,10 @@ Fecha de corte: **2026-09-09**.
   administración zonal de precios, bandeja estrictamente zonal y ejecución
   individual— sin confirmación en góndola, operación por lote ni aplicación de
   SQL en producción.
-- Publicación: corte funcional `a0688ae` publicado; PR draft #180 abierto contra
-  `master`. El primer CI es el run `34370271789`; el replay descartable y sus
-  expectativas continúan pendientes.
+- Publicación: corte funcional `a0688ae` y checkpoint `f59cff5` publicados; PR
+  draft #180 abierto contra `master`. El replay descartable terminó en verde en
+  el run `34376604368`; su expectativa revisada está incorporada localmente y
+  queda pendiente publicarla y exigir el CI completo resultante.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -213,9 +214,22 @@ Rama activa, bloque 3:
   prueba de mutación verde al debilitar temporalmente la igualdad de zona y
   restaurarla; build y `git diff --check` verdes; lint sin errores y con el
   warning preexistente de `ScannerModal.tsx:143`.
-- `npm test`: 117/118 archivos verdes. El único fallo es el gate deliberado de
-  expectativa móvil, porque la migración nueva aún no pasó por el replay
-  descartable.
+- Los CI iniciales `34370271789` y `34370439782` fallaron únicamente en la suite
+  por el gate deliberado de expectativa móvil todavía desactualizada.
+- Replay descartable verde en el run `34376604368`, sobre `f59cff5`. El
+  artefacto `10114175577` coincidió con el digest SHA-256 publicado y contenía
+  exactamente las dos expectativas permitidas; el ancla permaneció intacta.
+- El diff estructural agregó las dos implementaciones y los dos wrappers del
+  bloque, modificó sólo las dos restricciones y las cinco funciones de
+  invitaciones/contexto previstas, y agregó únicamente sus permisos de
+  ejecución para roles autenticados de servidor y aplicación. No eliminó
+  objetos ni cambió tablas, columnas, vistas, RLS, políticas, índices o
+  triggers.
+- Se incorporaron exclusivamente `expected-replay-fingerprint.json` y
+  `replay-expectation.json` dentro de `baseline-v1`.
+- Verificación local posterior: `npm test` 118/118, build y `git diff --check`
+  verdes; lint sin errores y con el warning preexistente de
+  `ScannerModal.tsx:143`.
 - Los dos recorridos Playwright nuevos tienen sintaxis validada, pero no se
   ejecutaron localmente porque el runner aislado sólo se instala en CI.
 - Hallazgo corregido: la hora de ejecución se toma después de adquirir el lock,
@@ -228,11 +242,11 @@ Rama activa, bloque 3:
 
 ## Próximo paso ejecutable
 
-1. Ejecutar el workflow manual de replay sobre
-   `feat/rag-centralizado-bandeja-zonal`, revisar su diff estructural e incorporar
-   exclusivamente las dos expectativas regeneradas.
-2. Exigir suite completa, gate vivo, exposición y Playwright verdes antes de
-   habilitar revisión o merge. No aplicar SQL en producción.
+1. Publicar las dos expectativas revisadas y este checkpoint en
+   `feat/rag-centralizado-bandeja-zonal`.
+2. Exigir suite completa, cuarto gate vivo, exposición y Playwright verdes antes
+   de sacar el PR #180 de draft. No aplicar SQL en producción ni mergear sin
+   autorización explícita.
 
 ## Protocolo de relevo
 
@@ -422,3 +436,17 @@ Rama activa, bloque 3:
 - Publicó el corte funcional reducido como `a0688ae` y abrió el PR draft #180.
   El run inicial `34370271789` quedó en cola; el PR permanece bloqueado hasta
   ejecutar y revisar el replay descartable sobre la rama correcta.
+- El checkpoint `f59cff5` generó el CI `34370439782`; tanto ese run como el
+  inicial fallaron sólo en el gate previsto de expectativa móvil.
+- Fernando ejecutó el replay sobre la rama correcta. El run `34376604368`
+  terminó en verde sobre `f59cff5`; todos sus pasos de regeneración, protección
+  del ancla, limitación del diff y suite completa pasaron.
+- Verificó byte a byte el digest del artefacto `10114175577` y comprobó que
+  contiene exclusivamente las dos expectativas móviles. La revisión por clave
+  confirmó cuatro funciones nuevas, los cambios esperados de invitaciones y
+  contexto, permisos acotados y cero objetos eliminados o cambios fuera del
+  alcance.
+- Incorporó sólo esos dos archivos. La validación local posterior quedó en
+  118/118 pruebas, build y diff-check verdes; lint sin errores y con el warning
+  preexistente de `ScannerModal.tsx:143`. Queda pendiente publicar este corte y
+  exigir todos los gates del nuevo CI antes de habilitar revisión.
