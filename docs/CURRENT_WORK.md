@@ -51,8 +51,8 @@ Fecha de corte: **2026-09-09**.
   góndola ni aplicación de SQL en producción.
 - Publicación: rama remota publicada; PR draft #179 abierto contra `master`.
   El corte funcional es `90d2736` y los commits posteriores actualizan este
-  checkpoint. El replay descartable y su expectativa siguen pendientes antes
-  de habilitar el merge.
+  checkpoint. El replay está verificado y su expectativa incorporada localmente;
+  falta publicar este corte y obtener el CI final antes de habilitar el merge.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -143,25 +143,25 @@ Rama técnica actual:
 - contratos UX, allowlist RPC y frontera de seguridad: verdes;
 - `npm run build`: verde;
 - `npm run lint`: cero errores y el warning preexistente de `ScannerModal.tsx`;
-- `npm test`: 116 de 117 archivos verdes. El único fallo es el gate deliberado
-  de expectativa móvil del replay por la migración nueva;
+- `npm test`: 117 de 117 archivos verdes después de incorporar la expectativa
+  regenerada;
 - `git diff --check`: verde;
-- replay SQL descartable del bloque 2: pendiente; no se ejecutó SQL contra
-  producción.
+- replay SQL descartable del bloque 2: verde en el run `34338998266`, ejecutado
+  sobre `e542ca3`; artefacto `10098969631` revisado antes de incorporar.
+- diff estructural del replay: agrega dos funciones, elimina cero objetos y
+  cambia sólo la RPC de control prevista. También retira del browser los dos
+  permisos de instrumentación anterior y agrega los cuatro permisos acotados de
+  la nueva RPC. El fingerprint del ancla permaneció intacto.
 - intento de replay `34338010251`: falló porque el workflow se lanzó sobre
   `master` y no sobre la rama del PR #179. Regeneró sin la migración nueva y el
   gate rechazó el resultado; no hay expectativa válida para incorporar.
-- CI del PR #179: run `34337224074` falló por el mismo gate esperado de
-  expectativa móvil; los demás gates no reemplazan el replay pendiente.
+- CI previos del PR #179 fallaron por el gate esperado de expectativa móvil. Se
+  reemplazarán como evidencia por el CI que dispare la expectativa ya revisada.
 
 ## Próximo paso ejecutable
 
-1. Volver a ejecutar el replay descartable seleccionando expresamente
-   `feat/rag-centralizado-validacion-sucursal`, revisar su diff
-   estructural e incorporar
-   únicamente la expectativa móvil generada.
-2. Repetir suite, build, lint y diff-check; actualizar el PR y esperar CI
-   completo en verde antes de decidir merge.
+1. Publicar la expectativa móvil y este checkpoint en el PR #179.
+2. Esperar el CI completo en verde, sacar el PR de draft y decidir el merge.
 3. No aplicar SQL en producción dentro de este bloque.
 
 ## Protocolo de relevo
@@ -298,6 +298,17 @@ Rama técnica actual:
   `34338010251` terminó fallando en el gate que limita el cambio a la expectativa
   móvil. No se incorporó su artefacto. Queda pendiente repetirlo sobre
   `feat/rag-centralizado-validacion-sucursal`.
+- El replay repetido sobre la rama correcta terminó en verde en el run
+  `34338998266`. El artefacto `10098969631` coincidió con su digest publicado y
+  mantuvo intacto el ancla.
+- Revisó el fingerprint completo: dos funciones nuevas, cero objetos eliminados
+  y un único cambio de definición previsto en la RPC de control; los permisos
+  browser reflejan el reemplazo de la instrumentación anterior por la solicitud
+  acotada.
+- Incorporó exclusivamente `expected-replay-fingerprint.json` y
+  `replay-expectation.json`. La verificación posterior quedó en 117/117 pruebas,
+  build y diff-check verdes; lint sin errores y con el warning preexistente de
+  `ScannerModal.tsx`.
 - El primer CI del PR #179, run `34337224074`, terminó fallido por la expectativa
   móvil desactualizada ya identificada localmente. No se interpreta como un
   defecto funcional: exige ejecutar y revisar el replay descartable antes de
