@@ -53,7 +53,9 @@ Fecha de corte: **2026-09-09**.
 - Publicación: corrección del gate publicada como `80e2f57`; PR #180 abierto y
   listo para revisión contra `master`. El CI `34378399796` terminó completo en
   verde. El checkpoint final `b8600ec` también terminó completo en verde en el
-  run `34396862327`. No se mergeó ni se aplicó SQL en producción.
+  run `34396862327`. La definición documental de 3B se publicó como `d73fc07` y
+  quedó verde en el run `34398753480`. No se mergeó ni se aplicó SQL en
+  producción.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -254,6 +256,9 @@ Rama activa, bloque 3:
   las solicitudes aparecen en tiempo real pero siempre agrupadas y ordenadas
   por sucursal, no por orden de llegada. Desde el corte quedan registradas para
   la jornada siguiente y no son visibles ese día.
+- Las solicitudes cargadas antes de las 08:00 se guardan para la jornada del
+  mismo día y aparecen a las 08:00. No se rechazan ni se difieren al día
+  siguiente.
 - La administrativa debe poder exportar un `.xlsx` real de una sucursal o del
   total visible de la zona, respetando el mismo orden. Después de cargar los
   cambios en el sistema de la cadena vuelve a la bandeja y usa **Marcar Activo**;
@@ -277,8 +282,8 @@ Rama activa, bloque 3:
    3A. No aplicar SQL en producción como parte de ese merge.
 2. Después del merge, crear una rama nueva para el bloque 3B: configuración de
    ventana por zona, asignación de jornada, visibilidad en tiempo real dentro de
-   08:00–12:00 para `Santa Cruz Sur`, diferimiento desde el corte y exportación
-   Excel por sucursal o total de zona.
+   08:00–12:00 para `Santa Cruz Sur`, espera hasta las 08:00 para cargas previas,
+   diferimiento desde el corte y exportación Excel por sucursal o total de zona.
 3. Recién después de 3B avanzar al bloque 4 de confirmación o rechazo en góndola.
 
 ## Protocolo de relevo
@@ -504,3 +509,6 @@ Rama activa, bloque 3:
   También exige exportar Excel por sucursal o por toda la zona y mostrar
   **Marcar Activo** sólo después de la carga externa. Se incorporó al contrato
   como bloque 3B, previo a la validación en góndola y todavía sin implementar.
+- Fernando confirmó el borde previo a la apertura: una solicitud cargada antes
+  de las 08:00 se conserva para la jornada de ese mismo día y aparece a las
+  08:00. No se rechaza ni se envía a la jornada siguiente.

@@ -33,6 +33,9 @@ empieza a medirse.
 
 - Cada zona configura su ventana de recepción. Para `Santa Cruz Sur` es de
   **08:00 a 12:00**, evaluada en horario argentino por el servidor.
+- Una solicitud cargada antes de las **08:00** se guarda para la jornada de ese
+  mismo día y aparece al abrir la ventana. No se rechaza ni se deriva al día
+  siguiente.
 - Dentro de esa ventana, cada solicitud aparece **en tiempo real** en la
   bandeja zonal. El orden de llegada no define su posición: la bandeja la ubica
   siempre dentro de su sucursal y mantiene el orden operacional acordado.
@@ -260,9 +263,10 @@ zona.
 **Jornada por zona:** la hora de inicio y el corte son configuración de la zona,
 no constantes del navegador. En `Santa Cruz Sur`, las solicitudes registradas
 desde las 08:00 y antes del corte de las 12:00 entran en tiempo real a la jornada
-visible. Las registradas desde el corte quedan en espera y sólo aparecen en la
-jornada siguiente. Cambiar la hora del dispositivo no puede adelantar ni atrasar
-esa asignación.
+visible. Las anteriores a las 08:00 quedan en espera para esa misma jornada y se
+muestran al abrir la ventana. Las registradas desde el corte quedan en espera y
+sólo aparecen en la jornada siguiente. Cambiar la hora del dispositivo no puede
+adelantar ni atrasar esa asignación.
 
 **Orden estable:** código de sucursal ascendente → sector/familia → fin de acción
 ascendente. Una solicitud nueva se inserta dentro del grupo de su sucursal;

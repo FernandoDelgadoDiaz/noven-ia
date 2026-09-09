@@ -90,7 +90,8 @@ por la fecha operativa; la fuente persistida sigue siendo el evento `ejecutada`.
 - Cada zona debe configurar en servidor el inicio y el corte de su jornada de
   recepción. En `Santa Cruz Sur` la ventana es 08:00–12:00: dentro de ella las
   solicitudes aparecen en tiempo real; desde el corte se asignan a la jornada
-  siguiente y permanecen invisibles hasta entonces.
+  siguiente y permanecen invisibles hasta entonces. Las solicitudes anteriores
+  a las 08:00 se asignan al mismo día y aparecen al abrir la ventana.
 - La bandeja mantiene un orden estable por código de sucursal ascendente,
   sector/familia y fin de acción, independientemente del orden de llegada. Debe
   exportar `.xlsx` real para una sucursal seleccionada o para toda la jornada
