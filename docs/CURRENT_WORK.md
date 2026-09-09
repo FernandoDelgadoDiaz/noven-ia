@@ -15,7 +15,7 @@ seguridad explotables. Cuando una comprobación requiera ese material, se
 registra el resultado mínimo y se enlaza el PR, CI o documento autorizado que
 contiene la evidencia.
 
-Fecha de corte: **2026-09-08**.
+Fecha de corte: **2026-09-09**.
 
 ## Lectura obligatoria antes de continuar
 
@@ -40,16 +40,16 @@ Fecha de corte: **2026-09-08**.
 
 ## Corte Git verificado
 
-- Base revisada: `origin/master` en `1f2a9b8`.
-- Último CI de esa base: run `34250337992`, completo en verde.
-- Rama activa: `docs/current-work-operational-rule`.
-- Head remoto validado: `8cd31a4`.
+- Base revisada: `origin/master` en `63fea6d`, merge del PR #177.
+- CI del PR #177: runs `34281365574` y `34281819683`, completos en verde.
+- El conector disponible no enumera runs disparados por push a `master`; la
+  validación local y el CI de la nueva rama siguen siendo obligatorios.
+- Rama activa: `feat/rag-centralizado-modelo-estados`.
 - Propietario de la rama: Codex hasta merge o relevo explícito.
-- Alcance de la rama: continuidad pública, reconciliación de estados y decisión
-  de iniciar el circuito RAG. No contiene código productivo ni migraciones.
-- Publicación: autorizada por el responsable en versión reducida. PR
-  [#177](https://github.com/FernandoDelgadoDiaz/noven-ia/pull/177) abierto contra
-  `master`; run `34281365574` completo en verde.
+- Alcance de la rama: bloque 1 del circuito RAG centralizado —modelo de
+  solicitud, máquina de estados, nuevo rol y permisos— sin interfaz ni
+  aplicación de SQL en producción.
+- Publicación: rama local, todavía sin commit remoto ni PR.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -72,8 +72,8 @@ base permanente.
 ### En ejecución
 
 **Circuito de validación y ejecución centralizada de RAG.** A, B y C ya están
-cerrados. La implementación por bloques está autorizada y comienza después de
-mergear esta reconciliación documental.
+cerrados. La implementación por bloques está autorizada; el bloque 1 está en
+ejecución en `feat/rag-centralizado-modelo-estados`.
 
 Orden acordado:
 
@@ -110,15 +110,14 @@ Resumen reconciliado; el detalle y las condiciones de salida permanecen en
 
 ## PR que no deben confundirse con trabajo activo
 
-- PR #160: contiene evidencia documental válida de Fase 2, pero su cambio de
-  reglas quedó superado. Esta rama incorpora los estados válidos; después de su
-  merge, #160 debe cerrarse como reemplazado, no mergearse tal como está.
+- PR #160: cerrado sin merge como reemplazado por #177; conserva su historial
+  documental y no es trabajo activo.
 - PR #118: diseño del Agente 2, permanece en draft. No implementar hasta contar
   con su muestra operativa y la decisión económica indicadas en ese PR.
 
-## Pruebas de la rama activa
+## Pruebas
 
-Ejecutadas y repetidas el 2026-09-08 después de reducir el checkpoint público:
+Última base validada, PR #177:
 
 - `npm test`: 115/115 archivos en verde.
 - `npm run lint`: cero errores; permanece un warning preexistente en
@@ -129,16 +128,27 @@ Ejecutadas y repetidas el 2026-09-08 después de reducir el checkpoint público:
   runner; `AGENTS.md` ahora remite a la preparación exacta usada por CI. El
   Playwright del PR #177 terminó en verde.
 - CI del PR #177: contratos, lint, build, replay, aislamiento, cuota, exposición
-  y Playwright completos en verde en el run `34281365574`.
+  y Playwright completos en verde en los runs `34281365574` y `34281819683`.
+
+Rama técnica actual:
+
+- contrato específico del bloque 1: verde;
+- `npm run build`: verde;
+- `npm run lint`: cero errores y el warning preexistente de `ScannerModal.tsx`;
+- `npm test`: 115 de 116 archivos verdes; el único rojo es el gate esperado de
+  expectativa móvil, porque la nueva migración todavía debe pasar por el replay
+  descartable y registrar su fingerprint;
+- `git diff --check`: verde;
+- replay SQL real: pendiente; este entorno no dispone de Docker/Postgres local.
 
 ## Próximo paso ejecutable
 
-1. Mergear el PR #177 y comprobar el CI posterior de `master`.
-2. Cerrar PR #160 como reemplazado, conservando su historial.
-3. Crear desde el nuevo `master` una rama pequeña para el bloque 1 del circuito:
-   modelo de solicitud, estados y permisos.
-4. Diseñar migración y contratos sin aplicar SQL en producción dentro de ese
-   primer PR.
+1. Publicar el primer commit de la rama y regenerar la expectativa móvil en el
+   Supabase descartable de CI.
+2. Revisar el diff estructural, incorporar sólo los dos artefactos de expectativa
+   y corregir cualquier incompatibilidad SQL que revele el replay.
+3. Ejecutar suite completa, abrir el PR pequeño y esperar CI verde.
+4. No aplicar SQL en producción dentro de este bloque.
 
 ## Protocolo de relevo
 
@@ -171,3 +181,45 @@ Ejecutadas y repetidas el 2026-09-08 después de reducir el checkpoint público:
   cambió la configuración ni se intentó eludir la autenticación.
 - El CI completo del PR #177 terminó verde en el run `34281365574`, incluidos
   replay, pruebas de aislamiento y Playwright. Queda habilitado el merge.
+
+### 2026-09-09 · Codex
+
+- PR #177 mergeado por squash en `master` como `63fea6d`; su segundo CI completo
+  también terminó verde en el run `34281819683`.
+- PR #160 cerrado sin merge y comentado como reemplazado por #177; PR #118
+  permanece intacto en draft.
+- Creó `feat/rag-centralizado-modelo-estados` desde `63fea6d` y asumió su
+  propiedad para el bloque 1. No ejecutó SQL ni escrituras productivas.
+- Consultó la documentación vigente de Supabase antes de diseñar el esquema; el
+  acceso directo al índice liviano del changelog no devolvió contenido en este
+  entorno, por lo que cualquier supuesto de plataforma debe quedar cubierto por
+  contratos y el replay local.
+- Verificó `supabase` CLI 2.117.0 y la ayuda vigente de `migration new`. El
+  intento de consultar el estado local no completó porque la aprobación de red
+  del ejecutor fue cancelada; no se consultó ni modificó una base.
+- Cerró el mapa del bloque 1: el nuevo rol queda fuera de todos los helpers de
+  scanner, operación local, catálogo, análisis y Radar; sólo obtiene lectura del
+  circuito por un helper dedicado a organización y zona.
+- Definió la solicitud como snapshot inmutable de la sugerencia y sus insumos,
+  separada de `intervenciones_rag`. La intervención conserva una FK nullable y
+  única que sólo se completará al confirmar en góndola.
+- Definió la máquina append-only: `solicitada → ejecutada → confirmada` o
+  `solicitada → ejecutada → no_aplicada → ejecutada…`. La disponibilidad del
+  día siguiente se deriva en `v_solicitudes_cambio_rag_actual`; no se persiste
+  como un evento ficticio.
+- El comando `supabase migration new` alcanzó a crear el archivo fechado antes
+  de que el ejecutor cancelara su acceso de red. Se pobló ese archivo y se
+  descartaron los archivos vacíos de intentos posteriores; ninguna base fue
+  consultada ni modificada.
+- Agregó RLS y sólo `SELECT` para `authenticated`, revocó DML directo y protegió
+  solicitudes/eventos contra `UPDATE` y `DELETE`. Las transiciones validan rol,
+  alcance, orden temporal y habilitación en la fecha operativa argentina.
+- Actualizó `ai/contracts.md`, el tipo compartido de roles, la clasificación de
+  exposición y un contrato específico. No expuso todavía el alta del nuevo rol
+  en la UI: hacerlo antes de su bandeja propia dejaría una cuenta sin superficie
+  válida y contradiría la separación del Dashboard operativo.
+- Verificación local del corte: contrato específico, build y diff-check verdes;
+  lint sin errores; suite con 115/116 archivos verdes. El único fallo es el gate
+  deliberado que exige regenerar la expectativa del replay por la nueva
+  migración. Docker/Postgres local no están disponibles, por lo que el replay
+  descartable queda como próximo gate remoto.
