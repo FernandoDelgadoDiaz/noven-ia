@@ -50,8 +50,9 @@ Fecha de corte: **2026-09-09**.
   administración zonal de precios, bandeja estrictamente zonal y ejecución
   individual— sin confirmación en góndola, operación por lote ni aplicación de
   SQL en producción.
-- Publicación: la rama remota conserva el checkpoint inicial `af92dbf`; el corte
-  funcional está validado localmente y pendiente de publicación y PR.
+- Publicación: corte funcional `a0688ae` publicado; PR draft #180 abierto contra
+  `master`. El primer CI es el run `34370271789`; el replay descartable y sus
+  expectativas continúan pendientes.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -227,11 +228,10 @@ Rama activa, bloque 3:
 
 ## Próximo paso ejecutable
 
-1. Publicar el corte funcional reducido y abrir el PR draft del bloque 3.
-2. Ejecutar el workflow manual de replay sobre
+1. Ejecutar el workflow manual de replay sobre
    `feat/rag-centralizado-bandeja-zonal`, revisar su diff estructural e incorporar
    exclusivamente las dos expectativas regeneradas.
-3. Exigir suite completa, gate vivo, exposición y Playwright verdes antes de
+2. Exigir suite completa, gate vivo, exposición y Playwright verdes antes de
    habilitar revisión o merge. No aplicar SQL en producción.
 
 ## Protocolo de relevo
@@ -419,3 +419,6 @@ Rama activa, bloque 3:
   individual del bloque 3. Añadió contratos, mutación, recorridos Playwright y
   un cuarto gate vivo sobre Supabase descartable. El corte local queda listo
   para publicar; el replay y su expectativa continúan pendientes.
+- Publicó el corte funcional reducido como `a0688ae` y abrió el PR draft #180.
+  El run inicial `34370271789` quedó en cola; el PR permanece bloqueado hasta
+  ejecutar y revisar el replay descartable sobre la rama correcta.
