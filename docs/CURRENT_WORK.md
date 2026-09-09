@@ -52,7 +52,8 @@ Fecha de corte: **2026-09-09**.
   SQL en producción.
 - Publicación: corrección del gate publicada como `80e2f57`; PR #180 abierto y
   listo para revisión contra `master`. El CI `34378399796` terminó completo en
-  verde. No se mergeó ni se aplicó SQL en producción.
+  verde. El checkpoint final `b8600ec` también terminó completo en verde en el
+  run `34396862327`. No se mergeó ni se aplicó SQL en producción.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -85,10 +86,13 @@ Orden acordado:
 
 1. modelo de solicitud, máquina de estados y permisos;
 2. validación gerencial y seguimiento desde la sucursal;
-3. bandeja zonal y ejecución individual;
+3. bandeja zonal:
+   - **3A:** base y ejecución individual;
+   - **3B:** jornada configurable, corte de visibilidad y exportación Excel por
+     sucursal o por toda la zona;
 4. confirmación o rechazo en góndola por gerente, supervisor u operador
    asignado a la familia, iniciando el tramo sólo al confirmar;
-5. exportación, impresión y operación por lote.
+5. impresión y operación por lote restante.
 
 ### Decisión de evidencia · 2026-09-08
 
@@ -243,6 +247,20 @@ Rama activa, bloque 3:
   en verde: replay estructural, aislamiento vivo 1–4, cuota, exposición y los
   recorridos críticos de Playwright incluidos. El PR #180 salió de draft y está
   listo para revisión.
+- El checkpoint final `b8600ec` repitió todos los gates en verde en el run
+  `34396862327`.
+- Requisito operativo confirmado para el bloque 3B: cada zona configura su
+  ventana de recepción; `Santa Cruz Sur` usa 08:00–12:00. Dentro de la ventana,
+  las solicitudes aparecen en tiempo real pero siempre agrupadas y ordenadas
+  por sucursal, no por orden de llegada. Desde el corte quedan registradas para
+  la jornada siguiente y no son visibles ese día.
+- La administrativa debe poder exportar un `.xlsx` real de una sucursal o del
+  total visible de la zona, respetando el mismo orden. Después de cargar los
+  cambios en el sistema de la cadena vuelve a la bandeja y usa **Marcar Activo**;
+  el evento interno continúa siendo `ejecutada`.
+- El PR #180 conserva su alcance como base 3A y no implementa todavía ventana,
+  diferimiento ni exportación. No presentar el circuito zonal como terminado
+  hasta cerrar 3B.
 - Los dos recorridos Playwright nuevos tienen sintaxis validada, pero no se
   ejecutaron localmente porque el runner aislado sólo se instala en CI.
 - Hallazgo corregido: la hora de ejecución se toma después de adquirir el lock,
@@ -255,11 +273,13 @@ Rama activa, bloque 3:
 
 ## Próximo paso ejecutable
 
-1. Revisar el PR #180 y obtener autorización explícita antes de mergear. No
-   aplicar SQL en producción como parte de ese merge.
-2. Después del merge, crear una rama nueva para el bloque 4: confirmación o
-   rechazo en góndola por gerente, supervisor u operador asignado a la familia,
-   iniciando la intervención sólo al confirmar.
+1. Revisar el PR #180 y obtener autorización explícita antes de mergear su base
+   3A. No aplicar SQL en producción como parte de ese merge.
+2. Después del merge, crear una rama nueva para el bloque 3B: configuración de
+   ventana por zona, asignación de jornada, visibilidad en tiempo real dentro de
+   08:00–12:00 para `Santa Cruz Sur`, diferimiento desde el corte y exportación
+   Excel por sucursal o total de zona.
+3. Recién después de 3B avanzar al bloque 4 de confirmación o rechazo en góndola.
 
 ## Protocolo de relevo
 
@@ -476,3 +496,11 @@ Rama activa, bloque 3:
   replay, aislamiento vivo 1–4, cuota, exposición y Playwright, además de suite,
   lint y build. Sacó el PR #180 de draft; el único pendiente del bloque es la
   revisión y decisión explícita de merge. No se aplicó SQL en producción.
+- El checkpoint final `b8600ec` quedó completo en verde en el run
+  `34396862327`.
+- Fernando precisó el ciclo de recepción zonal: 08:00–12:00 para `Santa Cruz
+  Sur`; dentro de la ventana, ingreso en tiempo real con orden estable por
+  sucursal; desde el corte, visibilidad diferida hasta la jornada siguiente.
+  También exige exportar Excel por sucursal o por toda la zona y mostrar
+  **Marcar Activo** sólo después de la carga externa. Se incorporó al contrato
+  como bloque 3B, previo a la validación en góndola y todavía sin implementar.

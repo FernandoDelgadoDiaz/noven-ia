@@ -87,10 +87,21 @@ por la fecha operativa; la fuente persistida sigue siendo el evento `ejecutada`.
 - `listar_bandeja_rag_zonal()` resuelve `auth.uid()` en servidor y devuelve sólo
   solicitudes de zonas donde la cuenta tiene ese rol activo. Incluye pendientes
   sin límite de antigüedad y ejecutadas durante veinticuatro horas.
+- Cada zona debe configurar en servidor el inicio y el corte de su jornada de
+  recepción. En `Santa Cruz Sur` la ventana es 08:00–12:00: dentro de ella las
+  solicitudes aparecen en tiempo real; desde el corte se asignan a la jornada
+  siguiente y permanecen invisibles hasta entonces.
+- La bandeja mantiene un orden estable por código de sucursal ascendente,
+  sector/familia y fin de acción, independientemente del orden de llegada. Debe
+  exportar `.xlsx` real para una sucursal seleccionada o para toda la jornada
+  visible de la zona, sin incluir solicitudes diferidas.
 - `ejecutar_solicitud_cambio_rag(p_solicitud_id)` recibe sólo la identidad de la
   solicitud, bloquea su fila y vuelve a validar rol, organización y zona. Agrega
   un único evento `ejecutada`, devuelve el existente ante reintentos y fija la
   habilitación en el día operativo argentino siguiente; no abre intervenciones.
+- La acción visible de la administrativa es **Marcar Activo** y sólo se usa
+  después de cargar el precio en el sistema de la cadena; internamente conserva
+  el evento append-only `ejecutada`.
 - La cuenta cuyo único acceso es `administrativa_precios_zonal` entra a
   `/rag/zona` y no recibe Dashboard, selector de sucursal, Scanner, vencimientos,
   análisis, problemas, importación, administración local ni Radar operativo.
