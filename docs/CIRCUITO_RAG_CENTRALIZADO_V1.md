@@ -286,6 +286,12 @@ Su única capacidad es consultar y ejecutar solicitudes ya validadas de su zona.
 Se da de alta desde Accesos y jerarquía, no desde la administración local de una
 sucursal.
 
+El alta debe exigir una zona concreta —por ejemplo, `Santa Cruz Sur`—. No existe
+una administrativa de precios global ni una asignación directa a sucursal: su
+bandeja reúne únicamente las sucursales que pertenecen a la zona seleccionada.
+La interfaz de Accesos y jerarquía y su API deben aplicar esta misma regla antes
+de habilitar la bandeja del bloque 3.
+
 ---
 
 ## La decisión de modelo que sostiene todo

@@ -178,11 +178,19 @@ Rama técnica actual:
   mismos gates. El PR #179 dejó de ser draft después de este resultado.
 - CI del checkpoint final `653ee6a`: run `34341380605` completo en verde,
   incluido Playwright.
+- CI del cierre documental `7f54943`: run `34341800649` completo en verde.
+- Alcance zonal ratificado: `administrativa_precios_zonal` requiere organización
+  y una zona concreta —por ejemplo, `Santa Cruz Sur`—, nunca alcance global ni
+  sucursal directa. El modelo, las FK, RLS y transiciones ya lo exigen. La UI y
+  API actuales de Accesos y jerarquía todavía no permiten dar de alta este rol;
+  esa habilitación es condición de entrada del bloque 3.
 
 ## Próximo paso ejecutable
 
 1. Esperar la decisión explícita de merge del PR #179.
-2. No aplicar SQL en producción dentro de este bloque.
+2. Tras el merge, iniciar el bloque 3 incluyendo el alta zonal explícita del rol
+   y su bandeja limitada a las sucursales de esa zona.
+3. No aplicar SQL en producción dentro de este bloque.
 
 ## Protocolo de relevo
 
@@ -351,3 +359,8 @@ Rama técnica actual:
   en producción.
 - Publicó el estado final como `653ee6a`; el run `34341380605` terminó completo
   en verde. El único pendiente del bloque es la decisión explícita de merge.
+- El cierre documental `7f54943` quedó verde en el run `34341800649`.
+- Fernando precisó que la administración zonal de precios está atada a una zona
+  concreta, como `Santa Cruz Sur`. Verificó que la capa de datos ya fuerza ese
+  alcance y registró para el bloque 3 el pendiente real: habilitar el alta del
+  rol en Accesos y jerarquía y mantener su bandeja estrictamente zonal.
