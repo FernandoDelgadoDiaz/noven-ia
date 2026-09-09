@@ -49,9 +49,9 @@ Fecha de corte: **2026-09-09**.
 - Alcance de la rama: bloque 2 del circuito RAG centralizado —validación
   gerencial y seguimiento desde la sucursal— sin bandeja zonal, confirmación en
   góndola ni aplicación de SQL en producción.
-- Publicación: primer corte remoto `90d2736`; PR y replay descartable todavía
-  pendientes. La expectativa del replay debe regenerarse antes de habilitar el
-  merge.
+- Publicación: rama remota en `e23a3dd`; PR draft #179 abierto contra `master`.
+  El replay descartable y su expectativa siguen pendientes antes de habilitar
+  el merge.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -150,12 +150,12 @@ Rama técnica actual:
 
 ## Próximo paso ejecutable
 
-1. Revisar el diff reducido, crear commit y publicar la rama del bloque 2.
-2. Ejecutar el replay descartable, revisar su diff estructural e incorporar
+1. Ejecutar el replay descartable sobre la rama del PR #179, revisar su diff
+   estructural e incorporar
    únicamente la expectativa móvil generada.
-3. Repetir suite, build, lint y diff-check; abrir un PR pequeño y esperar CI
+2. Repetir suite, build, lint y diff-check; actualizar el PR y esperar CI
    completo en verde antes de decidir merge.
-4. No aplicar SQL en producción dentro de este bloque.
+3. No aplicar SQL en producción dentro de este bloque.
 
 ## Protocolo de relevo
 
@@ -284,3 +284,6 @@ Rama técnica actual:
 - Creó el commit local `48c1e39` y publicó el mismo árbol mediante la conexión
   autorizada de GitHub como `90d2736`. El cliente Git local continúa sin
   credenciales; no se alteró su configuración.
+- Publicó el checkpoint como `e23a3dd` y abrió el PR draft #179 contra `master`.
+  El draft conserva como gate explícito el replay descartable; todavía no está
+  habilitado para merge.
