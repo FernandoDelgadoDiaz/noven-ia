@@ -49,9 +49,10 @@ Fecha de corte: **2026-09-09**.
 - Alcance de la rama: bloque 2 del circuito RAG centralizado —validación
   gerencial y seguimiento desde la sucursal— sin bandeja zonal, confirmación en
   góndola ni aplicación de SQL en producción.
-- Publicación: rama remota en `e23a3dd`; PR draft #179 abierto contra `master`.
-  El replay descartable y su expectativa siguen pendientes antes de habilitar
-  el merge.
+- Publicación: rama remota publicada; PR draft #179 abierto contra `master`.
+  El corte funcional es `90d2736` y los commits posteriores actualizan este
+  checkpoint. El replay descartable y su expectativa siguen pendientes antes
+  de habilitar el merge.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
