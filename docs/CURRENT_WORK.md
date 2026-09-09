@@ -148,12 +148,16 @@ Rama técnica actual:
 - `git diff --check`: verde;
 - replay SQL descartable del bloque 2: pendiente; no se ejecutó SQL contra
   producción.
+- intento de replay `34338010251`: falló porque el workflow se lanzó sobre
+  `master` y no sobre la rama del PR #179. Regeneró sin la migración nueva y el
+  gate rechazó el resultado; no hay expectativa válida para incorporar.
 - CI del PR #179: run `34337224074` falló por el mismo gate esperado de
   expectativa móvil; los demás gates no reemplazan el replay pendiente.
 
 ## Próximo paso ejecutable
 
-1. Ejecutar el replay descartable sobre la rama del PR #179, revisar su diff
+1. Volver a ejecutar el replay descartable seleccionando expresamente
+   `feat/rag-centralizado-validacion-sucursal`, revisar su diff
    estructural e incorporar
    únicamente la expectativa móvil generada.
 2. Repetir suite, build, lint y diff-check; actualizar el PR y esperar CI
@@ -290,6 +294,10 @@ Rama técnica actual:
 - Publicó el checkpoint como `e23a3dd` y abrió el PR draft #179 contra `master`.
   El draft conserva como gate explícito el replay descartable; todavía no está
   habilitado para merge.
+- Fernando ejecutó el workflow manual, pero GitHub usó `master`; el run
+  `34338010251` terminó fallando en el gate que limita el cambio a la expectativa
+  móvil. No se incorporó su artefacto. Queda pendiente repetirlo sobre
+  `feat/rag-centralizado-validacion-sucursal`.
 - El primer CI del PR #179, run `34337224074`, terminó fallido por la expectativa
   móvil desactualizada ya identificada localmente. No se interpreta como un
   defecto funcional: exige ejecutar y revisar el replay descartable antes de
