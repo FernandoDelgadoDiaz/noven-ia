@@ -49,7 +49,7 @@ Fecha de corte: **2026-09-09**.
 - Alcance de la rama: bloque 1 del circuito RAG centralizado —modelo de
   solicitud, máquina de estados, nuevo rol y permisos— sin interfaz ni
   aplicación de SQL en producción.
-- Publicación: rama remota en `bf48afc`; PR #178 abierto contra `master`.
+- Publicación: rama remota en `b3760ef`; PR #178 abierto contra `master`.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -140,13 +140,15 @@ Rama técnica actual:
 - replay SQL descartable: verde en el run manual `34303953570`, ejecutado sobre
   `d62cd83`; artefacto `10085981195` incorporado tras revisar el cambio
   estructural.
+- CI completo del PR #178: run `34304501281` en verde sobre `b3760ef`, con
+  contratos, lint, build, replay, aislamiento, cuota, exposición y Playwright.
 
 ## Próximo paso ejecutable
 
-1. Esperar el CI completo del PR #178 y revisar todos sus gates.
-2. Corregir en la misma rama cualquier incompatibilidad que revele el CI; no
-   mergear con gates rojos.
-3. Con CI verde, dejar el bloque 1 listo para revisión y decisión de merge.
+1. Revisar el PR #178 y decidir su merge; el bloque 1 quedó técnicamente verde.
+2. Después del merge, actualizar `master` y abrir una rama nueva para el bloque
+   2: validación gerencial y seguimiento desde la sucursal.
+3. No iniciar el bloque 2 sobre esta rama ni mezclar su interfaz con el modelo.
 4. No aplicar SQL en producción dentro de este bloque.
 
 ## Protocolo de relevo
@@ -234,5 +236,9 @@ Rama técnica actual:
 - Verificación posterior al replay: `npm test` 116/116, build y diff-check
   verdes; lint sin errores y con el warning preexistente de `ScannerModal.tsx`.
 - Publicó la expectativa y el checkpoint como `bf48afc` y abrió el PR #178
-  contra `master`. El CI completo del PR queda como gate activo; no se aplicó
-  SQL en producción.
+  contra `master`. El CI completo quedó como gate activo en ese corte; no se
+  aplicó SQL en producción.
+- El CI completo del PR #178 terminó en verde en el run `34304501281`, incluidos
+  replay estructural, aislamiento multitenant, cuota, exposición y Playwright.
+  El bloque 1 queda listo para revisión y decisión de merge; no se mergeó ni se
+  aplicó SQL en producción.
