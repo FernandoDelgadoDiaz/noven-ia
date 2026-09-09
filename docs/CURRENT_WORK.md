@@ -179,11 +179,15 @@ Rama técnica actual:
 - CI del checkpoint final `653ee6a`: run `34341380605` completo en verde,
   incluido Playwright.
 - CI del cierre documental `7f54943`: run `34341800649` completo en verde.
+- CI del contrato zonal `41c3730`: run `34342774425` completo en verde.
 - Alcance zonal ratificado: `administrativa_precios_zonal` requiere organización
   y una zona concreta —por ejemplo, `Santa Cruz Sur`—, nunca alcance global ni
   sucursal directa. El modelo, las FK, RLS y transiciones ya lo exigen. La UI y
   API actuales de Accesos y jerarquía todavía no permiten dar de alta este rol;
   esa habilitación es condición de entrada del bloque 3.
+- La presencia previa de un gerente zonal no es condición para crear la
+  administrativa. Si falta, Accesos y jerarquía debe ofrecer invitarlo o
+  continuar; queda una advertencia o pendiente de cobertura, nunca un bloqueo.
 
 ## Próximo paso ejecutable
 
@@ -364,3 +368,7 @@ Rama técnica actual:
   concreta, como `Santa Cruz Sur`. Verificó que la capa de datos ya fuerza ese
   alcance y registró para el bloque 3 el pendiente real: habilitar el alta del
   rol en Accesos y jerarquía y mantener su bandeja estrictamente zonal.
+- El contrato zonal publicado como `41c3730` quedó verde en el run
+  `34342774425`. Fernando corrigió una condición de UX: el sistema debe pedir la
+  cobertura del gerente zonal, pero permitir continuar sin ella al crear la
+  administrativa; se registró como aviso pendiente y no como dependencia dura.

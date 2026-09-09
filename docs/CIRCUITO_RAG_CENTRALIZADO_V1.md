@@ -292,6 +292,12 @@ bandeja reúne únicamente las sucursales que pertenecen a la zona seleccionada.
 La interfaz de Accesos y jerarquía y su API deben aplicar esta misma regla antes
 de habilitar la bandeja del bloque 3.
 
+La existencia previa de un gerente zonal **no es requisito** para crear la
+administrativa. Si la zona todavía no tiene esa cobertura, el alta debe ofrecer
+invitarlo ahora o continuar y completar la estructura después. La ausencia se
+registra y se muestra como pendiente de jerarquía, pero no bloquea a la
+administrativa ni su trabajo.
+
 ---
 
 ## La decisión de modelo que sostiene todo
