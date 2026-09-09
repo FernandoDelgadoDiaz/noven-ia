@@ -80,7 +80,8 @@ Orden acordado:
 1. modelo de solicitud, máquina de estados y permisos;
 2. validación gerencial y seguimiento desde la sucursal;
 3. bandeja zonal y ejecución individual;
-4. confirmación o rechazo en góndola, iniciando el tramo sólo al confirmar;
+4. confirmación o rechazo en góndola por gerente, supervisor u operador
+   asignado a la familia, iniciando el tramo sólo al confirmar;
 5. exportación, impresión y operación por lote.
 
 ### Decisión de evidencia · 2026-09-08
@@ -242,3 +243,7 @@ Rama técnica actual:
   replay estructural, aislamiento multitenant, cuota, exposición y Playwright.
   El bloque 1 queda listo para revisión y decisión de merge; no se mergeó ni se
   aplicó SQL en producción.
+- Fernando ratificó que la validación en góndola también corresponde al operador
+  asignado a la familia del producto. El permiso ya estaba implementado en la
+  migración del bloque 1 y ahora queda explícito en el contrato para la interfaz
+  del bloque 4.

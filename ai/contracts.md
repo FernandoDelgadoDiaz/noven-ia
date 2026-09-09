@@ -66,6 +66,9 @@ por la fecha operativa; la fuente persistida sigue siendo el evento `ejecutada`.
 - `administrativa_precios_zonal` sólo ve las solicitudes de su zona y sólo puede
   protagonizar el evento `ejecutada`; no integra helpers de scanner, catálogo,
   vencimientos, análisis, importación, administración local ni Radar.
+- La verificación en góndola (`confirmada` o `no_aplicada`) puede registrarla el
+  gerente o supervisor de la sucursal y también un operador asignado a la
+  familia del producto en esa sucursal.
 - `intervenciones_rag.solicitud_cambio_rag_id` es nullable: solicitar o ejecutar
   nunca abre el tramo; el vínculo se completará al confirmar en góndola.
 
