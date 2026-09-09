@@ -40,22 +40,18 @@ Fecha de corte: **2026-09-09**.
 
 ## Corte Git verificado
 
-- Base revisada: `origin/master` en `5a92df3`, merge del PR #178.
-- CI final del PR #178: run `34305619467`, completo en verde.
+- Base revisada: `origin/master` en `f0fd20f`, squash merge del PR #179.
+- CI final del PR #179: run `34343884360`, completo en verde.
 - El conector disponible no enumera runs disparados por push a `master`; la
   validación local y el CI de la nueva rama siguen siendo obligatorios.
-- Rama activa: `feat/rag-centralizado-validacion-sucursal`.
+- Rama activa: `feat/rag-centralizado-bandeja-zonal`.
 - Propietario de la rama: Codex hasta merge o relevo explícito.
-- Alcance de la rama: bloque 2 del circuito RAG centralizado —validación
-  gerencial y seguimiento desde la sucursal— sin bandeja zonal, confirmación en
-  góndola ni aplicación de SQL en producción.
-- Publicación: rama remota publicada; PR #179 abierto y listo para revisión
-  contra `master`.
-  El corte funcional es `90d2736` y la expectativa revisada del replay quedó
-  publicada en `97cd37a`. El ajuste E2E quedó publicado en `43404eb`; tanto su
-  CI como el del checkpoint `b71e6bd` terminaron completos en verde. La
-  descripción del PR refleja este estado. El checkpoint final `653ee6a` también
-  quedó verde; el merge no está autorizado todavía.
+- Alcance de la rama: bloque 3 del circuito RAG centralizado —alta de la
+  administración zonal de precios, bandeja estrictamente zonal y ejecución
+  individual— sin confirmación en góndola, operación por lote ni aplicación de
+  SQL en producción.
+- Publicación: rama remota creada desde `f0fd20f`; todavía no hay corte funcional
+  ni PR del bloque 3.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -74,12 +70,14 @@ base permanente.
 | C1 · convivencia RAG/oferta central | PR #171 |
 | C2A · operaciones explícitas por tipo | PR #173 |
 | C2B · interfaz operativa | PR #175; cierre documental #176 |
+| RAG centralizado · modelo y permisos | PR #178 |
+| RAG centralizado · validación y seguimiento en sucursal | PR #179 |
 
 ### En ejecución
 
-**Circuito de validación y ejecución centralizada de RAG.** A, B, C y el bloque
-1 ya están cerrados. El bloque 2 está en ejecución en
-`feat/rag-centralizado-validacion-sucursal`.
+**Circuito de validación y ejecución centralizada de RAG.** A, B, C y los
+bloques 1 y 2 ya están cerrados. El bloque 3 está en ejecución en
+`feat/rag-centralizado-bandeja-zonal`.
 
 Orden acordado:
 
@@ -137,7 +135,7 @@ Resumen reconciliado; el detalle y las condiciones de salida permanecen en
 - CI del PR #177: contratos, lint, build, replay, aislamiento, cuota, exposición
   y Playwright completos en verde en los runs `34281365574` y `34281819683`.
 
-Rama técnica actual:
+Último bloque cerrado:
 
 - contrato específico del bloque 2: verde;
 - prueba de mutación: verde; al retirar temporalmente el bloqueo que serializa
@@ -191,10 +189,13 @@ Rama técnica actual:
 
 ## Próximo paso ejecutable
 
-1. Esperar la decisión explícita de merge del PR #179.
-2. Tras el merge, iniciar el bloque 3 incluyendo el alta zonal explícita del rol
-   y su bandeja limitada a las sucursales de esa zona.
-3. No aplicar SQL en producción dentro de este bloque.
+1. Extender Accesos y jerarquía y su Function para crear
+   `administrativa_precios_zonal` con organización y zona obligatorias.
+2. Mostrar la falta de gerente zonal como invitación o pendiente no bloqueante.
+3. Implementar la bandeja de solicitudes de la zona y la ejecución individual,
+   sin confirmación en góndola ni operación por lote.
+4. Agregar contratos, validar localmente y pasar el replay descartable antes de
+   habilitar el merge. No aplicar SQL en producción.
 
 ## Protocolo de relevo
 
@@ -372,3 +373,8 @@ Rama técnica actual:
   `34342774425`. Fernando corrigió una condición de UX: el sistema debe pedir la
   cobertura del gerente zonal, pero permitir continuar sin ella al crear la
   administrativa; se registró como aviso pendiente y no como dependencia dura.
+- Publicó esa corrección como `f44404b`; el run `34343884360` terminó completo
+  en verde. El PR #179 fue mergeado por squash en `master` como `f0fd20f`.
+- Creó `feat/rag-centralizado-bandeja-zonal` desde ese merge e inició el bloque
+  3. La rama excluye confirmación en góndola, exportación, impresión, ejecución
+  por lote y cualquier escritura en producción.
