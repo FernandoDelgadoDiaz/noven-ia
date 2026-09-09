@@ -148,6 +148,8 @@ Rama técnica actual:
 - `git diff --check`: verde;
 - replay SQL descartable del bloque 2: pendiente; no se ejecutó SQL contra
   producción.
+- CI del PR #179: run `34337224074` falló por el mismo gate esperado de
+  expectativa móvil; los demás gates no reemplazan el replay pendiente.
 
 ## Próximo paso ejecutable
 
@@ -288,3 +290,7 @@ Rama técnica actual:
 - Publicó el checkpoint como `e23a3dd` y abrió el PR draft #179 contra `master`.
   El draft conserva como gate explícito el replay descartable; todavía no está
   habilitado para merge.
+- El primer CI del PR #179, run `34337224074`, terminó fallido por la expectativa
+  móvil desactualizada ya identificada localmente. No se interpreta como un
+  defecto funcional: exige ejecutar y revisar el replay descartable antes de
+  continuar.
