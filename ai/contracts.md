@@ -11,7 +11,7 @@ Referencia rápida del modelo productivo. La fuente de verdad estructural es
 | `regiones`, `zonas` | agrupación de sucursales |
 | `sucursales` | límite operativo; `codigo` es el identificador del negocio (ej. `091`) |
 | `usuarios` | perfil local |
-| `usuario_accesos` | rol de alcance: `admin_organizacion`, `gerente_zonal`, `gerente_sucursal`, `supervisor`, `operador` |
+| `usuario_accesos` | rol de alcance: `admin_organizacion`, `gerente_zonal`, `administrativa_precios_zonal`, `gerente_sucursal`, `supervisor`, `operador` |
 | `usuario_familias_sucursal` | familias asignadas a un operador dentro de una sucursal |
 | `invitaciones_acceso` | alta de usuarios por invitación |
 
@@ -41,6 +41,7 @@ Referencia rápida del modelo productivo. La fuente de verdad estructural es
 | `vencimientos` | scoped por sucursal; cantidad comprometida con una fecha |
 | `acciones_operativas` | acciones sobre un vencimiento, incluido el cierre terminal |
 | `intervenciones_rag`, `rag_escalamientos` | ciclo de Retiro Anticipado de Góndola |
+| `solicitudes_cambio_rag`, `solicitud_cambio_rag_eventos` | pedido centralizado separado del tramo RAG + historial append-only de su máquina de estados |
 | `vencimiento_observaciones`, `producto_costo_observaciones` | evidencia operativa |
 | `problemas_economicos_ciclos` | ciclo de vida del problema económico |
 | `alertas_zonales`, `alertas_zonales_destinos`, `push_subscriptions` | notificaciones |
@@ -52,6 +53,24 @@ Referencia rápida del modelo productivo. La fuente de verdad estructural es
 `v_resultado_vencimiento_tramos`, `v_efectividad_intervencion_rag`,
 `v_efectividad_rag_operador`, `v_efectividad_rag_resumen`, `v_resultado_operador_rag`,
 `v_problemas_economicos_historial`, `vw_usuarios_completos`.
+
+`v_solicitudes_cambio_rag_actual` proyecta el último evento sin reemplazar el
+historial. `ejecutada_no_habilitada` y `lista_confirmacion` son estados derivados
+por la fecha operativa; la fuente persistida sigue siendo el evento `ejecutada`.
+
+## Circuito RAG centralizado
+
+- Máquina persistida: `solicitada → ejecutada → confirmada` o
+  `solicitada → ejecutada → no_aplicada → ejecutada…`.
+- Solicitud y eventos son inmutables; cada transición conserva actor y hora.
+- `administrativa_precios_zonal` sólo ve las solicitudes de su zona y sólo puede
+  protagonizar el evento `ejecutada`; no integra helpers de scanner, catálogo,
+  vencimientos, análisis, importación, administración local ni Radar.
+- La verificación en góndola (`confirmada` o `no_aplicada`) puede registrarla el
+  gerente o supervisor de la sucursal y también un operador asignado a la
+  familia del producto en esa sucursal.
+- `intervenciones_rag.solicitud_cambio_rag_id` es nullable: solicitar o ejecutar
+  nunca abre el tramo; el vínculo se completará al confirmar en góndola.
 
 ## Contrato de seguridad
 

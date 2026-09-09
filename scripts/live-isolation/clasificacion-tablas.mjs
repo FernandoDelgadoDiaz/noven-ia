@@ -76,6 +76,8 @@ export const CLASIFICACION = Object.freeze({
   // Escala de porcentajes RAG autorizados. Se lee desde el cliente para
   // presentar la sugerencia; nunca se escribe desde el browser.
   rag_escala_descuento: 'lectura_tenant',
+  solicitud_cambio_rag_eventos: 'lectura_tenant',
+  solicitudes_cambio_rag: 'lectura_tenant',
   regiones: 'lectura_tenant',
   sectores: 'lectura_tenant',
   sucursales: 'lectura_tenant',
@@ -140,6 +142,7 @@ export const ACOTAMIENTOS = Object.freeze({
     // Faltaba, y su ausencia hacía que cinco tablas correctamente acotadas
     // parecieran sin acotar.
     /noven_private\.puede_leer_producto_sucursal\(/,
+    /noven_private\.puede_ver_solicitud_cambio_rag\(/,
   ],
   usuario: [
     /auth\.uid\(\)/,
@@ -186,6 +189,7 @@ export const CLASIFICACION_VISTAS = Object.freeze({
   v_intervencion_tramos: 'vista_lectura_tenant',
   v_resultado_vencimiento_tramos: 'vista_lectura_tenant',
   v_seguimiento_rag_actual: 'vista_lectura_tenant',
+  v_solicitudes_cambio_rag_actual: 'vista_lectura_tenant',
   v_vencimientos_operativos: 'vista_lectura_tenant',
 
   v_problemas_economicos_historial: 'vista_solo_servidor',

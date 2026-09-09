@@ -13,13 +13,14 @@
     "20260906004500_tramos_y_tipo_intervencion_v1.sql",
     "20260906160000_medicion_por_tramo_v1.sql",
     "20260906230000_convivencia_rag_oferta_central_v1.sql",
-    "20260908103000_intervenciones_explicitas_por_tipo_v1.sql"
+    "20260908103000_intervenciones_explicitas_por_tipo_v1.sql",
+    "20260909020007_circuito_rag_centralizado_modelo_estados_v1.sql"
   ],
-  "forward_migrations_sha256": "46947bfc2e23baf791f35ec4606508cc41656e79e9c0bebd805e507ab095bca6",
-  "replay_fingerprint_sha256": "ce64a6ef42982ff26c49d870dd90dc0e68bc0ffd3d8f00971ca213d243bcda26",
+  "forward_migrations_sha256": "12a5ade71f1f1d13e0d0d9ccac4e1ef86e41a78b314e19ba60d6c4be2a946e10",
+  "replay_fingerprint_sha256": "af23647a12806ffc9eb11be043792547d9cdd7b8ba17d8a6a9c0a7b565eaa43f",
   "anchor_fingerprint_sha256": "837771691ffc6e2276c66a26f9ae010c872f12ea33b118406d48b2ad6fca38af",
   "anchor_materialized_at": "2026-09-01",
   "anchor_materialized_from": "catalogo productivo meqvjabgyrgwkxpclqxp (PR #129)",
   "anchor_revalidacion_maxima_dias": 180,
-  "regenerado_at": "2026-09-08"
+  "regenerado_at": "2026-09-09"
 }

@@ -7,6 +7,7 @@ export type RolUsuario = 'admin' | 'operador' | 'supervisor'
 export type RolAccesoMultitenant =
   | 'admin_organizacion'
   | 'gerente_zonal'
+  | 'administrativa_precios_zonal'
   | 'gerente_sucursal'
   | 'supervisor'
   | 'operador'
