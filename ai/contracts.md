@@ -71,6 +71,18 @@ por la fecha operativa; la fuente persistida sigue siendo el evento `ejecutada`.
   familia del producto en esa sucursal.
 - `intervenciones_rag.solicitud_cambio_rag_id` es nullable: solicitar o ejecutar
   nunca abre el tramo; el vínculo se completará al confirmar en góndola.
+- `solicitar_cambio_rag(p_vencimiento_id)` es la única escritura browser del
+  bloque de validación: recibe sólo el vencimiento, recalcula server-side el
+  escalón y la evidencia, valida gerente/supervisor en esa sucursal y reutiliza
+  la solicitud abierta ante doble click.
+- `registrar_control_vencimiento_dashboard` rechaza todo
+  `p_porcentaje_rag` no nulo. El control registra observación; no puede abrir ni
+  modificar un RAG por una ruta lateral.
+- `instrumentar_sugerencia_rag` deja de tener `EXECUTE` para `authenticated`:
+  el snapshot nace atómicamente con la solicitud, no en una segunda llamada.
+- La bandeja de sucursal existe sólo para gerente/supervisor y ordena por días
+  comerciales ascendentes y luego dinero en riesgo descendente. No usa un score
+  compuesto. El operador conserva lectura del estado en la tarjeta.
 
 ## Contrato de seguridad
 

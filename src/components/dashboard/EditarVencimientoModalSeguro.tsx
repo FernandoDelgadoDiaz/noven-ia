@@ -5,6 +5,7 @@ import {
   ArrowRightLeft,
   CheckCircle,
   CircleOff,
+  Clock3,
   Percent,
   Save,
   Tags,
@@ -27,8 +28,11 @@ import {
   type ModoImagenProducto,
 } from '@/lib/product-image'
 import ProductIdentity from '@/components/product/ProductIdentity'
-import type { EstadoSeguimientoRag } from '@/types/index'
+import type { EstadoSeguimientoRag, EstadoSolicitudCambioRag } from '@/types/index'
 import { useEscalaRag } from '@/hooks/useEscalaRag'
+import { useSolicitudCambioRag } from '@/hooks/useSolicitudCambioRag'
+import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
+import { useUsuarioRol } from '@/hooks/useUsuarioRol'
 import { coberturaComoPorcentaje, evaluarSugerencia } from '@/lib/ragCobertura'
 import {
   CAUSAS_NO_VENTA,
@@ -107,6 +111,14 @@ function fmtVelocidad(valor: number | null): string {
   return `${valor.toFixed(2)} un/día`
 }
 
+const SOLICITUD_RAG_LABEL: Record<EstadoSolicitudCambioRag, string> = {
+  solicitada: 'Pendiente de ejecución zonal',
+  ejecutada_no_habilitada: 'Ejecutada · disponible para verificar mañana',
+  lista_confirmacion: 'Lista para verificar en góndola',
+  confirmada: 'Confirmada en góndola',
+  no_aplicada: 'No aplicada · pendiente de nueva ejecución',
+}
+
 export default function EditarVencimientoModalSeguro({
   vencimiento,
   onClose,
@@ -114,6 +126,15 @@ export default function EditarVencimientoModalSeguro({
   onImagenActualizada,
 }: Props) {
   const { sucursalId } = useSucursalActual()
+  const { accesos, legacyMode } = useAccesosMultitenant()
+  const { rol: rolLegacy } = useUsuarioRol()
+  const {
+    solicitud: solicitudCambioRag,
+    loading: cargandoSolicitudRag,
+    error: errorSolicitudRag,
+    disponible: circuitoRagDisponible,
+    refetch: recargarSolicitudRag,
+  } = useSolicitudCambioRag(vencimiento.id)
   const [stockActual, setStockActual] = useState(vencimiento.productos.stock_actual)
   const [fechaVencimiento, setFechaVencimiento] = useState(vencimiento.fecha_vencimiento)
   const [cantidad, setCantidad] = useState(vencimiento.cantidad)
@@ -126,8 +147,8 @@ export default function EditarVencimientoModalSeguro({
   const [error, setError] = useState<string | null>(null)
 
   const [seguimientoRag, setSeguimientoRag] = useState<SeguimientoRagRow | null>(null)
-  const [ragPorcentaje, setRagPorcentaje] = useState('')
   const [cargandoRag, setCargandoRag] = useState(true)
+  const [solicitandoRag, setSolicitandoRag] = useState(false)
   const [finalizandoRag, setFinalizandoRag] = useState(false)
   const [confirmarFinalizarRag, setConfirmarFinalizarRag] = useState(false)
   const { escala: escalaRag } = useEscalaRag()
@@ -181,7 +202,6 @@ export default function EditarVencimientoModalSeguro({
       const row = (data ?? null) as SeguimientoRagRow | null
       setSeguimientoRag(row)
       if (row?.dias_donacion != null) setDiasDonacion(row.dias_donacion)
-      setRagPorcentaje(row?.rag_porcentaje != null ? String(row.rag_porcentaje) : '')
       setCargandoRag(false)
     }
     void cargarSeguimiento()
@@ -271,6 +291,13 @@ export default function EditarVencimientoModalSeguro({
   }
 
   const puedeGestionarRag = nivelCalculado === 'radar' || nivelCalculado === 'urgente'
+  const puedeValidarSugerencia = legacyMode
+    ? rolLegacy === 'admin' || rolLegacy === 'supervisor'
+    : Boolean(sucursalId) && accesos.some((acceso) =>
+      acceso.activo
+      && acceso.sucursal_id === sucursalId
+      && (acceso.rol === 'gerente_sucursal' || acceso.rol === 'supervisor'),
+    )
 
   // Sugerencia por urgencia. Mismo motor determinístico que la línea del
   // Dashboard: el operador no puede ver dos números distintos para lo mismo.
@@ -300,15 +327,6 @@ export default function EditarVencimientoModalSeguro({
     diasDonacion,
   )
 
-  function resolverRagNuevo(): number | null | 'invalido' {
-    if (!puedeGestionarRag || ragPorcentaje.trim() === '') return null
-    const porcentaje = Number(ragPorcentaje)
-    if (!Number.isFinite(porcentaje) || porcentaje <= 0 || porcentaje > 100) return 'invalido'
-    const anterior = seguimientoRag?.rag_porcentaje ?? null
-    if (anterior !== null && Math.abs(porcentaje - anterior) <= 0.0001) return null
-    return porcentaje
-  }
-
   async function handleGuardar(): Promise<void> {
     setError(null)
     if (cantidad === 0) {
@@ -328,19 +346,15 @@ export default function EditarVencimientoModalSeguro({
       return
     }
 
-    const ragNuevo = resolverRagNuevo()
-    if (ragNuevo === 'invalido') {
-      setError('El RAG debe ser un porcentaje mayor a 0 y menor o igual a 100.')
-      return
-    }
-
     setGuardando(true)
     const { data: controlData, error: rpcError } = await supabase.rpc('registrar_control_vencimiento_dashboard', {
       p_vencimiento_id: vencimiento.id,
       p_cantidad_comprometida: cantidad,
       p_fecha_vencimiento: fechaVencimiento,
       p_stock_actual: stockActual,
-      p_porcentaje_rag: ragNuevo,
+      // El control registra evidencia operativa. El cambio de precio sigue el
+      // circuito centralizado y nunca se origina desde este formulario.
+      p_porcentaje_rag: null,
       p_nota: null,
     })
 
@@ -348,30 +362,6 @@ export default function EditarVencimientoModalSeguro({
       setGuardando(false)
       setError(`No se pudo registrar el control: ${rpcError.message}`)
       return
-    }
-
-    // Instrumentación: qué sugirió el motor y qué hizo la persona.
-    //
-    // Sin esto, en seis meses no se puede confrontar la regla contra lo que
-    // realmente pasó, que es todo el insumo del motor histórico. Se registra
-    // sólo cuando hubo cambio de RAG, que es cuando hay una decisión que medir.
-    //
-    // Un fallo acá NO puede voltear el control ya registrado: la instrumentación
-    // es evidencia, no parte de la operación. Se loguea y se sigue.
-    if (ragNuevo != null) {
-      const origen = sugerencia?.hay
-        ? (Math.abs(ragNuevo - (sugerencia.hasta ?? -1)) <= 0.0001 ? 'sugerida_aceptada' : 'sugerida_rechazada')
-        : 'manual'
-
-      const { error: instrError } = await supabase.rpc('instrumentar_sugerencia_rag', {
-        p_vencimiento_id: vencimiento.id,
-        p_cobertura: sugerencia?.cobertura ?? null,
-        p_escalones_sugeridos: sugerencia?.hay ? sugerencia.escalones : null,
-        p_origen: origen,
-      })
-      if (instrError) {
-        console.error('[EditarVencimientoModalSeguro] instrumentación RAG:', instrError)
-      }
     }
 
     const observacionId = Number((controlData as { observacion_id?: number } | null)?.observacion_id)
@@ -446,6 +436,27 @@ export default function EditarVencimientoModalSeguro({
     return stockActual !== vencimiento.productos.stock_actual
       || fechaVencimiento !== vencimiento.fecha_vencimiento
       || cantidad !== vencimiento.cantidad
+  }
+
+  async function handleSolicitarCambioRag(): Promise<void> {
+    setError(null)
+    if (hayControlSinGuardar()) {
+      setError('Registrá primero el control para validar la sugerencia con la evidencia actual.')
+      return
+    }
+
+    setSolicitandoRag(true)
+    const { error: rpcError } = await supabase.rpc('solicitar_cambio_rag', {
+      p_vencimiento_id: vencimiento.id,
+    })
+    setSolicitandoRag(false)
+    if (rpcError) {
+      setError(`No se pudo informar el cambio RAG: ${rpcError.message}`)
+      return
+    }
+
+    await recargarSolicitudRag()
+    onGuardado()
   }
 
   async function handleInformarOfertaCentral(): Promise<void> {
@@ -541,7 +552,7 @@ export default function EditarVencimientoModalSeguro({
   const badge = BADGE_CONFIG[nivelCalculado]
   const riskViz = RISK_VISUAL[nivelCalculado]
   const ocupado = guardando || cerrandoVendido || anulando || subiendoFoto
-    || finalizandoRag || gestionandoOfertaCentral || declarandoSalida
+    || finalizandoRag || gestionandoOfertaCentral || declarandoSalida || solicitandoRag
   const puedeEditarFoto = modoFoto === 'agregar' || modoFoto === 'reemplazar'
   const inputCls = 'w-full h-11 px-3 bg-surface-base border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150'
 
@@ -609,10 +620,9 @@ export default function EditarVencimientoModalSeguro({
               </div>
             </div>
 
-            {(puedeGestionarRag || seguimientoRag?.rag_porcentaje != null) && (
+            {(puedeGestionarRag || seguimientoRag?.rag_porcentaje != null || solicitudCambioRag != null) && (
             <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-3">
-              <div className="flex items-center gap-2"><Percent className="h-4 w-4 text-amber-700" /><div><p className="text-xs font-bold">RAG · Retiro Anticipado de Góndola</p><p className="text-[11px] text-muted-foreground">Descuento aplicado en Glaciar.</p></div></div>
-              <input type="number" min={1} max={100} step="0.01" value={ragPorcentaje} onChange={(e) => setRagPorcentaje(e.target.value)} disabled={!puedeGestionarRag} placeholder="Ej. 30" className={inputCls} />
+              <div className="flex items-center gap-2"><Percent className="h-4 w-4 text-amber-700" /><div><p className="text-xs font-bold">RAG · Retiro Anticipado de Góndola</p><p className="text-[11px] text-muted-foreground">El porcentaje se define por escala y se ejecuta de forma centralizada.</p></div></div>
               {cargandoRag ? <p className="text-[11px] text-muted-foreground">Cargando seguimiento…</p> : seguimientoRag?.rag_porcentaje != null ? (
                 <div className="rounded-lg bg-white/80 border border-amber-100 p-3 text-[11px]">
                   <div className="flex items-center gap-1.5 font-semibold"><Activity className="h-3.5 w-3.5 text-amber-700" />{RAG_ESTADO_LABEL[seguimientoRag.estado_seguimiento_rag]}</div>
@@ -642,19 +652,37 @@ export default function EditarVencimientoModalSeguro({
                           Si no responde, el próximo control vuelve a sugerir.
                         </p>
                       )}
-                      {puedeGestionarRag && (
+                      {cargandoSolicitudRag ? (
+                        <p className="mt-2 text-[10px] text-amber-900/80">Consultando estado de la solicitud…</p>
+                      ) : solicitudCambioRag && solicitudCambioRag.estado_actual !== 'confirmada' ? (
+                        <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-300 bg-white/80 p-2.5">
+                          <Clock3 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-[11px] font-bold">{SOLICITUD_RAG_LABEL[solicitudCambioRag.estado_actual]}</p>
+                            <p className="text-[10px] text-amber-900/80">Cambio solicitado: {solicitudCambioRag.porcentaje_rag_vigente}% → {solicitudCambioRag.porcentaje_solicitado}%</p>
+                          </div>
+                        </div>
+                      ) : puedeValidarSugerencia && circuitoRagDisponible ? (
                         <button
                           type="button"
-                          onClick={() => setRagPorcentaje(String(sugerencia.hasta))}
+                          onClick={() => void handleSolicitarCambioRag()}
                           disabled={ocupado}
                           className="mt-2 w-full h-8 rounded-lg border border-amber-400 bg-white text-amber-900 font-semibold text-[11px] disabled:opacity-50"
                         >
-                          Usar {sugerencia.hasta}%
+                          {solicitandoRag ? 'Informando…' : `Informar ${sugerencia.hasta}%`}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          className="mt-2 w-full h-8 rounded-lg border border-amber-300 bg-white/70 text-amber-900 font-semibold text-[11px] opacity-70"
+                        >
+                          Requiere gerente o supervisor
                         </button>
                       )}
                       <p className="text-[10px] mt-1.5 text-amber-900/80">
-                        Es una sugerencia por urgencia, no un porcentaje óptimo. Podés aplicarla,
-                        elegir otro porcentaje o ignorarla; nada se aplica solo.
+                        Es una sugerencia por urgencia, no un porcentaje óptimo. Informarla crea una solicitud;
+                        no modifica el precio ni inicia la medición.
                       </p>
                     </div>
                   )}
@@ -668,6 +696,15 @@ export default function EditarVencimientoModalSeguro({
                   </button>
                 </div>
               ) : <p className="text-[11px] text-muted-foreground">Todavía no hay un RAG registrado.</p>}
+              {!cargandoSolicitudRag && solicitudCambioRag && solicitudCambioRag.estado_actual === 'confirmada' && (
+                <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-emerald-800">
+                  <CheckCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <p className="text-[11px] font-semibold">{SOLICITUD_RAG_LABEL.confirmada}: {solicitudCambioRag.porcentaje_solicitado}%</p>
+                </div>
+              )}
+              {errorSolicitudRag && (
+                <p className="text-[10px] text-red-600">No se pudo consultar la solicitud: {errorSolicitudRag}</p>
+              )}
             </div>
             )}
 

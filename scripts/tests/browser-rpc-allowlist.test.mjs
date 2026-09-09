@@ -29,11 +29,6 @@ const ALLOWED_BROWSER_RPCS = new Set([
   'finalizar_oferta_central',
   'finalizar_rag_vigente',
   'guardar_vencimiento_y_stock_scanner_v1',
-  // Registra qué sugirió el motor de urgencia y qué hizo la persona. Escribe
-  // sólo columnas de instrumentación sobre la intervención RAG vigente del
-  // vencimiento, verifica permiso sobre el producto en el DEFINER, y no pisa
-  // una intervención ya instrumentada.
-  'instrumentar_sugerencia_rag',
   // El click abre una oferta central desde el stock ya conocido; no recibe ni
   // permite retrotraer fecha de inicio.
   'informar_oferta_central',
@@ -42,6 +37,9 @@ const ALLOWED_BROWSER_RPCS = new Set([
   'modo_imagen_producto_operador',
   'registrar_control_vencimiento_dashboard',
   'responder_alerta_zonal_v1',
+  // El browser identifica el vencimiento; rol, alcance, porcentaje y snapshot
+  // se resuelven dentro de la implementación server-side.
+  'solicitar_cambio_rag',
   'vincular_ean_producto_scanner',
 ])
 

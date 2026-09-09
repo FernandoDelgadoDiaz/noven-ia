@@ -40,16 +40,22 @@ Fecha de corte: **2026-09-09**.
 
 ## Corte Git verificado
 
-- Base revisada: `origin/master` en `63fea6d`, merge del PR #177.
-- CI del PR #177: runs `34281365574` y `34281819683`, completos en verde.
+- Base revisada: `origin/master` en `5a92df3`, merge del PR #178.
+- CI final del PR #178: run `34305619467`, completo en verde.
 - El conector disponible no enumera runs disparados por push a `master`; la
   validación local y el CI de la nueva rama siguen siendo obligatorios.
-- Rama activa: `feat/rag-centralizado-modelo-estados`.
+- Rama activa: `feat/rag-centralizado-validacion-sucursal`.
 - Propietario de la rama: Codex hasta merge o relevo explícito.
-- Alcance de la rama: bloque 1 del circuito RAG centralizado —modelo de
-  solicitud, máquina de estados, nuevo rol y permisos— sin interfaz ni
-  aplicación de SQL en producción.
-- Publicación: rama remota en `b3760ef`; PR #178 abierto contra `master`.
+- Alcance de la rama: bloque 2 del circuito RAG centralizado —validación
+  gerencial y seguimiento desde la sucursal— sin bandeja zonal, confirmación en
+  góndola ni aplicación de SQL en producción.
+- Publicación: rama remota publicada; PR #179 abierto y listo para revisión
+  contra `master`.
+  El corte funcional es `90d2736` y la expectativa revisada del replay quedó
+  publicada en `97cd37a`. El ajuste E2E quedó publicado en `43404eb`; tanto su
+  CI como el del checkpoint `b71e6bd` terminaron completos en verde. La
+  descripción del PR refleja este estado. El checkpoint final `653ee6a` también
+  quedó verde; el merge no está autorizado todavía.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -71,9 +77,9 @@ base permanente.
 
 ### En ejecución
 
-**Circuito de validación y ejecución centralizada de RAG.** A, B y C ya están
-cerrados. La implementación por bloques está autorizada; el bloque 1 está en
-ejecución en `feat/rag-centralizado-modelo-estados`.
+**Circuito de validación y ejecución centralizada de RAG.** A, B, C y el bloque
+1 ya están cerrados. El bloque 2 está en ejecución en
+`feat/rag-centralizado-validacion-sucursal`.
 
 Orden acordado:
 
@@ -133,24 +139,62 @@ Resumen reconciliado; el detalle y las condiciones de salida permanecen en
 
 Rama técnica actual:
 
-- contrato específico del bloque 1: verde;
+- contrato específico del bloque 2: verde;
+- prueba de mutación: verde; al retirar temporalmente el bloqueo que serializa
+  solicitudes, el contrato falló por la causa esperada y el código fue
+  restaurado antes de repetirlo en verde;
+- contratos UX, allowlist RPC y frontera de seguridad: verdes;
 - `npm run build`: verde;
 - `npm run lint`: cero errores y el warning preexistente de `ScannerModal.tsx`;
-- `npm test`: 116 de 116 archivos verdes;
+- `npm test`: 117 de 117 archivos verdes después de incorporar la expectativa
+  regenerada;
 - `git diff --check`: verde;
-- replay SQL descartable: verde en el run manual `34303953570`, ejecutado sobre
-  `d62cd83`; artefacto `10085981195` incorporado tras revisar el cambio
-  estructural.
-- CI completo del PR #178: run `34304501281` en verde sobre `b3760ef`, con
-  contratos, lint, build, replay, aislamiento, cuota, exposición y Playwright.
+- replay SQL descartable del bloque 2: verde en el run `34338998266`, ejecutado
+  sobre `e542ca3`; artefacto `10098969631` revisado antes de incorporar.
+- diff estructural del replay: agrega dos funciones, elimina cero objetos y
+  cambia sólo la RPC de control prevista. También retira del browser los dos
+  permisos de instrumentación anterior y agrega los cuatro permisos acotados de
+  la nueva RPC. El fingerprint del ancla permaneció intacto.
+- intento de replay `34338010251`: falló porque el workflow se lanzó sobre
+  `master` y no sobre la rama del PR #179. Regeneró sin la migración nueva y el
+  gate rechazó el resultado; no hay expectativa válida para incorporar.
+- CI previos del PR #179 fallaron por el gate esperado de expectativa móvil. Se
+  reemplazaron como evidencia del replay por el run posterior `34339575079`.
+- CI `34339575079`: replay, contratos, lint, build, aislamiento, cuota,
+  clasificación de exposición y preparación de Playwright quedaron verdes. El
+  único fallo fue un E2E que todavía buscaba el porcentaje editable retirado por
+  este bloque e intentaba enviarlo dentro de la RPC de control.
+- El E2E fue actualizado para pulsar `Informar 30%`, comprobar una única llamada
+  a `solicitar_cambio_rag(p_vencimiento_id)` y comprobar que esa acción no llama
+  a `registrar_control_vencimiento_dashboard` ni escribe tablas directamente.
+  El fixture y el contrato estático cubren la nueva ruta.
+- Verificación local posterior al ajuste E2E: contrato específico y suite
+  completa 117/117 en verde; build y diff-check verdes; lint con cero errores y
+  el warning preexistente de `ScannerModal.tsx:143`.
+- CI final del corte funcional `43404eb`: run `34340514382` completo en verde,
+  incluido el recorrido Playwright corregido y todos los gates de replay,
+  aislamiento, cuota y exposición.
+- CI del checkpoint `b71e6bd`: run `34340919978` completo en verde con los
+  mismos gates. El PR #179 dejó de ser draft después de este resultado.
+- CI del checkpoint final `653ee6a`: run `34341380605` completo en verde,
+  incluido Playwright.
+- CI del cierre documental `7f54943`: run `34341800649` completo en verde.
+- CI del contrato zonal `41c3730`: run `34342774425` completo en verde.
+- Alcance zonal ratificado: `administrativa_precios_zonal` requiere organización
+  y una zona concreta —por ejemplo, `Santa Cruz Sur`—, nunca alcance global ni
+  sucursal directa. El modelo, las FK, RLS y transiciones ya lo exigen. La UI y
+  API actuales de Accesos y jerarquía todavía no permiten dar de alta este rol;
+  esa habilitación es condición de entrada del bloque 3.
+- La presencia previa de un gerente zonal no es condición para crear la
+  administrativa. Si falta, Accesos y jerarquía debe ofrecer invitarlo o
+  continuar; queda una advertencia o pendiente de cobertura, nunca un bloqueo.
 
 ## Próximo paso ejecutable
 
-1. Revisar el PR #178 y decidir su merge; el bloque 1 quedó técnicamente verde.
-2. Después del merge, actualizar `master` y abrir una rama nueva para el bloque
-   2: validación gerencial y seguimiento desde la sucursal.
-3. No iniciar el bloque 2 sobre esta rama ni mezclar su interfaz con el modelo.
-4. No aplicar SQL en producción dentro de este bloque.
+1. Esperar la decisión explícita de merge del PR #179.
+2. Tras el merge, iniciar el bloque 3 incluyendo el alta zonal explícita del rol
+   y su bandeja limitada a las sucursales de esa zona.
+3. No aplicar SQL en producción dentro de este bloque.
 
 ## Protocolo de relevo
 
@@ -247,3 +291,84 @@ Rama técnica actual:
   asignado a la familia del producto. El permiso ya estaba implementado en la
   migración del bloque 1 y ahora queda explícito en el contrato para la interfaz
   del bloque 4.
+- El CI final del PR #178 terminó en verde en el run `34305619467`; el PR fue
+  mergeado por squash en `master` como `5a92df3`.
+- Creó `feat/rag-centralizado-validacion-sucursal` desde ese merge e inició el
+  bloque 2. El alcance excluye bandeja zonal, ejecución administrativa,
+  confirmación en góndola y cualquier escritura productiva.
+- Implementó `solicitar_cambio_rag(p_vencimiento_id)`: la RPC recibe sólo la
+  identidad del vencimiento, resuelve permiso y alcance en servidor, recalcula
+  el siguiente escalón, crea el snapshot y su evento inicial de forma atómica e
+  idempotente, sin abrir una intervención.
+- Cerró el atajo anterior: registrar un control ya no admite un porcentaje RAG
+  y la instrumentación separada dejó de ser una RPC del navegador. La evidencia
+  nace con la operación que crea la solicitud.
+- Reemplazó el porcentaje editable por `Informar NN%` para gerente/supervisor y
+  `Requiere gerente o supervisor` para operador. La tarjeta muestra pendiente
+  de ejecución, ejecutada sin habilitar, lista para verificar, confirmada o no
+  aplicada; solicitar nunca se presenta como cambio de precio.
+- Agregó la bandeja de validación del gerente dentro del Dashboard existente.
+  Reúne sugerencias y solicitudes de la sucursal y ordena primero por urgencia y
+  después por dinero en riesgo, sin inventar un score compuesto.
+- Conservó el contrato del bloque 4: la verificación futura en góndola podrá
+  hacerla gerente, supervisor u operador asignado a la familia. Este bloque sólo
+  muestra el estado; todavía no expone las acciones de confirmación/rechazo.
+- Añadió contratos del bloque y actualizó allowlist y frontera browser. La
+  prueba de mutación retiró temporalmente la serialización, comprobó el fallo
+  esperado y restauró el código; contrato, build, lint y diff-check quedaron
+  verdes.
+- La suite completa quedó en 116/117: sólo falla la expectativa móvil porque la
+  nueva migración aún no pasó por el replay descartable. No se consultó ni
+  modificó producción.
+- Creó el commit local `48c1e39` y publicó el mismo árbol mediante la conexión
+  autorizada de GitHub como `90d2736`. El cliente Git local continúa sin
+  credenciales; no se alteró su configuración.
+- Publicó el checkpoint como `e23a3dd` y abrió el PR draft #179 contra `master`.
+  El draft conserva como gate explícito el replay descartable; todavía no está
+  habilitado para merge.
+- Fernando ejecutó el workflow manual, pero GitHub usó `master`; el run
+  `34338010251` terminó fallando en el gate que limita el cambio a la expectativa
+  móvil. No se incorporó su artefacto. Queda pendiente repetirlo sobre
+  `feat/rag-centralizado-validacion-sucursal`.
+- El replay repetido sobre la rama correcta terminó en verde en el run
+  `34338998266`. El artefacto `10098969631` coincidió con su digest publicado y
+  mantuvo intacto el ancla.
+- Revisó el fingerprint completo: dos funciones nuevas, cero objetos eliminados
+  y un único cambio de definición previsto en la RPC de control; los permisos
+  browser reflejan el reemplazo de la instrumentación anterior por la solicitud
+  acotada.
+- Incorporó exclusivamente `expected-replay-fingerprint.json` y
+  `replay-expectation.json`. La verificación posterior quedó en 117/117 pruebas,
+  build y diff-check verdes; lint sin errores y con el warning preexistente de
+  `ScannerModal.tsx`.
+- El primer CI del PR #179, run `34337224074`, terminó fallido por la expectativa
+  móvil desactualizada ya identificada localmente. No se interpreta como un
+  defecto funcional: exige ejecutar y revisar el replay descartable antes de
+  continuar.
+- Publicó la expectativa revisada del replay en el corte remoto `97cd37a`. El CI
+  resultante, run `34339575079`, dejó verdes todos los gates de base de datos,
+  seguridad, contratos, build y lint; sólo falló el Playwright que conservaba la
+  interacción anterior con un porcentaje editable.
+- Actualizó ese recorrido para representar la operación vigente: gerencia
+  informa la sugerencia mediante `solicitar_cambio_rag`, sin reutilizar la RPC
+  de control ni efectuar escrituras directas. Contrato específico, 117/117
+  pruebas, build y diff-check quedaron verdes; lint quedó sin errores y con su
+  warning preexistente.
+- Publicó el ajuste E2E como `43404eb`. El run `34340514382` terminó completo en
+  verde, incluido Playwright; el defecto era exclusivamente la expectativa
+  obsoleta del test y no la nueva operación de solicitud.
+- Publicó el checkpoint `b71e6bd`; su run `34340919978` también terminó completo
+  en verde. Sacó el PR #179 de draft y actualizó su descripción para retirar el
+  replay ya resuelto. El PR está listo para revisión, sin merge ni SQL aplicado
+  en producción.
+- Publicó el estado final como `653ee6a`; el run `34341380605` terminó completo
+  en verde. El único pendiente del bloque es la decisión explícita de merge.
+- El cierre documental `7f54943` quedó verde en el run `34341800649`.
+- Fernando precisó que la administración zonal de precios está atada a una zona
+  concreta, como `Santa Cruz Sur`. Verificó que la capa de datos ya fuerza ese
+  alcance y registró para el bloque 3 el pendiente real: habilitar el alta del
+  rol en Accesos y jerarquía y mantener su bandeja estrictamente zonal.
+- El contrato zonal publicado como `41c3730` quedó verde en el run
+  `34342774425`. Fernando corrigió una condición de UX: el sistema debe pedir la
+  cobertura del gerente zonal, pero permitir continuar sin ella al crear la
+  administrativa; se registró como aviso pendiente y no como dependencia dura.
