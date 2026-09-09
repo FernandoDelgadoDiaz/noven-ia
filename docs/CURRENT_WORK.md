@@ -49,8 +49,9 @@ Fecha de corte: **2026-09-09**.
 - Alcance de la rama: bloque 2 del circuito RAG centralizado —validación
   gerencial y seguimiento desde la sucursal— sin bandeja zonal, confirmación en
   góndola ni aplicación de SQL en producción.
-- Publicación: implementación local completa, todavía sin commit remoto ni PR;
-  falta regenerar la expectativa del replay antes de habilitar el merge.
+- Publicación: primer corte remoto `90d2736`; PR y replay descartable todavía
+  pendientes. La expectativa del replay debe regenerarse antes de habilitar el
+  merge.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -280,3 +281,6 @@ Rama técnica actual:
 - La suite completa quedó en 116/117: sólo falla la expectativa móvil porque la
   nueva migración aún no pasó por el replay descartable. No se consultó ni
   modificó producción.
+- Creó el commit local `48c1e39` y publicó el mismo árbol mediante la conexión
+  autorizada de GitHub como `90d2736`. El cliente Git local continúa sin
+  credenciales; no se alteró su configuración.
