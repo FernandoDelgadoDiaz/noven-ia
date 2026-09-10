@@ -511,6 +511,8 @@ BEGIN
       ORDER BY s.id
     )
     SELECT jsonb_build_object(
+      -- `to_char` no tiene sobrecarga para `time`: el cast a interval es
+      -- explícito para no depender de que exista una conversión implícita.
       'ahora_argentina', to_char(v_local, 'YYYY-MM-DD"T"HH24:MI:SS'),
       'zonas', COALESCE((
         SELECT jsonb_agg(jsonb_build_object(
@@ -518,8 +520,8 @@ BEGIN
           'codigo', j.codigo,
           'nombre', j.nombre,
           'organizacion_id', j.organizacion_id,
-          'jornada_inicio', to_char(j.rag_jornada_inicio, 'HH24:MI'),
-          'jornada_corte', to_char(j.rag_jornada_corte, 'HH24:MI'),
+          'jornada_inicio', to_char(j.rag_jornada_inicio::interval, 'HH24:MI'),
+          'jornada_corte', to_char(j.rag_jornada_corte::interval, 'HH24:MI'),
           'jornada_visible', j.jornada_visible,
           'jornada_en_curso', j.jornada_en_curso,
           'ventana_abierta', j.ventana_abierta
@@ -700,8 +702,8 @@ BEGIN
         'nombre', z.nombre,
         'region_id', z.region_id,
         'organizacion_id', z.organizacion_id,
-        'rag_jornada_inicio', to_char(z.rag_jornada_inicio, 'HH24:MI'),
-        'rag_jornada_corte', to_char(z.rag_jornada_corte, 'HH24:MI')
+        'rag_jornada_inicio', to_char(z.rag_jornada_inicio::interval, 'HH24:MI'),
+        'rag_jornada_corte', to_char(z.rag_jornada_corte::interval, 'HH24:MI')
       ) ORDER BY z.nombre)
       FROM public.zonas z
       WHERE z.organizacion_id = v_org AND z.activa = true
@@ -843,8 +845,8 @@ BEGIN
     'zona_id', p_zona_id,
     'zona_nombre', v_nombre,
     'organizacion_id', v_org,
-    'rag_jornada_inicio', to_char(p_inicio, 'HH24:MI'),
-    'rag_jornada_corte', to_char(p_corte, 'HH24:MI')
+    'rag_jornada_inicio', to_char(p_inicio::interval, 'HH24:MI'),
+    'rag_jornada_corte', to_char(p_corte::interval, 'HH24:MI')
   );
 END;
 $$;
