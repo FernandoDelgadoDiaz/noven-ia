@@ -113,6 +113,12 @@ Hasta reunir esa muestra:
 - la UI distingue evidencia insuficiente de una intervención medida e
   inefectiva.
 
+**Riesgo asumido, registrado el 2026-09-10.** El circuito se está construyendo
+sobre una recomendación que todavía no se validó en producción. Es una decisión
+consciente del responsable del producto, no un supuesto implícito. Qué se asume,
+qué pasa si la evidencia no acompaña y qué habría que revisar entonces quedó
+escrito en `docs/PRE_PRODUCTION_HARDENING_PLAN.md`, en la entrada del circuito.
+
 ## Estado del hardening
 
 Resumen reconciliado; el detalle y las condiciones de salida permanecen en
@@ -310,10 +316,13 @@ Alcance implementado:
   administrativa y con permiso de administración de jerarquía. No es superficie
   del browser ni de la propia bandeja.
 
-Decisión registrada: la bandeja **no** muestra un conteo de solicitudes
-diferidas. El contrato dice que no se ven ese día y un conteo sigue siendo
-información sobre ellas. Queda anotado como punto abierto por si la operación
-real pide lo contrario.
+Decisión ratificada: la bandeja **no** muestra un conteo de solicitudes
+diferidas. La razón de fondo no es sólo que el contrato diga que no se ven ese
+día: **un número visible es una invitación**. Si el conteo está ahí, tarde o
+temprano alguien pregunta si no puede procesarlas ya que están, y el corte se
+disuelve entero. Además la administrativa no puede hacer nada con esa
+información hoy: le genera ansiedad sin acción posible. Si la operación real lo
+pide, se agrega.
 
 Pruebas de la rama:
 
