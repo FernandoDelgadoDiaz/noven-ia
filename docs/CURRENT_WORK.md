@@ -348,7 +348,16 @@ Pruebas de la rama:
   comprobando que empiece con la firma de un ZIP y contenga la hoja y el
   producto.
 
-Pendiente de esta rama: regenerar la expectativa del replay sobre esta rama,
+Hallazgo corregido antes de pedir CI: `to_char` no tiene sobrecarga para `time`.
+Los cuerpos plpgsql no se analizan al crearse, así que una conversión implícita
+inexistente habría fallado recién al ejecutar la bandeja, con la migración ya
+aplicada. Los seis usos pasaron a un cast explícito a `interval`.
+
+Regeneración de la expectativa: el primer run se lanzó sobre el commit anterior
+y quedó inservible al publicarse el cast; se canceló y se relanzó sobre la
+cabeza nueva. La expectativa sólo vale para el commit sobre el que se regeneró.
+
+Pendiente de esta rama: incorporar la expectativa del replay regenerada,
 incorporarla, obtener CI completo en verde y pedir autorización antes de mergear
 y antes de aplicar SQL en producción.
 
