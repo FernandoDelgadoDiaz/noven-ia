@@ -279,16 +279,95 @@ Rama activa, bloque 3:
   por `npx` no fue autorizado. La migración usa un nombre fechado generado en
   UTC; no se consultó ni modificó ninguna base.
 
+## Rama activa · bloque 3B
+
+Alcance implementado:
+
+- `zonas` recibe la ventana de recepción como configuración propia, con
+  `08:00`–`12:00` por defecto y la restricción de que el corte sea posterior al
+  inicio. El valor por defecto es política del circuito, no un dato sembrado.
+- Una única función privada decide a qué jornada pertenece un momento: el mismo
+  día hasta el corte, el siguiente desde el corte, siempre en horario argentino.
+  El inicio no participa de esa decisión, porque una carga previa a la apertura
+  pertenece a la jornada de ese mismo día.
+- La solicitud persiste su jornada al crearse y no vuelve a recalcularla. La fila
+  y su jornada se derivan de un único instante, para que no puedan caer a lados
+  distintos del corte.
+- Las solicitudes ya registradas se reconstruyeron con la misma regla aplicada
+  sobre `creada_at`. El bloqueo de inmutabilidad se suspende sólo para ese
+  relleno y se restablece dentro de la misma transacción.
+- La bandeja aplica el corte de visibilidad con sus dos mitades: un pendiente de
+  una jornada anterior se ve siempre; lo asignado a hoy espera a que abra la
+  ventana; lo diferido no se ve ese día.
+- Ejecutar rechaza lo que todavía no corresponde ver. El reintento idempotente
+  responde antes de esa guarda, para que una repetición tardía no falle.
+- La bandeja agrupa por sucursal y exporta un `.xlsx` real —ZIP con partes
+  OOXML, sin dependencias nuevas— por sucursal o por la jornada visible completa
+  de la zona, respetando orden y agrupación de la pantalla.
+- La acción de la administrativa pasa a llamarse **Marcar Activo**; el evento
+  interno sigue siendo `ejecutada`.
+- La ventana se configura desde Accesos y jerarquía, por la Function
+  administrativa y con permiso de administración de jerarquía. No es superficie
+  del browser ni de la propia bandeja.
+
+Decisión registrada: la bandeja **no** muestra un conteo de solicitudes
+diferidas. El contrato dice que no se ven ese día y un conteo sigue siendo
+información sobre ellas. Queda anotado como punto abierto por si la operación
+real pide lo contrario.
+
+Pruebas de la rama:
+
+- contrato específico del bloque 3B: verde;
+- prueba de mutación: once mutantes, todos detectados; cada sustitución se
+  verificó aplicada antes de correr el contrato, para que un reemplazo fallido
+  no se lea como cobertura. Cubren las dos mitades del corte de visibilidad, la
+  pérdida de `security_invoker` en la vista, el corte tomado por el inicio en vez
+  del cierre, la ejecución fuera de jornada, el reintento caído después de la
+  guarda, el porcentaje exportado como texto, el orden gobernado por la llegada,
+  la ventana configurable desde el browser, el relleno que deja el bloqueo
+  apagado y la jornada derivada de un instante distinto al de la fila;
+- contrato del bloque 3A actualizado: la exportación deja de estar prohibida, la
+  acción cambia de nombre y el formateo en horario argentino se afirma sobre la
+  librería compartida entre pantalla y archivo;
+- el archivo exportado se vuelve a abrir en la prueba con un lector de ZIP
+  propio, que verifica el CRC32 de cada parte contra los bytes leídos por
+  offset: un error de posiciones no se vería comparando cadenas;
+- gate vivo ampliado con un Gate 5 sobre Supabase efímero: prueba que lo diferido
+  no entra en la bandeja ni puede ejecutarse, que lo asignado a hoy espera al
+  inicio, que un pendiente de una jornada anterior se ve igual, y que el rechazo
+  no deja un evento de ejecución. Las ventanas del gate se fijan para no depender
+  de la hora en que corra el CI;
+- `npm test`: 118 de 119 archivos verdes. El único fallo es el gate deliberado
+  que exige regenerar la expectativa móvil del replay por la migración nueva;
+- `npm run lint`: cero errores; permanece el warning preexistente de
+  `ScannerModal.tsx:143`;
+- `npm run build`: verde;
+- `git diff --check`: verde;
+- Playwright no se ejecutó localmente porque el runner sólo se instala en CI. El
+  recorrido zonal se amplió para leer la jornada visible y descargar el archivo,
+  comprobando que empiece con la firma de un ZIP y contenga la hoja y el
+  producto.
+
+Pendiente de esta rama: regenerar la expectativa del replay sobre esta rama,
+incorporarla, obtener CI completo en verde y pedir autorización antes de mergear
+y antes de aplicar SQL en producción.
+
 ## Próximo paso ejecutable
 
-1. Implementar el bloque 3B en `feat/rag-centralizado-jornada-zonal`: ventana de
-   jornada configurable por zona, asignación de jornada resuelta en servidor,
-   corte de visibilidad y exportación `.xlsx` por sucursal o por zona.
-2. Regenerar la expectativa móvil del replay sobre esta rama, incorporarla y
-   obtener CI completo en verde.
-3. Pedir autorización explícita antes de mergear y antes de aplicar SQL en
+1. Regenerar la expectativa móvil del replay ejecutando el workflow manual
+   **sobre `feat/rag-centralizado-jornada-zonal`**, no sobre `master`: lanzarlo
+   sobre otra rama regenera sin la migración nueva y el gate rechaza el
+   resultado.
+2. Incorporar únicamente `expected-replay-fingerprint.json` y
+   `replay-expectation.json` dentro de `baseline-v1`, comprobando que el
+   fingerprint del ancla permanezca intacto, y revisar el diff estructural: debe
+   agregar dos columnas a `zonas`, una a `solicitudes_cambio_rag` con su índice y
+   restricción, la función de jornada y la de configuración, y modificar sólo la
+   vista de solicitudes y las tres RPC previstas.
+3. Abrir el PR de 3B y obtener CI completo en verde.
+4. Pedir autorización explícita antes de mergear y antes de aplicar SQL en
    producción.
-4. Recién después de 3B avanzar al bloque 4 de confirmación o rechazo en
+5. Recién después de 3B avanzar al bloque 4 de confirmación o rechazo en
    góndola.
 
 ## Protocolo de relevo

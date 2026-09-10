@@ -52,11 +52,17 @@ export async function installRagZonalFixture(page) {
     if (rpc === 'listar_bandeja_rag_zonal') {
       rpcCalls.push({ name: rpc, body })
       const response = {
+        ahora_argentina: '2026-09-10T09:15:00',
         zonas: [{
           id: IDS.zona,
           codigo: 'SCS',
           nombre: 'Santa Cruz Sur',
           organizacion_id: IDS.org,
+          jornada_inicio: '08:00',
+          jornada_corte: '12:00',
+          jornada_visible: '2026-09-10',
+          jornada_en_curso: '2026-09-10',
+          ventana_abierta: true,
         }],
         solicitudes: [{
           id: RAG_ZONAL_IDS.request,
@@ -75,6 +81,7 @@ export async function installRagZonalFixture(page) {
           fin_accion: '2026-09-10',
           cantidad_comprometida: 12,
           creada_at: '2026-09-09T14:30:00Z',
+          jornada_zonal: '2026-09-10',
           ultimo_evento: executed ? 'ejecutada' : 'solicitada',
           ultimo_evento_at: executed ? '2026-09-09T15:00:00Z' : '2026-09-09T14:30:00Z',
           habilitada_desde: executed ? '2026-09-10' : null,
