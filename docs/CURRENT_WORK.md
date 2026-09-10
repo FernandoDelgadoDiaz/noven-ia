@@ -394,6 +394,61 @@ Pendiente de esta rama: incorporar la expectativa del replay regenerada,
 incorporarla, obtener CI completo en verde y pedir autorización antes de mergear
 y antes de aplicar SQL en producción.
 
+## Hallazgo abierto · el circuito no sabe abrir el primer RAG
+
+Detectado el 2026-09-10 sobre la app en uso, fuera del alcance de 3B. **No es un
+problema de interfaz: no existe ningún camino para crear el primer RAG de un
+producto.** Verificado en los tres niveles:
+
+- **Superficie de RPC.** Las únicas RPC de RAG expuestas al browser son
+  `finalizar_rag_vigente` y `solicitar_cambio_rag`. La oferta central sí tiene su
+  `informar_oferta_central`; el RAG no tiene su par, porque se resolvió que pasa
+  por el circuito centralizado.
+- **Servidor.** `solicitar_cambio_rag` exige `rag_porcentaje IS NOT NULL`,
+  `dias_desde_ultimo_rag IS NOT NULL`, `estado_seguimiento_rag IN ('insuficiente',
+  'sin_movimiento')` y un escalón estrictamente mayor al vigente. Sin tramo
+  abierto, la vista devuelve `sin_rag` y esas cuatro condiciones son inalcanzables.
+- **Interfaz.** El bloque de sugerencia está anidado dentro de
+  `rag_porcentaje != null`; sin RAG la tarjeta cae al texto «Todavía no hay un RAG
+  registrado», sin acción.
+
+La causa es de diseño, no un defecto de implementación: el motor de cobertura
+mide un tramo contra su propia ventana, así que **sin tramo no hay nada que
+medir**, y el circuito quedó construido como escalamiento. El bloque 2 cerró a la
+vez el camino anterior —registrar un control ya no acepta un porcentaje RAG—, así
+que la única puerta que existía se cerró sin que se abriera la nueva.
+
+Consecuencia en uso: un producto en Radar cuya velocidad necesaria supera
+holgadamente su venta media no puede recibir un RAG por ningún medio.
+
+**Planteo pendiente de decisión, no implementado.** Son dos sugerencias
+distintas, con evidencia distinta, y confundirlas repetiría el error de que dos
+situaciones produzcan el mismo valor:
+
+1. **Primer RAG, escalón cero a uno.** No hay tramo ni cobertura medida. La única
+   señal disponible es la que ya calcula el motor de riesgo y ya se muestra en la
+   tarjeta: la velocidad necesaria contra la venta media informada por Glaciar.
+   Es evidencia prestada —no una observación propia de NoVen sobre ese
+   vencimiento—, y eso tiene que quedar marcado: `cobertura_al_sugerir` no puede
+   guardar una cobertura medida y una estimada en la misma columna sin
+   distinguirlas.
+2. **Escalamiento, escalón n a n+1.** Hay tramo. La señal es la cobertura medida
+   contra la ventana del propio tramo, con la guarda de ventana observable. Es lo
+   que ya funciona.
+
+Decisiones que no son mías y bloquean la implementación:
+
+- si la primera sugerencia es siempre el primer escalón de la escala, o puede
+  saltar varios cuando el déficit es grande. El modelo ya admite lo segundo
+  —`escalones_sugeridos` acepta más de uno y el escalón cero implícito ya sabe
+  contarlos—, pero hoy la RPC escribe `1` fijo. A favor del primer escalón: la
+  evidencia es la más débil del circuito. En contra: con pocos días de ventana un
+  primer escalón corto pierde un ciclo de control entero;
+- si la primera sugerencia exige un control nuevo, como el resto del circuito.
+  El principio vigente dice que sin observación nueva no hay sugerencia nueva;
+- si esto es un bloque propio antes del 4, o un arreglo que entra antes por
+  dejar la operación sin una herramienta.
+
 ## Próximo paso ejecutable
 
 1. Obtener CI completo en verde sobre el PR de 3B —contratos, lint, build,
