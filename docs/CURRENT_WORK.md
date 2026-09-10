@@ -15,7 +15,7 @@ seguridad explotables. Cuando una comprobación requiera ese material, se
 registra el resultado mínimo y se enlaza el PR, CI o documento autorizado que
 contiene la evidencia.
 
-Fecha de corte: **2026-09-09**.
+Fecha de corte: **2026-09-10**.
 
 ## Lectura obligatoria antes de continuar
 
@@ -40,22 +40,24 @@ Fecha de corte: **2026-09-09**.
 
 ## Corte Git verificado
 
-- Base revisada: `origin/master` en `f0fd20f`, squash merge del PR #179.
-- CI final del PR #179: run `34343884360`, completo en verde.
+- Base revisada: `origin/master` en `33a8c5e`, squash merge del PR #180.
+- PR #180 mergeado; `origin/master` y `origin/feat/rag-centralizado-bandeja-zonal`
+  no tienen diferencias de contenido, por lo que el bloque 3A entró completo.
+- Contradicción detectada y corregida en este corte: el checkpoint anterior
+  declaraba el corte en `f0fd20f`, la rama activa en
+  `feat/rag-centralizado-bandeja-zonal` y el PR #180 pendiente de revisión y
+  merge. Git muestra el merge ya hecho. El paso 1 del plan anterior queda
+  cerrado por evidencia, no por decisión nueva.
 - El conector disponible no enumera runs disparados por push a `master`; la
   validación local y el CI de la nueva rama siguen siendo obligatorios.
-- Rama activa: `feat/rag-centralizado-bandeja-zonal`.
-- Propietario de la rama: Codex hasta merge o relevo explícito.
-- Alcance de la rama: bloque 3 del circuito RAG centralizado —alta de la
-  administración zonal de precios, bandeja estrictamente zonal y ejecución
-  individual— sin confirmación en góndola, operación por lote ni aplicación de
-  SQL en producción.
-- Publicación: corrección del gate publicada como `80e2f57`; PR #180 abierto y
-  listo para revisión contra `master`. El CI `34378399796` terminó completo en
-  verde. El checkpoint final `b8600ec` también terminó completo en verde en el
-  run `34396862327`. La definición documental de 3B se publicó como `d73fc07` y
-  quedó verde en el run `34398753480`. No se mergeó ni se aplicó SQL en
-  producción.
+- Rama activa: `feat/rag-centralizado-jornada-zonal`.
+- Propietario de la rama: Claude Code hasta merge o relevo explícito.
+- Alcance de la rama: bloque 3B del circuito RAG centralizado —ventana de
+  jornada configurable por zona, asignación de jornada en servidor, corte de
+  visibilidad y exportación `.xlsx` por sucursal o por zona— sin confirmación en
+  góndola, sin operación por lote y sin aplicación de SQL en producción.
+- Ningún PR abierto compite por este alcance: el único PR abierto es el #118, en
+  draft y explícitamente fuera del trabajo activo.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -76,22 +78,23 @@ base permanente.
 | C2B · interfaz operativa | PR #175; cierre documental #176 |
 | RAG centralizado · modelo y permisos | PR #178 |
 | RAG centralizado · validación y seguimiento en sucursal | PR #179 |
+| RAG centralizado · 3A bandeja y ejecución zonal | PR #180 |
 
 ### En ejecución
 
 **Circuito de validación y ejecución centralizada de RAG.** A, B, C y los
-bloques 1 y 2 ya están cerrados. La implementación del bloque 3 está completa y
-lista para revisión en `feat/rag-centralizado-bandeja-zonal`; se considera
-cerrada sólo después del merge explícitamente autorizado.
+bloques 1, 2 y 3A ya están cerrados. En ejecución está el bloque 3B en
+`feat/rag-centralizado-jornada-zonal`; se considera cerrado sólo después del
+merge explícitamente autorizado.
 
 Orden acordado:
 
-1. modelo de solicitud, máquina de estados y permisos;
-2. validación gerencial y seguimiento desde la sucursal;
+1. modelo de solicitud, máquina de estados y permisos — cerrado;
+2. validación gerencial y seguimiento desde la sucursal — cerrado;
 3. bandeja zonal:
-   - **3A:** base y ejecución individual;
+   - **3A:** base y ejecución individual — cerrado;
    - **3B:** jornada configurable, corte de visibilidad y exportación Excel por
-     sucursal o por toda la zona;
+     sucursal o por toda la zona — en ejecución;
 4. confirmación o rechazo en góndola por gerente, supervisor u operador
    asignado a la familia, iniciando el tramo sólo al confirmar;
 5. impresión y operación por lote restante.
@@ -278,13 +281,15 @@ Rama activa, bloque 3:
 
 ## Próximo paso ejecutable
 
-1. Revisar el PR #180 y obtener autorización explícita antes de mergear su base
-   3A. No aplicar SQL en producción como parte de ese merge.
-2. Después del merge, crear una rama nueva para el bloque 3B: configuración de
-   ventana por zona, asignación de jornada, visibilidad en tiempo real dentro de
-   08:00–12:00 para `Santa Cruz Sur`, espera hasta las 08:00 para cargas previas,
-   diferimiento desde el corte y exportación Excel por sucursal o total de zona.
-3. Recién después de 3B avanzar al bloque 4 de confirmación o rechazo en góndola.
+1. Implementar el bloque 3B en `feat/rag-centralizado-jornada-zonal`: ventana de
+   jornada configurable por zona, asignación de jornada resuelta en servidor,
+   corte de visibilidad y exportación `.xlsx` por sucursal o por zona.
+2. Regenerar la expectativa móvil del replay sobre esta rama, incorporarla y
+   obtener CI completo en verde.
+3. Pedir autorización explícita antes de mergear y antes de aplicar SQL en
+   producción.
+4. Recién después de 3B avanzar al bloque 4 de confirmación o rechazo en
+   góndola.
 
 ## Protocolo de relevo
 
