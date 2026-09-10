@@ -366,26 +366,43 @@ Regeneración de la expectativa: el primer run se lanzó sobre el commit anterio
 y quedó inservible al publicarse el cast; se canceló y se relanzó sobre la
 cabeza nueva. La expectativa sólo vale para el commit sobre el que se regeneró.
 
+Replay descartable verde en el run `34517411806`, sobre `b91d9cc`. Ese run
+también es la única prueba de que el cuerpo de las funciones resuelve: la
+migración aplicó contra un Postgres real. Se incorporaron exclusivamente
+`expected-replay-fingerprint.json` y `replay-expectation.json` dentro de
+`baseline-v1`, extraídos del log con verificación SHA-256; el ancla permaneció
+intacta y `git status` no muestra ningún otro archivo de la baseline modificado.
+
+Diff estructural, comparado por objeto completo: agrega nueve objetos —las tres
+columnas nuevas, sus dos restricciones, el índice por zona y jornada, y las dos
+funciones—, no elimina ninguno, y cambia cinco: las tres RPC previstas, el
+contexto de altas y la vista de solicitudes. En la vista cambia sólo
+`definition_sha256`: `options` sigue en `["security_invoker=true"]`, igual que en
+las otras dos vistas del circuito. El único cambio de ACL es un `EXECUTE` para
+`service_role` sobre la RPC de configuración; `authenticated` no gana nada, y
+`jornada_rag_zonal_v1` no aparece en el ACL de nadie.
+
+Hallazgo en el propio instrumento: `acl` no es una lista sino un objeto que
+agrupa `schemas`, `tables` y `functions`, así que el comparador lo volcaba
+entero como un valor único. La sección más sensible del fingerprint era la menos
+legible, y ahí adentro podía viajar cualquier permiso nuevo sin que nadie lo
+viera. El comparador ahora baja un nivel en las secciones que agrupan otras, y
+su contrato cubre el caso; se verificó que el caso nuevo falla contra la versión
+anterior del comparador.
+
 Pendiente de esta rama: incorporar la expectativa del replay regenerada,
 incorporarla, obtener CI completo en verde y pedir autorización antes de mergear
 y antes de aplicar SQL en producción.
 
 ## Próximo paso ejecutable
 
-1. Regenerar la expectativa móvil del replay ejecutando el workflow manual
-   **sobre `feat/rag-centralizado-jornada-zonal`**, no sobre `master`: lanzarlo
-   sobre otra rama regenera sin la migración nueva y el gate rechaza el
-   resultado.
-2. Incorporar únicamente `expected-replay-fingerprint.json` y
-   `replay-expectation.json` dentro de `baseline-v1`, comprobando que el
-   fingerprint del ancla permanezca intacto, y revisar el diff estructural: debe
-   agregar dos columnas a `zonas`, una a `solicitudes_cambio_rag` con su índice y
-   restricción, la función de jornada y la de configuración, y modificar sólo la
-   vista de solicitudes y las tres RPC previstas.
-3. Abrir el PR de 3B y obtener CI completo en verde.
-4. Pedir autorización explícita antes de mergear y antes de aplicar SQL en
-   producción.
-5. Recién después de 3B avanzar al bloque 4 de confirmación o rechazo en
+1. Obtener CI completo en verde sobre el PR de 3B —contratos, lint, build,
+   replay estructural, aislamiento vivo con el Gate 5 nuevo, cuota, exposición y
+   Playwright—.
+2. Pedir autorización explícita antes de mergear.
+3. Pedir autorización explícita antes de aplicar la migración a producción, y
+   registrar el timestamp productivo como se hizo con C1 y C2A.
+4. Recién después de 3B avanzar al bloque 4 de confirmación o rechazo en
    góndola.
 
 ## Protocolo de relevo

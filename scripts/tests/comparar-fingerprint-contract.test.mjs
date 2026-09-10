@@ -83,4 +83,43 @@ assert.throws(
   'con claves ambiguas hay que ampliar los campos identificadores, no seguir',
 )
 
-console.log('✓ El comparador detecta cambios de campo, altas, bajas, y aborta ante claves ambiguas')
+// --- 5. Una sección que agrupa otras se baja un nivel, no se vuelca entera ---
+//
+// `acl` no es una lista: es un objeto con `schemas`, `tables` y `functions`
+// adentro. Tratado como valor único, el diff imprimía las miles de entradas de
+// ACL como un solo bloque ilegible y ahí dentro podía viajar cualquier permiso
+// nuevo sin que nadie lo viera. Es la misma familia de error que comparar sólo
+// `definition_sha256`: la sección más sensible resultaba la menos legible.
+
+const aclCon = (extra = []) => ({
+  acl: {
+    schemas: [{ schema: 'public', grantee: 'authenticated', privilege: 'USAGE' }],
+    functions: [
+      { schema: 'public', name: 'f', identity_arguments: '', grantee: 'service_role', privilege: 'EXECUTE' },
+      ...extra,
+    ],
+  },
+})
+
+const salidaAcl = correr(
+  escribir('k.json', aclCon()),
+  escribir('l.json', aclCon([
+    { schema: 'public', name: 'f', identity_arguments: '', grantee: 'authenticated', privilege: 'EXECUTE' },
+  ])),
+)
+assert.match(
+  salidaAcl,
+  /AGREGA\s+\[acl\.functions\][^\n]*grantee=authenticated/,
+  'un EXECUTE nuevo dentro de acl tiene que aparecer identificado, no dentro de un volcado',
+)
+assert.ok(
+  !/"schemas"/.test(salidaAcl),
+  'la sección no debe volcarse entera: eso es lo que la volvía ilegible',
+)
+assert.match(
+  correr(escribir('m.json', aclCon()), escribir('n.json', aclCon())),
+  /Sin diferencias estructurales/,
+  'sin cambios en el ACL tampoco se inventa uno',
+)
+
+console.log('✓ El comparador detecta cambios de campo, altas, bajas, secciones anidadas, y aborta ante claves ambiguas')
