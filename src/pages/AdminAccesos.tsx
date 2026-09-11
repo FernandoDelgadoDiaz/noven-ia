@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Building2, Check, ChevronDown, ChevronRight, Copy, Link2, Loader2, Mail, MapPinned, Plus, Shield, Store, Users, X } from 'lucide-react'
+import { AlertTriangle, Building2, Check, ChevronDown, ChevronRight, Clock, Copy, Link2, Loader2, Mail, MapPinned, Plus, Shield, Store, Users, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 type RolInvitable = 'gerente_zonal' | 'administrativa_precios_zonal' | 'gerente_sucursal'
 type Canal = 'link' | 'email'
 
 interface RegionItem { id: string; codigo: string; nombre: string; organizacion_id: string }
-interface ZonaItem { id: string; codigo: string; nombre: string; region_id: string; organizacion_id: string }
+interface ZonaItem {
+  id: string
+  codigo: string
+  nombre: string
+  region_id: string
+  organizacion_id: string
+  rag_jornada_inicio?: string
+  rag_jornada_corte?: string
+}
 interface SucursalItem { id: string; codigo: string; nombre: string; zona_id: string; organizacion_id: string }
 interface CoberturaPersona { usuario_id?: string; invitacion_id?: string; nombre: string }
 interface CoberturaZonal {
@@ -201,6 +209,7 @@ export default function AdminAccesos() {
 
                               {zonaAbierta && (
                                 <div className="border-t border-border/50 bg-white divide-y divide-border/40">
+                                  <JornadaZonal zona={zona} onGuardado={() => void cargar()} />
                                   {sucursalesZona.map((sucursal) => (
                                     <div key={sucursal.id} className="px-4 py-3 pl-12 flex items-center gap-3">
                                       <div className="h-8 w-8 rounded-lg bg-brand-light flex items-center justify-center shrink-0">
@@ -230,6 +239,88 @@ export default function AdminAccesos() {
       {modal && contexto && (
         <ModalInvitacion contexto={contexto} onClose={() => { setModal(false); void cargar() }} />
       )}
+    </div>
+  )
+}
+
+/**
+ * La ventana de recepción de la bandeja zonal. Se edita acá y no en la bandeja
+ * porque es una regla de la organización sobre la zona, no una preferencia de
+ * quien la opera: si la cambiara la administrativa, el corte dejaría de ser un
+ * acuerdo con las sucursales.
+ */
+function JornadaZonal({ zona, onGuardado }: { zona: ZonaItem; onGuardado: () => void }) {
+  const inicioActual = zona.rag_jornada_inicio ?? ''
+  const corteActual = zona.rag_jornada_corte ?? ''
+  const [inicio, setInicio] = useState(inicioActual)
+  const [corte, setCorte] = useState(corteActual)
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [guardado, setGuardado] = useState(false)
+
+  const sucio = inicio !== inicioActual || corte !== corteActual
+  const invalido = !inicio || !corte || inicio >= corte
+
+  async function guardar() {
+    setGuardando(true)
+    setError(null)
+    setGuardado(false)
+    try {
+      await request({ accion: 'jornada', zonaId: zona.id, inicio, corte })
+      setGuardado(true)
+      onGuardado()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div className="px-4 py-3 pl-12">
+      <div className="flex items-center gap-2">
+        <Clock className="h-4 w-4 text-brand shrink-0" />
+        <p className="text-sm font-semibold text-foreground">Ventana de recepción de precios</p>
+      </div>
+      <p className="text-[11px] text-muted-foreground mt-0.5">
+        Las solicitudes anteriores al inicio esperan a que abra. Desde el corte pasan a la jornada siguiente.
+      </p>
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        <label className="text-[11px] text-muted-foreground">
+          Inicio
+          <input
+            type="time"
+            value={inicio}
+            onChange={(event) => { setInicio(event.target.value); setGuardado(false) }}
+            className="mt-0.5 block h-9 px-2 rounded-lg border border-border bg-white text-sm text-foreground"
+          />
+        </label>
+        <label className="text-[11px] text-muted-foreground">
+          Corte
+          <input
+            type="time"
+            value={corte}
+            onChange={(event) => { setCorte(event.target.value); setGuardado(false) }}
+            className="mt-0.5 block h-9 px-2 rounded-lg border border-border bg-white text-sm text-foreground"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => void guardar()}
+          disabled={guardando || invalido || !sucio}
+          className="h-9 px-3 rounded-lg bg-brand text-white text-xs font-semibold flex items-center gap-2 disabled:opacity-50"
+        >
+          {guardando && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          Guardar jornada
+        </button>
+        {guardado && !sucio && (
+          <span className="text-[11px] text-emerald-700 flex items-center gap-1"><Check className="h-3.5 w-3.5" />Guardada</span>
+        )}
+      </div>
+      {invalido && (inicio || corte) && (
+        <p className="text-[11px] text-amber-700 mt-1">El corte tiene que ser posterior al inicio.</p>
+      )}
+      {error && <p className="text-[11px] text-red-700 mt-1">{error}</p>}
     </div>
   )
 }

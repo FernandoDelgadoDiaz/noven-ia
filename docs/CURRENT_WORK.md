@@ -15,7 +15,7 @@ seguridad explotables. Cuando una comprobación requiera ese material, se
 registra el resultado mínimo y se enlaza el PR, CI o documento autorizado que
 contiene la evidencia.
 
-Fecha de corte: **2026-09-09**.
+Fecha de corte: **2026-09-10**.
 
 ## Lectura obligatoria antes de continuar
 
@@ -40,22 +40,24 @@ Fecha de corte: **2026-09-09**.
 
 ## Corte Git verificado
 
-- Base revisada: `origin/master` en `f0fd20f`, squash merge del PR #179.
-- CI final del PR #179: run `34343884360`, completo en verde.
+- Base revisada: `origin/master` en `33a8c5e`, squash merge del PR #180.
+- PR #180 mergeado; `origin/master` y `origin/feat/rag-centralizado-bandeja-zonal`
+  no tienen diferencias de contenido, por lo que el bloque 3A entró completo.
+- Contradicción detectada y corregida en este corte: el checkpoint anterior
+  declaraba el corte en `f0fd20f`, la rama activa en
+  `feat/rag-centralizado-bandeja-zonal` y el PR #180 pendiente de revisión y
+  merge. Git muestra el merge ya hecho. El paso 1 del plan anterior queda
+  cerrado por evidencia, no por decisión nueva.
 - El conector disponible no enumera runs disparados por push a `master`; la
   validación local y el CI de la nueva rama siguen siendo obligatorios.
-- Rama activa: `feat/rag-centralizado-bandeja-zonal`.
-- Propietario de la rama: Codex hasta merge o relevo explícito.
-- Alcance de la rama: bloque 3 del circuito RAG centralizado —alta de la
-  administración zonal de precios, bandeja estrictamente zonal y ejecución
-  individual— sin confirmación en góndola, operación por lote ni aplicación de
-  SQL en producción.
-- Publicación: corrección del gate publicada como `80e2f57`; PR #180 abierto y
-  listo para revisión contra `master`. El CI `34378399796` terminó completo en
-  verde. El checkpoint final `b8600ec` también terminó completo en verde en el
-  run `34396862327`. La definición documental de 3B se publicó como `d73fc07` y
-  quedó verde en el run `34398753480`. No se mergeó ni se aplicó SQL en
-  producción.
+- Rama activa: `feat/rag-centralizado-jornada-zonal`.
+- Propietario de la rama: Claude Code hasta merge o relevo explícito.
+- Alcance de la rama: bloque 3B del circuito RAG centralizado —ventana de
+  jornada configurable por zona, asignación de jornada en servidor, corte de
+  visibilidad y exportación `.xlsx` por sucursal o por zona— sin confirmación en
+  góndola, sin operación por lote y sin aplicación de SQL en producción.
+- Ningún PR abierto compite por este alcance: el único PR abierto es el #118, en
+  draft y explícitamente fuera del trabajo activo.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -76,22 +78,23 @@ base permanente.
 | C2B · interfaz operativa | PR #175; cierre documental #176 |
 | RAG centralizado · modelo y permisos | PR #178 |
 | RAG centralizado · validación y seguimiento en sucursal | PR #179 |
+| RAG centralizado · 3A bandeja y ejecución zonal | PR #180 |
 
 ### En ejecución
 
 **Circuito de validación y ejecución centralizada de RAG.** A, B, C y los
-bloques 1 y 2 ya están cerrados. La implementación del bloque 3 está completa y
-lista para revisión en `feat/rag-centralizado-bandeja-zonal`; se considera
-cerrada sólo después del merge explícitamente autorizado.
+bloques 1, 2 y 3A ya están cerrados. En ejecución está el bloque 3B en
+`feat/rag-centralizado-jornada-zonal`; se considera cerrado sólo después del
+merge explícitamente autorizado.
 
 Orden acordado:
 
-1. modelo de solicitud, máquina de estados y permisos;
-2. validación gerencial y seguimiento desde la sucursal;
+1. modelo de solicitud, máquina de estados y permisos — cerrado;
+2. validación gerencial y seguimiento desde la sucursal — cerrado;
 3. bandeja zonal:
-   - **3A:** base y ejecución individual;
+   - **3A:** base y ejecución individual — cerrado;
    - **3B:** jornada configurable, corte de visibilidad y exportación Excel por
-     sucursal o por toda la zona;
+     sucursal o por toda la zona — en ejecución;
 4. confirmación o rechazo en góndola por gerente, supervisor u operador
    asignado a la familia, iniciando el tramo sólo al confirmar;
 5. impresión y operación por lote restante.
@@ -109,6 +112,12 @@ Hasta reunir esa muestra:
 - no se afirma efectividad histórica ni se recalibran umbrales;
 - la UI distingue evidencia insuficiente de una intervención medida e
   inefectiva.
+
+**Riesgo asumido, registrado el 2026-09-10.** El circuito se está construyendo
+sobre una recomendación que todavía no se validó en producción. Es una decisión
+consciente del responsable del producto, no un supuesto implícito. Qué se asume,
+qué pasa si la evidencia no acompaña y qué habría que revisar entonces quedó
+escrito en `docs/PRE_PRODUCTION_HARDENING_PLAN.md`, en la entrada del circuito.
 
 ## Estado del hardening
 
@@ -276,15 +285,221 @@ Rama activa, bloque 3:
   por `npx` no fue autorizado. La migración usa un nombre fechado generado en
   UTC; no se consultó ni modificó ninguna base.
 
+## Rama activa · bloque 3B
+
+Alcance implementado:
+
+- `zonas` recibe la ventana de recepción como configuración propia, con
+  `08:00`–`12:00` por defecto y la restricción de que el corte sea posterior al
+  inicio. El valor por defecto es política del circuito, no un dato sembrado.
+- Una única función privada decide a qué jornada pertenece un momento: el mismo
+  día hasta el corte, el siguiente desde el corte, siempre en horario argentino.
+  El inicio no participa de esa decisión, porque una carga previa a la apertura
+  pertenece a la jornada de ese mismo día.
+- La solicitud persiste su jornada al crearse y no vuelve a recalcularla. La fila
+  y su jornada se derivan de un único instante, para que no puedan caer a lados
+  distintos del corte.
+- Las solicitudes ya registradas se reconstruyeron con la misma regla aplicada
+  sobre `creada_at`. El bloqueo de inmutabilidad se suspende sólo para ese
+  relleno y se restablece dentro de la misma transacción.
+- La bandeja aplica el corte de visibilidad con sus dos mitades: un pendiente de
+  una jornada anterior se ve siempre; lo asignado a hoy espera a que abra la
+  ventana; lo diferido no se ve ese día.
+- Ejecutar rechaza lo que todavía no corresponde ver. El reintento idempotente
+  responde antes de esa guarda, para que una repetición tardía no falle.
+- La bandeja agrupa por sucursal y exporta un `.xlsx` real —ZIP con partes
+  OOXML, sin dependencias nuevas— por sucursal o por la jornada visible completa
+  de la zona, respetando orden y agrupación de la pantalla.
+- La acción de la administrativa pasa a llamarse **Marcar Activo**; el evento
+  interno sigue siendo `ejecutada`.
+- La ventana se configura desde Accesos y jerarquía, por la Function
+  administrativa y con permiso de administración de jerarquía. No es superficie
+  del browser ni de la propia bandeja.
+
+Decisión ratificada: la bandeja **no** muestra un conteo de solicitudes
+diferidas. La razón de fondo no es sólo que el contrato diga que no se ven ese
+día: **un número visible es una invitación**. Si el conteo está ahí, tarde o
+temprano alguien pregunta si no puede procesarlas ya que están, y el corte se
+disuelve entero. Además la administrativa no puede hacer nada con esa
+información hoy: le genera ansiedad sin acción posible. Si la operación real lo
+pide, se agrega.
+
+Pruebas de la rama:
+
+- contrato específico del bloque 3B: verde;
+- prueba de mutación: once mutantes, todos detectados; cada sustitución se
+  verificó aplicada antes de correr el contrato, para que un reemplazo fallido
+  no se lea como cobertura. Cubren las dos mitades del corte de visibilidad, la
+  pérdida de `security_invoker` en la vista, el corte tomado por el inicio en vez
+  del cierre, la ejecución fuera de jornada, el reintento caído después de la
+  guarda, el porcentaje exportado como texto, el orden gobernado por la llegada,
+  la ventana configurable desde el browser, el relleno que deja el bloqueo
+  apagado y la jornada derivada de un instante distinto al de la fila;
+- contrato del bloque 3A actualizado: la exportación deja de estar prohibida, la
+  acción cambia de nombre y el formateo en horario argentino se afirma sobre la
+  librería compartida entre pantalla y archivo;
+- el archivo exportado se vuelve a abrir en la prueba con un lector de ZIP
+  propio, que verifica el CRC32 de cada parte contra los bytes leídos por
+  offset: un error de posiciones no se vería comparando cadenas;
+- gate vivo ampliado con un Gate 5 sobre Supabase efímero: prueba que lo diferido
+  no entra en la bandeja ni puede ejecutarse, que lo asignado a hoy espera al
+  inicio, que un pendiente de una jornada anterior se ve igual, y que el rechazo
+  no deja un evento de ejecución. Las ventanas del gate se fijan para no depender
+  de la hora en que corra el CI;
+- `npm test`: 118 de 119 archivos verdes. El único fallo es el gate deliberado
+  que exige regenerar la expectativa móvil del replay por la migración nueva;
+- `npm run lint`: cero errores; permanece el warning preexistente de
+  `ScannerModal.tsx:143`;
+- `npm run build`: verde;
+- `git diff --check`: verde;
+- Playwright no se ejecutó localmente porque el runner sólo se instala en CI. El
+  recorrido zonal se amplió para leer la jornada visible y descargar el archivo,
+  comprobando que empiece con la firma de un ZIP y contenga la hoja y el
+  producto.
+
+Hallazgo corregido antes de pedir CI: `to_char` no tiene sobrecarga para `time`.
+Los cuerpos plpgsql no se analizan al crearse, así que una conversión implícita
+inexistente habría fallado recién al ejecutar la bandeja, con la migración ya
+aplicada. Los seis usos pasaron a un cast explícito a `interval`.
+
+Regeneración de la expectativa: el primer run se lanzó sobre el commit anterior
+y quedó inservible al publicarse el cast; se canceló y se relanzó sobre la
+cabeza nueva. La expectativa sólo vale para el commit sobre el que se regeneró.
+
+Replay descartable verde en el run `34517411806`, sobre `b91d9cc`. Ese run
+también es la única prueba de que el cuerpo de las funciones resuelve: la
+migración aplicó contra un Postgres real. Se incorporaron exclusivamente
+`expected-replay-fingerprint.json` y `replay-expectation.json` dentro de
+`baseline-v1`, extraídos del log con verificación SHA-256; el ancla permaneció
+intacta y `git status` no muestra ningún otro archivo de la baseline modificado.
+
+Diff estructural, comparado por objeto completo: agrega nueve objetos —las tres
+columnas nuevas, sus dos restricciones, el índice por zona y jornada, y las dos
+funciones—, no elimina ninguno, y cambia cinco: las tres RPC previstas, el
+contexto de altas y la vista de solicitudes. En la vista cambia sólo
+`definition_sha256`: `options` sigue en `["security_invoker=true"]`, igual que en
+las otras dos vistas del circuito. El único cambio de ACL es un `EXECUTE` para
+`service_role` sobre la RPC de configuración; `authenticated` no gana nada, y
+`jornada_rag_zonal_v1` no aparece en el ACL de nadie.
+
+Hallazgo en el propio instrumento: `acl` no es una lista sino un objeto que
+agrupa `schemas`, `tables` y `functions`, así que el comparador lo volcaba
+entero como un valor único. La sección más sensible del fingerprint era la menos
+legible, y ahí adentro podía viajar cualquier permiso nuevo sin que nadie lo
+viera. El comparador ahora baja un nivel en las secciones que agrupan otras, y
+su contrato cubre el caso; se verificó que el caso nuevo falla contra la versión
+anterior del comparador.
+
+Dos ciclos de CI se gastaron en el mismo lugar —el fixture del gate vivo— y los
+dos fallos fueron invariantes del esquema que ningún gate local puede ver, porque
+el gate vivo necesita Docker y un Supabase efímero. Ambos quedaron cubiertos por
+el contrato, con su prueba de mutación:
+
+- el `CHECK` no admite una jornada anterior a la fecha de creación, y el fixture
+  sembraba una solicitud con jornada de ayer creada hoy;
+- la FK contra `rag_escala_descuento` exige que todo porcentaje pertenezca a la
+  escala de la organización, y el fixture pedía un escalón que él mismo no
+  sembraba.
+
+En los dos casos la corrección fue ajustar el fixture, no relajar la restricción:
+estaba construyendo estados que el circuito no puede producir.
+
+El tercer CI pasó los gates vivos completos —incluido el Gate 5 nuevo— y falló en
+Playwright por una consecuencia de este mismo bloque: la tarjeta ahora muestra la
+pastilla breve y también el estado completo, así que buscar el texto de la
+pastilla por subcadena coincidía con dos elementos. Se corrigió exigiendo la
+coincidencia exacta y comprobando además el estado completo, que es información
+nueva que la tarjeta debe mostrar. El contrato lo exige y la mutación lo
+confirma.
+
+El primer CI del PR falló en el gate vivo, y lo cazó una restricción propia de
+este bloque: el fixture sembraba una solicitud con jornada de ayer pero fecha de
+creación de hoy, y el `CHECK` no admite una jornada anterior a la creación. La
+restricción tiene razón —una solicitud de una jornada anterior se creó ese día—,
+así que el fixture estaba construyendo un estado que el circuito no puede
+producir. Se corrigió fechándola completa, no relajando la restricción. El
+contrato ahora exige esa coherencia y se verificó que la exige: quitando la fecha
+de creación, el contrato falla.
+
+Verificación local con la expectativa incorporada y el fixture corregido:
+`npm test` 119 de 119 archivos verdes, `npm run lint` sin errores y con el
+warning preexistente de `ScannerModal.tsx:143`, `npm run build` verde y
+`git diff --check` verde.
+
+CI completo en verde sobre `18df7bb` en el run `34545436645`: replay estructural,
+contratos, lint, build, aislamiento vivo 1–5 con el Gate 5 nuevo, cuota,
+clasificación de exposición y los veinte recorridos Playwright. El PR #181 quedó
+en estado `clean` contra `master`.
+
+Pendiente de esta rama: autorización explícita antes de mergear y antes de
+aplicar SQL en producción. Al aplicarla, registrar el timestamp productivo como
+se hizo con C1 y C2A.
+
+## Hallazgo abierto · el circuito no sabe abrir el primer RAG
+
+Detectado el 2026-09-10 sobre la app en uso, fuera del alcance de 3B. **No es un
+problema de interfaz: no existe ningún camino para crear el primer RAG de un
+producto.** Verificado en los tres niveles:
+
+- **Superficie de RPC.** Las únicas RPC de RAG expuestas al browser son
+  `finalizar_rag_vigente` y `solicitar_cambio_rag`. La oferta central sí tiene su
+  `informar_oferta_central`; el RAG no tiene su par, porque se resolvió que pasa
+  por el circuito centralizado.
+- **Servidor.** `solicitar_cambio_rag` exige `rag_porcentaje IS NOT NULL`,
+  `dias_desde_ultimo_rag IS NOT NULL`, `estado_seguimiento_rag IN ('insuficiente',
+  'sin_movimiento')` y un escalón estrictamente mayor al vigente. Sin tramo
+  abierto, la vista devuelve `sin_rag` y esas cuatro condiciones son inalcanzables.
+- **Interfaz.** El bloque de sugerencia está anidado dentro de
+  `rag_porcentaje != null`; sin RAG la tarjeta cae al texto «Todavía no hay un RAG
+  registrado», sin acción.
+
+La causa es de diseño, no un defecto de implementación: el motor de cobertura
+mide un tramo contra su propia ventana, así que **sin tramo no hay nada que
+medir**, y el circuito quedó construido como escalamiento. El bloque 2 cerró a la
+vez el camino anterior —registrar un control ya no acepta un porcentaje RAG—, así
+que la única puerta que existía se cerró sin que se abriera la nueva.
+
+Consecuencia en uso: un producto en Radar cuya velocidad necesaria supera
+holgadamente su venta media no puede recibir un RAG por ningún medio.
+
+**Planteo pendiente de decisión, no implementado.** Son dos sugerencias
+distintas, con evidencia distinta, y confundirlas repetiría el error de que dos
+situaciones produzcan el mismo valor:
+
+1. **Primer RAG, escalón cero a uno.** No hay tramo ni cobertura medida. La única
+   señal disponible es la que ya calcula el motor de riesgo y ya se muestra en la
+   tarjeta: la velocidad necesaria contra la venta media informada por Glaciar.
+   Es evidencia prestada —no una observación propia de NoVen sobre ese
+   vencimiento—, y eso tiene que quedar marcado: `cobertura_al_sugerir` no puede
+   guardar una cobertura medida y una estimada en la misma columna sin
+   distinguirlas.
+2. **Escalamiento, escalón n a n+1.** Hay tramo. La señal es la cobertura medida
+   contra la ventana del propio tramo, con la guarda de ventana observable. Es lo
+   que ya funciona.
+
+Decisiones que no son mías y bloquean la implementación:
+
+- si la primera sugerencia es siempre el primer escalón de la escala, o puede
+  saltar varios cuando el déficit es grande. El modelo ya admite lo segundo
+  —`escalones_sugeridos` acepta más de uno y el escalón cero implícito ya sabe
+  contarlos—, pero hoy la RPC escribe `1` fijo. A favor del primer escalón: la
+  evidencia es la más débil del circuito. En contra: con pocos días de ventana un
+  primer escalón corto pierde un ciclo de control entero;
+- si la primera sugerencia exige un control nuevo, como el resto del circuito.
+  El principio vigente dice que sin observación nueva no hay sugerencia nueva;
+- si esto es un bloque propio antes del 4, o un arreglo que entra antes por
+  dejar la operación sin una herramienta.
+
 ## Próximo paso ejecutable
 
-1. Revisar el PR #180 y obtener autorización explícita antes de mergear su base
-   3A. No aplicar SQL en producción como parte de ese merge.
-2. Después del merge, crear una rama nueva para el bloque 3B: configuración de
-   ventana por zona, asignación de jornada, visibilidad en tiempo real dentro de
-   08:00–12:00 para `Santa Cruz Sur`, espera hasta las 08:00 para cargas previas,
-   diferimiento desde el corte y exportación Excel por sucursal o total de zona.
-3. Recién después de 3B avanzar al bloque 4 de confirmación o rechazo en góndola.
+1. Obtener CI completo en verde sobre el PR de 3B —contratos, lint, build,
+   replay estructural, aislamiento vivo con el Gate 5 nuevo, cuota, exposición y
+   Playwright—.
+2. Pedir autorización explícita antes de mergear.
+3. Pedir autorización explícita antes de aplicar la migración a producción, y
+   registrar el timestamp productivo como se hizo con C1 y C2A.
+4. Recién después de 3B avanzar al bloque 4 de confirmación o rechazo en
+   góndola.
 
 ## Protocolo de relevo
 

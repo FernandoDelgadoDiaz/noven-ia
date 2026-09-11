@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { test, expect } from '@playwright/test'
 import { IDS, installNovenFixture, login } from './fixtures/noven-fixture.mjs'
 import { SCANNER_IDS, installScannerWriteFixture } from './fixtures/scanner-write-fixture.mjs'
@@ -369,17 +370,39 @@ test.describe('Noven · bandeja RAG zonal', () => {
     await expect(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Scanner' })).toHaveCount(0)
 
+    // La jornada visible y el estado de la ventana se muestran antes de operar:
+    // sin eso, la administrativa no sabe a qué día pertenece lo que está viendo.
+    await expect(page.getByText('08:00 a 12:00')).toBeVisible()
+    await expect(page.getByText(/Jornada del 10\/09\/2026/)).toBeVisible()
+
+    // El archivo se arma en el browser y tiene que ser un .xlsx real: un ZIP
+    // OOXML, no un CSV renombrado.
+    const [descarga] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Exportar toda la zona' }).click(),
+    ])
+    expect(descarga.suggestedFilename()).toMatch(/^rag-zona-scs-2026-09-10\.xlsx$/)
+    const rutaDescarga = await descarga.path()
+    const bytes = await readFile(rutaDescarga)
+    expect(bytes.subarray(0, 4)).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]))
+    expect(bytes.includes(Buffer.from('xl/worksheets/sheet1.xml'))).toBe(true)
+    expect(bytes.includes(Buffer.from('PRODUCTO RAG ZONAL E2E'))).toBe(true)
+
     page.once('dialog', (dialog) => dialog.accept())
-    await page.getByRole('button', { name: 'Marcar como ejecutada' }).click()
+    await page.getByRole('button', { name: 'Marcar Activo' }).click()
 
     await expect.poll(() => fixture.rpcCalls.filter((call) => call.name === 'ejecutar_solicitud_cambio_rag').length).toBe(1)
     expect(fixture.rpcCalls.find((call) => call.name === 'ejecutar_solicitud_cambio_rag')?.body).toEqual({
       p_solicitud_id: RAG_ZONAL_IDS.request,
     })
     expect(fixture.directTableWrites).toEqual([])
-    await expect(page.getByText('EJECUTADA')).toBeVisible()
+    // Exacto a propósito: la tarjeta muestra además el estado completo
+    // —«Ejecutada · disponible mañana»—, y una coincidencia por subcadena
+    // confundiría la pastilla breve con esa línea.
+    await expect(page.getByText('EJECUTADA', { exact: true })).toBeVisible()
+    await expect(page.getByText('Ejecutada · disponible mañana')).toBeVisible()
     await expect(page.getByText(/La sucursal podrá verificarla en góndola desde 10\/09\/2026/)).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Marcar como ejecutada' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Marcar Activo' })).toHaveCount(0)
 
     await page.goto('/dashboard')
     await page.waitForURL('**/rag/zona')

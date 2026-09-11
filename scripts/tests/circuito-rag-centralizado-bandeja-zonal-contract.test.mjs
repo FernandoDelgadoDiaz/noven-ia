@@ -15,6 +15,7 @@ const router = read('src/router/index.tsx')
 const ragRoute = read('src/components/auth/RagZonalRoute.tsx')
 const standardRoute = read('src/components/auth/StandardAppRoute.tsx')
 const defaultRoute = read('src/components/auth/DefaultAuthenticatedRoute.tsx')
+const bandejaLib = read('src/lib/bandeja-rag-zonal.ts')
 const e2e = read('e2e/critical-flows.spec.mjs')
 const e2eFixture = read('e2e/fixtures/rag-zonal-fixture.mjs')
 const liveGates = read('scripts/live-isolation/gates-1-3.mjs')
@@ -106,10 +107,16 @@ assert.match(page, /supabase\.rpc\('listar_bandeja_rag_zonal'\)/)
 assert.match(page, /supabase\.rpc\('ejecutar_solicitud_cambio_rag'/)
 assert.doesNotMatch(page, /supabase\.from\(/,
   'el browser no escribe ni compone la bandeja desde tablas')
-assert.match(page, /timeZone: 'America\/Argentina\/Buenos_Aires'/)
-assert.match(page, /Marcar como ejecutada/)
-assert.doesNotMatch(page, /Exportar|Imprimir|Ejecutar seleccionadas|confirmar_solicitud_cambio_rag/,
-  'lote, exportación y confirmación en góndola pertenecen a bloques posteriores')
+// El formateo en horario argentino se mudó a la librería compartida con la
+// exportación: la pantalla y el archivo tienen que mostrar la misma hora.
+assert.match(bandejaLib, /timeZone: 'America\/Argentina\/Buenos_Aires'/)
+assert.match(page, /fechaHoraArgentina/)
+assert.match(page, /Marcar Activo/,
+  'el contrato nombra la acción como la ve la administrativa, no como la persiste el evento')
+// La exportación entró con el bloque 3B; impresión, lote y confirmación en
+// góndola siguen fuera de la bandeja.
+assert.doesNotMatch(page, /Imprimir|Ejecutar seleccionadas|confirmar_solicitud_cambio_rag/,
+  'lote, impresión y confirmación en góndola pertenecen a bloques posteriores')
 
 assert.match(ragRoute, /rol === 'administrativa_precios_zonal'[\s\S]*?Boolean\(acceso\.zona_id\)[\s\S]*?acceso\.sucursal_id === null/)
 assert.match(router, /element: <RagZonalRoute \/>[\s\S]*?path: 'rag\/zona'/)
@@ -120,7 +127,7 @@ assert.match(layout, /!esSoloAdministrativaPrecios[\s\S]*?&& soportado/,
   'el rol puro no recibe la invitación a notificaciones operativas')
 assert.match(layout, /!esSoloAdministrativaPrecios && <SucursalContextSelector/)
 assert.match(e2e, /name: 'Continuar sin gerente zonal'/)
-assert.match(e2e, /name: 'Marcar como ejecutada'/)
+assert.match(e2e, /name: 'Marcar Activo'/)
 assert.match(e2e, /p_solicitud_id: RAG_ZONAL_IDS\.request/)
 assert.match(e2eFixture, /rpc === 'listar_bandeja_rag_zonal'/)
 assert.match(e2eFixture, /rpc === 'ejecutar_solicitud_cambio_rag'/)

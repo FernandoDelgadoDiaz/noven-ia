@@ -557,6 +557,30 @@ coordinación y su trazabilidad. Mientras la muestra no exista, el porcentaje
 sale únicamente del motor determinístico vigente y la interfaz debe expresar
 “evidencia insuficiente” cuando corresponda.
 
+**Riesgo asumido, registrado el 2026-09-10.** Estaba escrito que convenía tener
+veinte o treinta sugerencias aceptadas y medidas antes de construir el circuito,
+para saber si el consejo del motor sirve. Se avanzó igual, por decisión
+explícita del responsable del producto. Queda anotado como decisión consciente y
+riesgo conocido, no como un supuesto implícito:
+
+- **Qué se está asumiendo.** Que la recomendación del motor determinístico es lo
+  bastante buena como para que valga la pena construirle encima un circuito de
+  autorización. Esa recomendación todavía no se validó en producción.
+- **Qué pasa si la evidencia no acompaña.** Si en la práctica se elige con
+  frecuencia un porcentaje distinto al sugerido, el circuito va a necesitar
+  ajustes. Hoy el circuito está construido sobre la premisa contraria —“si el
+  cálculo está bien hecho, la sugerencia no se discute”— y por eso el botón es
+  confirmación y no decisión: la administrativa no puede cambiar el porcentaje y
+  no existe un camino para negociarlo.
+- **Qué habría que revisar entonces.** Tres cosas, en este orden: si el
+  porcentaje debe volver a ser editable por el gerente al validar, y con qué
+  registro de la diferencia entre lo sugerido y lo pedido; si el motor necesita
+  recalibrar sus umbrales antes que la interfaz; y si la sugerencia debe pasar de
+  ser una instrucción a ser un default con alternativa explícita. Ninguna de las
+  tres se toca antes de tener la muestra.
+- **Qué lo va a hacer visible.** El propio circuito, que registra qué sugirió
+  Noven, qué se validó y qué se ejecutó. Si empiezan a diferir, se ve ahí.
+
 **Un punto que toca el bloque B, ahora y no después.** Si una rebaja entra en
 vigencia al día siguiente, el inicio del tramo no puede ser el click de
 autorización. El circuito lo resuelve haciendo que el tramo arranque en la
