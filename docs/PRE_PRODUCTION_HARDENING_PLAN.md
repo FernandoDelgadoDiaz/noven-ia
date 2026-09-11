@@ -593,6 +593,44 @@ dividida en modelo y estados, validación gerencial, bandeja zonal, confirmació
 en góndola y operación por lote. Cada bloque debe registrar sus pruebas y
 pendientes en `docs/CURRENT_WORK.md` dentro de la misma rama.
 
+### Fuera de numeración · Detectar migraciones mergeadas sin aplicar — PENDIENTE
+
+**Por qué existe este ítem.** El 2026-09-11 se descubrió que los bloques 1, 2 y
+3A del circuito RAG estaban mergeados en `master` y **no aplicados a
+producción**. La regla era migración primero, merge después, justamente para que
+el código nunca pida columnas que no existen. Se invirtió tres veces seguidas y
+nadie lo notó. Lo detectó el cuarto bloque porque casualmente empezaba con un
+`ALTER` sobre una tabla ausente: eso es suerte, no diseño. Si 3B no hubiera
+tocado esa tabla, el desfasaje seguía creciendo.
+
+**El costo mientras duró.** El frontend desplegado quedó tres bloques adelante
+de la base y la operación se quedó sin forma de poner un RAG. Estuvo enmascarado
+porque el cliente degrada ante tabla ausente, así que se veía como una ausencia
+y no como un error.
+
+**Propuesta.** La idea de comparar las migraciones del repositorio contra el
+ledger productivo es correcta en sustancia. Lo que conviene cambiar es **dónde
+corre**:
+
+1. **Un workflow programado, no un gate de PR.** Comparar contra el ledger exige
+   credenciales productivas. Ponerlas en cada corrida de PR amplía la exposición
+   sin necesidad, y además haría fallar un PR por una condición que su autor no
+   causó ni puede arreglar —la migración pendiente puede ser de otro, o estar
+   deliberadamente sin aplicar esperando autorización—. El desfasaje es un hecho
+   de **producción**, no del código; por eso va donde ya viven esas credenciales
+   y con la cadencia de lo que vigila. Falla el workflow, no el PR.
+2. **Que la degradación deje de ser silenciosa.** Lo que ocultó el problema no
+   fue la falta de un gate: fue que el cliente esconde la ausencia de los objetos
+   del circuito para no romperle la pantalla al operador. Eso está bien para el
+   operador y mal para quien puede actuar. La degradación debe seguir, y además
+   registrarse y hacerse visible a un rol de conducción.
+3. **El orden, en el checklist de merge.** Migración aplicada antes del merge
+   como condición de entrada explícita de cada bloque con esquema, escrita en
+   `docs/CURRENT_WORK.md`, que ya es lectura obligatoria antes de continuar.
+
+Las tres capas atacan cosas distintas: la primera detecta, la segunda deja de
+esconder, la tercera previene. Ninguna depende de que alguien se acuerde.
+
 ### Fuera de numeración · Deuda que bloqueaba el bloque C2 — HECHO
 
 PR #173 incorporó RPC independientes para informar y finalizar cada tipo de

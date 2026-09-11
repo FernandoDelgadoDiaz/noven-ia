@@ -435,6 +435,85 @@ Pendiente de esta rama: autorización explícita antes de mergear y antes de
 aplicar SQL en producción. Al aplicarla, registrar el timestamp productivo como
 se hizo con C1 y C2A.
 
+## Circuito RAG aplicado a producción · 2026-09-11
+
+Los cuatro bloques se aplicaron **de a uno, con verificación de objetos entre
+cada paso**, y antes de cada uno se comprobaron sus precondiciones para que un
+fallo dijera qué faltaba y no «algo falló». Ninguno falló.
+
+| Bloque | Versión en Git | Versión en el ledger productivo |
+|---|---|---|
+| 1 · modelo y estados | `20260909020007` | `20260911010801` |
+| 2 · validación en sucursal | `20260909092814` | `20260911011059` |
+| 3A · bandeja zonal | `20260909144530` | `20260911011425` |
+| 3B · jornada zonal | `20260910183632` | `20260911011704` |
+
+El desvío de timestamp es el mismo de C1 y C2A —el mecanismo remoto registra la
+hora de ejecución, no la del nombre del archivo— y quedó documentado en
+`scripts/migration-replay/history-manifest.json`, con su contrato.
+
+Verificado contra la base después de aplicar:
+
+- las dos tablas del circuito, su vista y sus políticas RLS existen; la vista
+  conserva `security_invoker=true` **después** del reemplazo de 3B;
+- el trigger de inmutabilidad quedó **reactivado** tras el relleno de jornada;
+- `jornada_zonal` es `NOT NULL` y las 17 zonas tomaron la ventana 08:00–12:00;
+- `authenticated` tiene EXECUTE sólo donde corresponde;
+  `configurar_jornada_rag_zonal_v1` no está expuesta al browser y
+  `jornada_rag_zonal_v1` no tiene EXECUTE para nadie;
+- la guarda de jornada está presente en la ejecución.
+
+### El desfasaje se cerró; la capacidad de abrir el primer RAG no
+
+Medido contra la base, no deducido: de los vencimientos activos, **uno** puede
+crear una solicitud hoy —tiene RAG vigente, estado insuficiente y escalón
+superior disponible—. El circuito está vivo de punta a punta.
+
+Los **nueve** en `sin_rag` siguen sin poder recibir uno, y no por el desfasaje:
+la RPC exige `rag_porcentaje IS NOT NULL`, porque el circuito sabe **escalar** un
+RAG existente y no **abrir** el primero. Aplicar los cuatro bloques alineó la
+base con el frontend, que era el desfasaje; no cerró el hueco del primer RAG,
+que es un hallazgo aparte y espera tres decisiones de producto.
+
+Dicho sin rodeos: el criterio «que la operación vuelva a poder poner un RAG en un
+producto sin intervención previa» **no se cumple**, y no iba a cumplirse con
+estas cuatro migraciones.
+
+## Cómo se llegó acá · producción no tenía los bloques 1, 2 ni 3A
+
+Verificado contra la base productiva el 2026-09-11, antes de aplicar 3B. **3B no
+se puede aplicar**: su migración empieza con `ALTER TABLE
+public.solicitudes_cambio_rag`, y esa tabla no existe en producción.
+
+El ledger productivo termina en `intervenciones_explicitas_por_tipo_v1` (C2A).
+Las migraciones de los bloques 1, 2 y 3A del circuito nunca se aplicaron. La
+comprobación no se hizo sobre el ledger sino sobre los objetos, que es la
+evidencia real: `solicitudes_cambio_rag`, `solicitud_cambio_rag_eventos`,
+`v_solicitudes_cambio_rag_actual`, `solicitar_cambio_rag`,
+`listar_bandeja_rag_zonal`, `ejecutar_solicitud_cambio_rag` y
+`zonas.rag_jornada_inicio` devuelven todos nulo.
+
+Aplicar 3B exigía aplicar antes esos tres bloques. Se autorizaron y se aplicaron
+los cuatro el 2026-09-11; el detalle está arriba. Esta sección se conserva porque
+explica el origen del ítem de deuda sobre migraciones mergeadas sin aplicar.
+
+### Corrección de un diagnóstico anterior
+
+El hallazgo de más abajo decía que el bloque 2 había cerrado el camino viejo para
+abrir un RAG. **Eso es cierto del repositorio, no de producción.** En la base
+productiva `registrar_control_vencimiento_dashboard` todavía acepta
+`p_porcentaje_rag` y no lo rechaza: la migración que cierra esa puerta no está
+aplicada.
+
+La causa operativa en producción es otra y más simple: **el frontend desplegado
+está tres bloques adelante de la base.** La interfaz ya es la del circuito
+centralizado —no ofrece el porcentaje editable— y la base todavía no tiene el
+circuito. El hueco es la diferencia entre las dos.
+
+La degradación está prevista en el código: `useSolicitudCambioRag` marca
+`disponible: false` ante `42P01`/`PGRST205` y la tarjeta no muestra un error. Por
+eso el síntoma se ve como una ausencia y no como una falla.
+
 ## Hallazgo abierto · el circuito no sabe abrir el primer RAG
 
 Detectado el 2026-09-10 sobre la app en uso, fuera del alcance de 3B. **No es un
@@ -490,16 +569,31 @@ Decisiones que no son mías y bloquean la implementación:
 - si esto es un bloque propio antes del 4, o un arreglo que entra antes por
   dejar la operación sin una herramienta.
 
+### Verificado · el tope de escala está cubierto en el motor y mudo en la tarjeta
+
+El motor lo resuelve bien: `subirEscalones` devuelve `null` cuando el porcentaje
+vigente ya es el tope, y `evaluarSugerencia` produce el motivo `tope_de_escala`
+con `hay: false`. No inventa un escalón que no existe.
+
+Pero **ese motivo no se muestra en ninguna parte**. El bloque de sugerencia del
+modal se renderiza sólo cuando `sugerencia.hay`, así que con un RAG en el tope la
+tarjeta muestra el estado —«RAG insuficiente»— y las velocidades, y no dice nada
+sobre por qué no hay sugerencia. Queda mudo justo donde hace falta una frase.
+
+Hoy no hay ningún vencimiento en esa situación en producción, así que es un
+arreglo de texto sin urgencia, pero es real.
+
 ## Próximo paso ejecutable
 
-1. Obtener CI completo en verde sobre el PR de 3B —contratos, lint, build,
-   replay estructural, aislamiento vivo con el Gate 5 nuevo, cuota, exposición y
-   Playwright—.
-2. Pedir autorización explícita antes de mergear.
-3. Pedir autorización explícita antes de aplicar la migración a producción, y
-   registrar el timestamp productivo como se hizo con C1 y C2A.
-4. Recién después de 3B avanzar al bloque 4 de confirmación o rechazo en
-   góndola.
+1. Las tres decisiones del primer RAG, que son lo único que bloquea trabajo real:
+   si la primera sugerencia es siempre el primer escalón o puede saltar varios;
+   si exige un control nuevo; y si va como bloque propio antes del 4 o entra
+   antes por dejar la operación sin la herramienta.
+2. Abrir el PR de esta rama —timestamps productivos, frase del tope de escala y
+   propuesta de detección de desfasaje— y obtener CI verde.
+3. Construir la detección de migraciones mergeadas sin aplicar, según la
+   propuesta registrada en `docs/PRE_PRODUCTION_HARDENING_PLAN.md`.
+4. Recién después, el bloque 4 del circuito: confirmación o rechazo en góndola.
 
 ## Protocolo de relevo
 

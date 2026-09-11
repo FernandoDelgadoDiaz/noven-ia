@@ -80,6 +80,10 @@ assert.deepEqual([...ledgerDivergences.keys()], [
   'cuota_y_cache_timestamp',
   'convivencia_rag_oferta_central_timestamp',
   'intervenciones_explicitas_por_tipo_timestamp',
+  'circuito_rag_centralizado_modelo_estados_timestamp',
+  'rag_centralizado_validacion_sucursal_timestamp',
+  'rag_centralizado_bandeja_zonal_timestamp',
+  'rag_centralizado_jornada_zonal_timestamp',
 ])
 const cuotaCacheTimestamp = ledgerDivergences.get('cuota_y_cache_timestamp')
 assert.equal(cuotaCacheTimestamp.kind, 'repository_production_version_mismatch')
@@ -197,5 +201,43 @@ const legacyBootstrap = fs.readFileSync(
 )
 assert.ok(legacyBootstrap.includes("NOVEN_EPHEMERAL_REPLAY !== '1'"))
 assert.ok(legacyBootstrap.includes('LOCAL / CI ONLY'))
+
+
+// Los cuatro bloques del circuito RAG se aplicaron a producción el mismo día y
+// comparten la misma forma de divergencia. Se verifican con un recorrido común:
+// repetir el bloque anterior cuatro veces haría el contrato más largo y no más
+// estricto.
+for (const [id, versionRepo, versionProd, nombreProd] of [
+  ['circuito_rag_centralizado_modelo_estados_timestamp', '20260909020007', '20260911010801',
+   'circuito_rag_centralizado_modelo_estados_v1'],
+  ['rag_centralizado_validacion_sucursal_timestamp', '20260909092814', '20260911011059',
+   'rag_centralizado_validacion_sucursal_v1'],
+  ['rag_centralizado_bandeja_zonal_timestamp', '20260909144530', '20260911011425',
+   'rag_centralizado_bandeja_zonal_v1'],
+  ['rag_centralizado_jornada_zonal_timestamp', '20260910183632', '20260911011704',
+   'rag_centralizado_jornada_zonal_v1'],
+]) {
+  const entrada = ledgerDivergences.get(id)
+  assert.ok(entrada, `falta la divergencia ${id}`)
+  assert.equal(entrada.kind, 'repository_production_version_mismatch')
+  assert.equal(entrada.repository_version, versionRepo)
+  assert.equal(entrada.production_ledger_version, versionProd)
+  assert.equal(entrada.production_ledger_name, nombreProd)
+  assert.equal(entrada.universal_replay, true)
+  assert.equal(entrada.resolution, 'document_only_no_ledger_normalization')
+  assert.notEqual(
+    entrada.repository_version,
+    entrada.production_ledger_version,
+    'la divergencia documentada no puede colapsarse silenciosamente',
+  )
+  assert.ok(
+    path.basename(entrada.repository_path).startsWith(`${entrada.repository_version}_`),
+    'la versión Git debe corresponder al nombre del archivo versionado',
+  )
+  const sql = fs.readFileSync(path.join(root, entrada.repository_path), 'utf8')
+  for (const marker of entrada.evidence_markers) {
+    assert.ok(sql.includes(marker), `${id}: no se encontró evidencia ${marker}`)
+  }
+}
 
 console.log('migration replay baseline contract: OK')
