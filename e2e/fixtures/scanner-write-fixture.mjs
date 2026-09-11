@@ -157,7 +157,7 @@ export async function installScannerWriteFixture(page, options = {}) {
         return route.fulfill({ status: 200, headers: jsonHeaders(), body: JSON.stringify(salidaContext ? [salidaContext] : []) })
       }
 
-      if (['informar_oferta_central', 'finalizar_oferta_central', 'finalizar_rag_vigente', 'declarar_salida_no_venta'].includes(rpc)) {
+      if (['informar_oferta_central', 'informar_rag', 'finalizar_oferta_central', 'finalizar_rag_vigente', 'declarar_salida_no_venta'].includes(rpc)) {
         rpcCalls.push({ name: rpc, body })
         return route.fulfill({ status: 200, headers: jsonHeaders(), body: 'null' })
       }

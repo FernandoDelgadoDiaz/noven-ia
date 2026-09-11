@@ -276,6 +276,73 @@ test.describe('Noven · escrituras críticas Scanner', () => {
     expect(fixture.directTableWrites).toEqual([])
   })
 
+  test('el primer RAG se informa desde la escala, sin pasar por el control', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-08-31T12:00:00Z'))
+
+    const fixture = await installScannerWriteFixture(page, {
+      hasActiveControl: true,
+      activeControlQuantity: 20,
+      activeControlDate: '2026-09-12',
+      productStock: 30,
+      productVmd: 2,
+      ragPorcentaje: null,
+    })
+    await login(page)
+    await buscarProductoScanner(page)
+
+    const dialog = page.getByRole('dialog', { name: 'Control de vencimiento' })
+    await expect(dialog.getByText('Todavía no hay un RAG registrado.')).toBeVisible()
+
+    const informar = dialog.getByRole('button', { name: 'Informar RAG' })
+    await expect(informar).toBeDisabled()
+
+    await dialog.getByRole('combobox').selectOption('30')
+    await expect(informar).toBeEnabled()
+    await informar.click()
+
+    await expect.poll(() => fixture.rpcCalls.filter((call) => call.name === 'informar_rag').length).toBe(1)
+    expect(fixture.rpcCalls.find((call) => call.name === 'informar_rag')?.body).toEqual({
+      p_vencimiento_id: SCANNER_IDS.control,
+      p_porcentaje: 30,
+      p_nota: null,
+    })
+    // Constatar no es controlar: el informe no arrastra un control ni el
+    // circuito de cambio, que necesita un RAG vigente que todavía no existe.
+    expect(fixture.rpcCalls.filter((call) => call.name === 'registrar_control_vencimiento_dashboard')).toHaveLength(0)
+    expect(fixture.rpcCalls.filter((call) => call.name === 'solicitar_cambio_rag')).toHaveLength(0)
+    expect(fixture.directTableWrites).toEqual([])
+  })
+
+  test('un RAG fuera de la escala también se puede informar: ya está en góndola', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-08-31T12:00:00Z'))
+
+    const fixture = await installScannerWriteFixture(page, {
+      hasActiveControl: true,
+      activeControlQuantity: 20,
+      activeControlDate: '2026-09-12',
+      productStock: 30,
+      productVmd: 2,
+      ragPorcentaje: null,
+    })
+    await login(page)
+    await buscarProductoScanner(page)
+
+    const dialog = page.getByRole('dialog', { name: 'Control de vencimiento' })
+    await dialog.getByRole('combobox').selectOption('otro')
+    await expect(dialog.getByText('Fuera de la escala autorizada.', { exact: false })).toBeVisible()
+
+    await dialog.getByPlaceholder('%').fill('35')
+    await dialog.getByRole('button', { name: 'Informar RAG' }).click()
+
+    await expect.poll(() => fixture.rpcCalls.filter((call) => call.name === 'informar_rag').length).toBe(1)
+    expect(fixture.rpcCalls.find((call) => call.name === 'informar_rag')?.body).toEqual({
+      p_vencimiento_id: SCANNER_IDS.control,
+      p_porcentaje: 35,
+      p_nota: null,
+    })
+    expect(fixture.directTableWrites).toEqual([])
+  })
+
   test('oferta central se informa y finaliza por RPC propias sin tocar el RAG', async ({ page }) => {
     const fixture = await installScannerWriteFixture(page, {
       hasActiveControl: true,
