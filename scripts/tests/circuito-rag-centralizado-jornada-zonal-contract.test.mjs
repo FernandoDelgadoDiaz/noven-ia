@@ -251,6 +251,15 @@ assert.match(page, /Exportar sucursal/)
 assert.match(page, /Marcar Activo/)
 assert.match(e2e, /waitForEvent\('download'\)/)
 assert.match(liveGates, /Gate 5: la jornada zonal esconde lo diferido/)
+// Un fixture puede sembrar un estado que el circuito no sabe producir, y ahi la
+// prueba deja de probar el sistema. El CHECK del esquema no admite una jornada
+// anterior a la fecha de creacion, asi que la solicitud de una jornada anterior
+// tiene que traer tambien su `creada_at` de ese dia.
+assert.match(
+  liveGates,
+  /creada_at: `\$\{fechaArgentina\(-1\)\}T\d{2}:\d{2}:\d{2}Z`,\n\s*jornada_zonal: fechaArgentina\(-1\)/,
+  'una solicitud sembrada en una jornada anterior tiene que haberse creado ese dia',
+)
 assert.match(liveGates, /deferred request was executed/)
 assert.match(liveGates, /request of an unopened journey was executed/)
 

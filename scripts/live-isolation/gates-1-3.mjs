@@ -475,6 +475,11 @@ async function installFixtures(environment) {
     producto_descripcion: 'Gate Product A',
     sector_nombre: 'Sector A',
     familia_nombre: 'Family A',
+    // Una solicitud de una jornada anterior se creo ese dia: el esquema no
+    // admite una jornada anterior a su propia fecha de creacion, y sembrar una
+    // seria construir un estado que el circuito no puede producir. 15:00 UTC
+    // son las 12:00 en Argentina, lejos de cualquier borde de dia.
+    creada_at: `${fechaArgentina(-1)}T15:00:00Z`,
     jornada_zonal: fechaArgentina(-1),
   }])
   // Una segunda solicitud diferida a la jornada siguiente: es la que prueba que
