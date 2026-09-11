@@ -252,9 +252,13 @@ assert.match(page, /Marcar Activo/)
 assert.match(e2e, /waitForEvent\('download'\)/)
 assert.match(liveGates, /Gate 5: la jornada zonal esconde lo diferido/)
 // Un fixture puede sembrar un estado que el circuito no sabe producir, y ahi la
-// prueba deja de probar el sistema. El CHECK del esquema no admite una jornada
-// anterior a la fecha de creacion, asi que la solicitud de una jornada anterior
-// tiene que traer tambien su `creada_at` de ese dia.
+// prueba deja de probar el sistema. Dos invariantes del esquema que el fixture
+// tiene que respetar, y que sólo se descubrían corriendo el gate contra una base
+// real —es decir, gastando un ciclo de CI entero por cada uno—.
+//
+// La primera: el CHECK no admite una jornada anterior a la fecha de creacion,
+// asi que la solicitud de una jornada anterior tiene que traer tambien su
+// `creada_at` de ese dia.
 assert.match(
   liveGates,
   /creada_at: `\$\{fechaArgentina\(-1\)\}T\d{2}:\d{2}:\d{2}Z`,\n\s*jornada_zonal: fechaArgentina\(-1\)/,
@@ -262,6 +266,24 @@ assert.match(
 )
 assert.match(liveGates, /deferred request was executed/)
 assert.match(liveGates, /request of an unopened journey was executed/)
+
+// La segunda: `solicitudes_cambio_rag_porcentaje_escala_fk` exige que todo
+// porcentaje pertenezca a la escala de la organizacion. Sembrar uno que no esta
+// en la escala que el propio fixture carga es un error que no se ve leyendo el
+// archivo.
+const escalaSembrada = new Set(
+  [...liveGates.matchAll(/escalon: \d+, porcentaje: (\d+)/g)].map((m) => m[1]),
+)
+assert.ok(escalaSembrada.size > 0, 'el gate vivo tiene que sembrar una escala RAG')
+for (const [, porcentaje] of liveGates.matchAll(
+  /porcentaje_(?:solicitado|rag_vigente): (\d+)/g,
+)) {
+  assert.ok(
+    escalaSembrada.has(porcentaje),
+    `el gate vivo siembra ${porcentaje}% fuera de la escala que él mismo carga: ` +
+      'la FK contra rag_escala_descuento lo rechaza',
+  )
+}
 
 // --- 10. Orden y agrupación, ejecutados de verdad ---------------------------
 

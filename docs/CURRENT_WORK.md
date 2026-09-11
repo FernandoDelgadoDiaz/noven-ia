@@ -390,6 +390,20 @@ viera. El comparador ahora baja un nivel en las secciones que agrupan otras, y
 su contrato cubre el caso; se verificó que el caso nuevo falla contra la versión
 anterior del comparador.
 
+Dos ciclos de CI se gastaron en el mismo lugar —el fixture del gate vivo— y los
+dos fallos fueron invariantes del esquema que ningún gate local puede ver, porque
+el gate vivo necesita Docker y un Supabase efímero. Ambos quedaron cubiertos por
+el contrato, con su prueba de mutación:
+
+- el `CHECK` no admite una jornada anterior a la fecha de creación, y el fixture
+  sembraba una solicitud con jornada de ayer creada hoy;
+- la FK contra `rag_escala_descuento` exige que todo porcentaje pertenezca a la
+  escala de la organización, y el fixture pedía un escalón que él mismo no
+  sembraba.
+
+En los dos casos la corrección fue ajustar el fixture, no relajar la restricción:
+estaba construyendo estados que el circuito no puede producir.
+
 El primer CI del PR falló en el gate vivo, y lo cazó una restricción propia de
 este bloque: el fixture sembraba una solicitud con jornada de ayer pero fecha de
 creación de hoy, y el `CHECK` no admite una jornada anterior a la creación. La
