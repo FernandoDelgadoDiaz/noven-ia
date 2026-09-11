@@ -884,5 +884,16 @@ arreglo de texto sin urgencia, pero es real.
   `catalog-role-boundary` en el caso del gerente zonal, y **falla igual sin este
   cambio**: se verificó volviendo el árbol al estado de `master` y repitiendo el
   recorrido. Queda como artefacto de este entorno; el CI es la autoridad.
+- Expectativa móvil regenerada en el run `34629059400` sobre el mismo SHA del PR,
+  con sus pasos de protección del ancla y de limitación del diff en verde. Se
+  incorporó extrayéndola del log, verificando el SHA-256 de cada archivo, y sin
+  tocar el ancla `expected-fingerprint.json` —comprobado por digest antes y
+  después—. Suite completa 121/121 con la expectativa nueva.
+- Diff estructural por objeto completo: **agrega 5, saca 0, cambia 0**. Las dos
+  funciones nuevas y sus tres entradas de ACL. Ni `anon` ni `PUBLIC`: el REVOKE
+  previo al GRANT hizo lo que dice. La forma de los permisos es idéntica a la de
+  `informar_oferta_central` —`authenticated` + `service_role` en el wrapper
+  público, sólo `authenticated` en la implementación—, así que no introduce una
+  asimetría nueva.
 - **No se aplicó SQL en producción.** La aplicación requiere autorización
   explícita y se avisa antes.
