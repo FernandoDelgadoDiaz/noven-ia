@@ -390,9 +390,22 @@ viera. El comparador ahora baja un nivel en las secciones que agrupan otras, y
 su contrato cubre el caso; se verificó que el caso nuevo falla contra la versión
 anterior del comparador.
 
-Pendiente de esta rama: incorporar la expectativa del replay regenerada,
-incorporarla, obtener CI completo en verde y pedir autorización antes de mergear
-y antes de aplicar SQL en producción.
+El primer CI del PR falló en el gate vivo, y lo cazó una restricción propia de
+este bloque: el fixture sembraba una solicitud con jornada de ayer pero fecha de
+creación de hoy, y el `CHECK` no admite una jornada anterior a la creación. La
+restricción tiene razón —una solicitud de una jornada anterior se creó ese día—,
+así que el fixture estaba construyendo un estado que el circuito no puede
+producir. Se corrigió fechándola completa, no relajando la restricción. El
+contrato ahora exige esa coherencia y se verificó que la exige: quitando la fecha
+de creación, el contrato falla.
+
+Verificación local con la expectativa incorporada y el fixture corregido:
+`npm test` 119 de 119 archivos verdes, `npm run lint` sin errores y con el
+warning preexistente de `ScannerModal.tsx:143`, `npm run build` verde y
+`git diff --check` verde.
+
+Pendiente de esta rama: CI completo en verde, y autorización explícita antes de
+mergear y antes de aplicar SQL en producción.
 
 ## Hallazgo abierto · el circuito no sabe abrir el primer RAG
 
