@@ -426,8 +426,14 @@ Verificación local con la expectativa incorporada y el fixture corregido:
 warning preexistente de `ScannerModal.tsx:143`, `npm run build` verde y
 `git diff --check` verde.
 
-Pendiente de esta rama: CI completo en verde, y autorización explícita antes de
-mergear y antes de aplicar SQL en producción.
+CI completo en verde sobre `18df7bb` en el run `34545436645`: replay estructural,
+contratos, lint, build, aislamiento vivo 1–5 con el Gate 5 nuevo, cuota,
+clasificación de exposición y los veinte recorridos Playwright. El PR #181 quedó
+en estado `clean` contra `master`.
+
+Pendiente de esta rama: autorización explícita antes de mergear y antes de
+aplicar SQL en producción. Al aplicarla, registrar el timestamp productivo como
+se hizo con C1 y C2A.
 
 ## Hallazgo abierto · el circuito no sabe abrir el primer RAG
 
