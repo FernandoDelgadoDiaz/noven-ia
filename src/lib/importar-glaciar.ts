@@ -106,13 +106,13 @@ export function analizarReporteGlaciar(
   if (metadata.codigoSucursal === null) {
     erroresBloqueantes.push(
       fuente === '0258'
-        ? 'No se pudo identificar la sucursal del 0258. Se esperaba una columna Stk NNN (por ejemplo Stk 091).'
+        ? 'No se pudo identificar la sucursal del reporte de ventas. Se esperaba una columna Stk NNN (por ejemplo Stk 091).'
         : 'No se pudo identificar la sucursal del reporte (Cod.Suc.Padrón). No se puede importar sin una sucursal fuente verificable.',
     )
   }
 
   if (parser.headerAusente) {
-    erroresBloqueantes.push(`No se encontró el encabezado válido de ${fuente === '0258' ? 'Glaciar 0258' : 'Reposición Asistida'} (Cod.Art.).`)
+    erroresBloqueantes.push(`No se encontró el encabezado válido del reporte de ${fuente === '0258' ? 'ventas' : 'reposición'} (Cod.Art.).`)
   } else if (parser.faltantes.length > 0) {
     erroresBloqueantes.push(`Faltan columnas requeridas: ${parser.faltantes.join(', ')}.`)
   }
@@ -121,7 +121,7 @@ export function analizarReporteGlaciar(
   // que mezcle Almacén, Bebidas, Limpieza, etc.; cada archivo debe tener un único
   // sector verificable para evitar una actualización masiva fuera de alcance.
   if (fuente === '0258' && modo === 'masiva' && codigoSectorFuente === null) {
-    erroresBloqueantes.push('El 0258 masivo debe corresponder a un único sector. No se admite una carga que mezcle varios sectores.')
+    erroresBloqueantes.push('El reporte de ventas masivo debe corresponder a un único sector. No se admite una carga que mezcle varios sectores.')
   }
 
   // En la primera vuelta por familia, la familia debe ser inequívoca. En 0258

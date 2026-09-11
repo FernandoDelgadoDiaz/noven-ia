@@ -45,7 +45,7 @@ export function useScanner(sucursalId?: string): UseScannerReturn {
     if (!desdeCamara && !/^\d{7}$/.test(codigo)) {
       setState((prev) => ({
         ...prev,
-        error: 'La búsqueda manual acepta únicamente el código interno de 7 dígitos de Glaciar. El EAN se registra sólo escaneándolo con la cámara.',
+        error: 'La búsqueda manual acepta únicamente el código interno de 7 dígitos del sistema. El EAN se registra sólo escaneándolo con la cámara.',
         lastResult: null,
       }))
       return null

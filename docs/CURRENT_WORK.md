@@ -941,3 +941,26 @@ arreglo de texto sin urgencia, pero es real.
   pendiente, no como defecto silencioso.
 - Mitigación temporal por el calendario, no por diseño: seis de los siete cruzan
   a `radar` entre el 2026-09-12 y el 2026-09-16, y el séptimo el 2026-10-05.
+
+### 2026-09-11 · Claude Code · nomenclatura del sistema de origen
+
+- El nombre de la cadena y el de sus reportes salieron del texto de usuario:
+  diecinueve cadenas en once archivos. Quedan en comentarios, identificadores y
+  nombres de archivo, que es donde describen el formato real que se parsea.
+- **El relevamiento inicial estaba incompleto y lo detectó el contrato.** Miró
+  sólo `pages` y `components`, y se le escaparon tres mensajes de error que viven
+  en `src/lib/importar-glaciar.ts` y llegan al usuario vía `throw new Error` desde
+  las dos pantallas de importación, más un encabezado en mayúsculas del reporte
+  exportable. El contrato los encontró antes que la revisión a ojo.
+- El contrato también protege la mitad inversa: los nombres de columna se
+  conservan. Sin esa aserción, la regla empujaría a vaciar los mensajes de error.
+- Un mutante cazó un defecto del propio contrato: el filtro de identificadores
+  borraba también la palabra suelta, así que daba verde sin verificar nada.
+  Corregido exigiendo un carácter pegado.
+- Dos contratos existentes anclaban en el texto viejo y se actualizaron: las
+  acciones sugeridas de `riesgo-politicas` y el mensaje de carga masiva de
+  `importar-0258`. Lo que verifican no cambió; cambió la redacción.
+- `LARGO_COD_ART = 7` no se tocó: es un supuesto de formato, no de nomenclatura,
+  y la desambiguación contra EAN depende de él. Queda en el plan.
+- Suite completa en verde, build limpio, lint sin errores (con el warning
+  preexistente de `ScannerModal.tsx:143`).

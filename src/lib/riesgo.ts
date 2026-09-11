@@ -107,8 +107,8 @@ export function sugerirAcciones(nivel: NivelRiesgo): string[] {
   switch (nivel) {
     case 'decomiso': return ['Retirar inmediatamente', 'Registrar decomiso']
     case 'donacion': return ['Retirar de góndola', 'Gestionar donación']
-    case 'urgente': return ['Revisar RAG en Glaciar', 'Monitorear cantidad comprometida', 'Escalar a encargado']
-    case 'radar': return ['Gestionar RAG en Glaciar', 'Monitorear cantidad comprometida']
+    case 'urgente': return ['Revisar RAG en el sistema', 'Monitorear cantidad comprometida', 'Escalar a encargado']
+    case 'radar': return ['Gestionar RAG en el sistema', 'Monitorear cantidad comprometida']
     case 'seguro': return []
   }
 }
