@@ -162,3 +162,36 @@ assert.match(hook, /setEscala\(\[\]\)/,
 
 console.log('✓ La sugerencia vive en la tarjeta existente, con un solo motor para los dos lugares')
 console.log('✓ Human-in-the-loop: gerencia informa el escalón y nunca cambia el precio desde el browser')
+
+// --- Tope de escala: el motor evaluó y no tiene nada que ofrecer ------------
+//
+// Sin esta frase la tarjeta queda muda justo donde iría la sugerencia, y el
+// operador no puede distinguir «el motor evaluó y no hay margen» de «el motor
+// se olvidó de responder». El motivo existía en el motor desde siempre; lo que
+// faltaba era mostrarlo.
+
+const modalTope = fs.readFileSync(
+  path.join(process.cwd(), 'src/components/dashboard/EditarVencimientoModalSeguro.tsx'),
+  'utf8',
+)
+
+assert.match(
+  modalTope,
+  /sugerencia\?\.motivo === 'tope_de_escala'/,
+  'la tarjeta tiene que reconocer el tope de escala, no sólo la ausencia de sugerencia',
+)
+assert.match(modalTope, /Sin escalón superior/)
+assert.match(
+  modalTope,
+  /el máximo de la escala[\s\S]{0,120}No hay más margen de descuento para sugerir/,
+  'la frase tiene que decir por qué no hay sugerencia, no sólo que no la hay',
+)
+// Mismo contenedor y mismas clases que el aviso de «el salto puede no alcanzar»:
+// el operador debe leerlo con el mismo peso, no como una nota al pie.
+assert.match(
+  modalTope,
+  /tope_de_escala'[\s\S]{0,200}rounded-lg border border-amber-300 bg-amber-100\/70 p-2\.5/,
+  'el aviso de tope va con el mismo peso visual que el resto de los avisos del bloque',
+)
+
+console.log('✓ Tope de escala: la tarjeta explica por qué no hay sugerencia')

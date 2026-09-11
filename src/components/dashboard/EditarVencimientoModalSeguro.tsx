@@ -633,6 +633,15 @@ export default function EditarVencimientoModalSeguro({
                       <span>Días comerciales</span><span className="text-right font-medium text-foreground">{seguimientoRag.dias_comerciales_restantes}</span>
                     </>)}
                   </div>
+                  {sugerencia?.motivo === 'tope_de_escala' && (
+                    <div className="mt-2.5 rounded-lg border border-amber-300 bg-amber-100/70 p-2.5">
+                      <p className="font-bold text-[11px]">Sin escalón superior</p>
+                      <p className="text-[11px] mt-0.5">
+                        El RAG ya está en {seguimientoRag?.rag_porcentaje}%, el máximo de la escala.
+                        No hay más margen de descuento para sugerir.
+                      </p>
+                    </div>
+                  )}
                   {sugerencia?.hay && (
                     <div className="mt-2.5 rounded-lg border border-amber-300 bg-amber-100/70 p-2.5">
                       <p className="font-bold text-[11px]">Sugerencia por urgencia</p>
