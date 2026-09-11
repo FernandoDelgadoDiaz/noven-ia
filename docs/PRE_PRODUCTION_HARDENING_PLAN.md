@@ -622,8 +622,19 @@ corre**:
 2. **Que la degradación deje de ser silenciosa.** Lo que ocultó el problema no
    fue la falta de un gate: fue que el cliente esconde la ausencia de los objetos
    del circuito para no romperle la pantalla al operador. Eso está bien para el
-   operador y mal para quien puede actuar. La degradación debe seguir, y además
-   registrarse y hacerse visible a un rol de conducción.
+   operador y mal para quien puede actuar.
+
+   **Es D-8 otra vez, ahora entre capas del sistema en vez de dentro de una
+   pantalla:** un fallo y una ausencia legítima producen el mismo estado. Cuando
+   `useSolicitudCambioRag` recibe `42P01` no puede distinguir «este entorno
+   todavía no tiene el circuito» de «la migración no se aplicó y la operación
+   está degradada», y muestra lo mismo en los dos casos. Es la misma forma de
+   error que el plan viene persiguiendo desde el escalón cero: dos situaciones
+   distintas colapsadas en un solo valor.
+
+   No se elige entre degradar y avisar: van las dos. La pantalla del operador
+   sigue sin romperse **y** la ausencia se registra y se muestra a un rol de
+   conducción.
 3. **El orden, en el checklist de merge.** Migración aplicada antes del merge
    como condición de entrada explícita de cada bloque con esquema, escrita en
    `docs/CURRENT_WORK.md`, que ya es lectura obligatoria antes de continuar.
