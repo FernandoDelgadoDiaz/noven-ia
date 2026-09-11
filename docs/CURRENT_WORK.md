@@ -435,6 +435,40 @@ Pendiente de esta rama: autorización explícita antes de mergear y antes de
 aplicar SQL en producción. Al aplicarla, registrar el timestamp productivo como
 se hizo con C1 y C2A.
 
+## Bloqueo · producción no tiene los bloques 1, 2 ni 3A del circuito
+
+Verificado contra la base productiva el 2026-09-11, antes de aplicar 3B. **3B no
+se puede aplicar**: su migración empieza con `ALTER TABLE
+public.solicitudes_cambio_rag`, y esa tabla no existe en producción.
+
+El ledger productivo termina en `intervenciones_explicitas_por_tipo_v1` (C2A).
+Las migraciones de los bloques 1, 2 y 3A del circuito nunca se aplicaron. La
+comprobación no se hizo sobre el ledger sino sobre los objetos, que es la
+evidencia real: `solicitudes_cambio_rag`, `solicitud_cambio_rag_eventos`,
+`v_solicitudes_cambio_rag_actual`, `solicitar_cambio_rag`,
+`listar_bandeja_rag_zonal`, `ejecutar_solicitud_cambio_rag` y
+`zonas.rag_jornada_inicio` devuelven todos nulo.
+
+Aplicar 3B exige aplicar antes esos tres bloques. Cada uno es una decisión propia
+y ninguno está autorizado, así que no se aplicó nada.
+
+### Corrección de un diagnóstico anterior
+
+El hallazgo de más abajo decía que el bloque 2 había cerrado el camino viejo para
+abrir un RAG. **Eso es cierto del repositorio, no de producción.** En la base
+productiva `registrar_control_vencimiento_dashboard` todavía acepta
+`p_porcentaje_rag` y no lo rechaza: la migración que cierra esa puerta no está
+aplicada.
+
+La causa operativa en producción es otra y más simple: **el frontend desplegado
+está tres bloques adelante de la base.** La interfaz ya es la del circuito
+centralizado —no ofrece el porcentaje editable— y la base todavía no tiene el
+circuito. El hueco es la diferencia entre las dos.
+
+La degradación está prevista en el código: `useSolicitudCambioRag` marca
+`disponible: false` ante `42P01`/`PGRST205` y la tarjeta no muestra un error. Por
+eso el síntoma se ve como una ausencia y no como una falla.
+
 ## Hallazgo abierto · el circuito no sabe abrir el primer RAG
 
 Detectado el 2026-09-10 sobre la app en uso, fuera del alcance de 3B. **No es un
@@ -489,6 +523,20 @@ Decisiones que no son mías y bloquean la implementación:
   El principio vigente dice que sin observación nueva no hay sugerencia nueva;
 - si esto es un bloque propio antes del 4, o un arreglo que entra antes por
   dejar la operación sin una herramienta.
+
+### Verificado · el tope de escala está cubierto en el motor y mudo en la tarjeta
+
+El motor lo resuelve bien: `subirEscalones` devuelve `null` cuando el porcentaje
+vigente ya es el tope, y `evaluarSugerencia` produce el motivo `tope_de_escala`
+con `hay: false`. No inventa un escalón que no existe.
+
+Pero **ese motivo no se muestra en ninguna parte**. El bloque de sugerencia del
+modal se renderiza sólo cuando `sugerencia.hay`, así que con un RAG en el tope la
+tarjeta muestra el estado —«RAG insuficiente»— y las velocidades, y no dice nada
+sobre por qué no hay sugerencia. Queda mudo justo donde hace falta una frase.
+
+Hoy no hay ningún vencimiento en esa situación en producción, así que es un
+arreglo de texto sin urgencia, pero es real.
 
 ## Próximo paso ejecutable
 
