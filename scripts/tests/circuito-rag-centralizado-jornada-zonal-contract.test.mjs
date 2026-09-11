@@ -249,6 +249,12 @@ assert.doesNotMatch(
 assert.match(page, /Exportar toda la zona/)
 assert.match(page, /Exportar sucursal/)
 assert.match(page, /Marcar Activo/)
+// La tarjeta muestra la pastilla breve y el estado completo. Son dos textos
+// distintos sobre la misma fila, así que el recorrido tiene que distinguirlos
+// de forma exacta: una coincidencia por subcadena los confunde.
+assert.match(page, /etiquetaEstado\(solicitud\.estado_actual\)/)
+assert.match(e2e, /getByText\('EJECUTADA', \{ exact: true \}\)/)
+assert.match(e2e, /getByText\('Ejecutada · disponible mañana'\)/)
 assert.match(e2e, /waitForEvent\('download'\)/)
 assert.match(liveGates, /Gate 5: la jornada zonal esconde lo diferido/)
 // Un fixture puede sembrar un estado que el circuito no sabe producir, y ahi la

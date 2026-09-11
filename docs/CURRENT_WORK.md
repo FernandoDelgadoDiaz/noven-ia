@@ -404,6 +404,14 @@ el contrato, con su prueba de mutación:
 En los dos casos la corrección fue ajustar el fixture, no relajar la restricción:
 estaba construyendo estados que el circuito no puede producir.
 
+El tercer CI pasó los gates vivos completos —incluido el Gate 5 nuevo— y falló en
+Playwright por una consecuencia de este mismo bloque: la tarjeta ahora muestra la
+pastilla breve y también el estado completo, así que buscar el texto de la
+pastilla por subcadena coincidía con dos elementos. Se corrigió exigiendo la
+coincidencia exacta y comprobando además el estado completo, que es información
+nueva que la tarjeta debe mostrar. El contrato lo exige y la mutación lo
+confirma.
+
 El primer CI del PR falló en el gate vivo, y lo cazó una restricción propia de
 este bloque: el fixture sembraba una solicitud con jornada de ayer pero fecha de
 creación de hoy, y el `CHECK` no admite una jornada anterior a la creación. La

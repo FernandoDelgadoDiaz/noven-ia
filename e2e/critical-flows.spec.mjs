@@ -396,7 +396,11 @@ test.describe('Noven · bandeja RAG zonal', () => {
       p_solicitud_id: RAG_ZONAL_IDS.request,
     })
     expect(fixture.directTableWrites).toEqual([])
-    await expect(page.getByText('EJECUTADA')).toBeVisible()
+    // Exacto a propósito: la tarjeta muestra además el estado completo
+    // —«Ejecutada · disponible mañana»—, y una coincidencia por subcadena
+    // confundiría la pastilla breve con esa línea.
+    await expect(page.getByText('EJECUTADA', { exact: true })).toBeVisible()
+    await expect(page.getByText('Ejecutada · disponible mañana')).toBeVisible()
     await expect(page.getByText(/La sucursal podrá verificarla en góndola desde 10\/09\/2026/)).toBeVisible()
     await expect(page.getByRole('button', { name: 'Marcar Activo' })).toHaveCount(0)
 
