@@ -15,7 +15,7 @@ seguridad explotables. Cuando una comprobación requiera ese material, se
 registra el resultado mínimo y se enlaza el PR, CI o documento autorizado que
 contiene la evidencia.
 
-Fecha de corte: **2026-09-10**.
+Fecha de corte: **2026-09-11**.
 
 ## Lectura obligatoria antes de continuar
 
@@ -40,6 +40,14 @@ Fecha de corte: **2026-09-10**.
 
 ## Corte Git verificado
 
+- Base revisada: `origin/master` en `d494d71`, squash merge del PR #182.
+- Rama activa de este corte: `feat/informar-rag-constatacion`, creada desde
+  `d494d71`. Propietario: Claude Code hasta merge o relevo explícito.
+- Alcance de la rama: el camino faltante para constatar el **primer RAG** de un
+  vencimiento —RPC `informar_rag`, selector de escala en la tarjeta, contrato de
+  la frontera constatar/autorizar y la regla en `ai/rules.md`—. Sin aplicación de
+  SQL en producción: la migración se aplica recién con autorización explícita.
+- Registro histórico del corte anterior (bloque 3B), que se conserva:
 - Base revisada: `origin/master` en `33a8c5e`, squash merge del PR #180.
 - PR #180 mergeado; `origin/master` y `origin/feat/rag-centralizado-bandeja-zonal`
   no tienen diferencias de contenido, por lo que el bloque 3A entró completo.
@@ -585,15 +593,19 @@ arreglo de texto sin urgencia, pero es real.
 
 ## Próximo paso ejecutable
 
-1. Las tres decisiones del primer RAG, que son lo único que bloquea trabajo real:
-   si la primera sugerencia es siempre el primer escalón o puede saltar varios;
-   si exige un control nuevo; y si va como bloque propio antes del 4 o entra
-   antes por dejar la operación sin la herramienta.
-2. Abrir el PR de esta rama —timestamps productivos, frase del tope de escala y
-   propuesta de detección de desfasaje— y obtener CI verde.
-3. Construir la detección de migraciones mergeadas sin aplicar, según la
+1. Abrir el PR de `feat/informar-rag-constatacion` y obtener CI verde, incluido
+   el replay con su expectativa móvil regenerada.
+2. Con autorización explícita: mergear, aplicar la migración a producción y
+   registrar el timestamp productivo en `history-manifest.json`, como en C1, C2A
+   y los cuatro bloques del circuito.
+3. Después de aplicar, informar cuántos de los vencimientos hoy sin RAG pueden
+   recibir uno informado y cuántos quedan afuera por otra razón. Cerrar el hueco
+   parcialmente también es un resultado, pero hay que decirlo como tal.
+4. Construir la detección de migraciones mergeadas sin aplicar, según la
    propuesta registrada en `docs/PRE_PRODUCTION_HARDENING_PLAN.md`.
-4. Recién después, el bloque 4 del circuito: confirmación o rechazo en góndola.
+5. Recién después, el bloque 4 del circuito: confirmación o rechazo en góndola.
+6. Abrir el PR de la rama ya publicada `docs/degradacion-silenciosa-d8`, que
+   quedó sin PR.
 
 ## Protocolo de relevo
 
@@ -821,3 +833,67 @@ arreglo de texto sin urgencia, pero es real.
 - Fernando confirmó el borde previo a la apertura: una solicitud cargada antes
   de las 08:00 se conserva para la jornada de ese mismo día y aparece a las
   08:00. No se rechaza ni se envía a la jornada siguiente.
+
+### 2026-09-11 · Claude Code · rama `feat/informar-rag-constatacion`
+
+- **Hallazgo de fondo, ya nombrado como regla.** Al cerrar la puerta lateral por
+  la que el browser abría un RAG se reconstruyó solamente el camino de
+  **autorizar** un cambio (`solicitar_cambio_rag`, que exige un RAG vigente). El
+  camino de **constatar** el primero nunca se reconstruyó, así que un vencimiento
+  sin intervención previa no tenía forma de recibir su primer RAG: no por falta
+  de permiso, sino por falta de camino. Sin intervención no hay tramo y sin tramo
+  el motor de cobertura no arranca. La omisión no daba síntoma de error — la
+  tarjeta decía «Todavía no hay un RAG registrado», que era cierto, junto a
+  ningún botón.
+- **La regla quedó escrita en `ai/rules.md`:** constatar un hecho y autorizar un
+  cambio son permisos distintos. Constatar lo puede hacer quien está frente al
+  producto; autorizar, quien tiene la jerarquía.
+- Nueva migración `20260911151500_informar_rag_constatacion_v1.sql`: RPC
+  `public.informar_rag(uuid, numeric, text)` sobre
+  `noven_private.informar_rag_impl`, autorizada por
+  `puede_ver_producto_sucursal` y sin lista de roles. Es RPC propia y no cuelga
+  del control: registrar stock y declarar un precio no vuelven a ser la misma
+  llamada. No puede tocar un RAG vigente con otro porcentaje —ese camino sigue
+  siendo el circuito centralizado— y ante el mismo porcentaje devuelve la
+  intervención existente sin mover `aplicado_at`.
+- La escala **no** bloquea la constatación: si la cadena puso un porcentaje fuera
+  de escala, ocurrió, y se registra marcado `fuera_de_escala`. La instrumentación
+  se delega en `instrumentar_sugerencia_rag_impl` con origen `manual` en vez de
+  recalcular el escalón: dos cómputos del mismo número terminan divergiendo, y
+  dejar `escalones_estado` en NULL habría afirmado «no se instrumentó» sobre una
+  fila nacida hoy.
+- UI: el texto muerto de la tarjeta se reemplazó por el selector de la escala más
+  «Informar RAG», con un campo libre detrás de «Otro porcentaje…» para el caso
+  fuera de escala. El camino diario sigue siendo elegir el número y confirmarlo.
+- Contratos nuevos: `frontera-constatar-autorizar-contract.test.mjs` —registro de
+  RPC clasificadas, con **mutantes en las dos direcciones** (un constatador con
+  lista de roles y un autorizador que se conforma con el alcance tienen que
+  hacerlo fallar) más un tercer mutante para el registro incompleto— e
+  `informar-rag-contract.test.mjs` para las propiedades de la RPC.
+- `rag-sugerencia-ux-contract` se ajustó de forma deliberada: prohibía todo campo
+  numérico ligado al RAG. La excepción del porcentaje fuera de escala quedó
+  cercada por aserciones propias (sólo en la rama sin RAG, sólo detrás de «Otro
+  porcentaje…», y con el total de campos numéricos del modal fijado) en vez de
+  aflojar la regla.
+- Validación local: lint sin errores (con el warning preexistente de
+  `ScannerModal.tsx:143`), build verde, suite de contratos verde salvo la
+  expectativa móvil del replay, que por diseño se regenera en CI al agregarse una
+  migración.
+- Playwright local: 21 recorridos en verde, incluidos dos nuevos para el primer
+  RAG —el camino de escala y el de porcentaje fuera de escala—. El único rojo es
+  `catalog-role-boundary` en el caso del gerente zonal, y **falla igual sin este
+  cambio**: se verificó volviendo el árbol al estado de `master` y repitiendo el
+  recorrido. Queda como artefacto de este entorno; el CI es la autoridad.
+- Expectativa móvil regenerada en el run `34629059400` sobre el mismo SHA del PR,
+  con sus pasos de protección del ancla y de limitación del diff en verde. Se
+  incorporó extrayéndola del log, verificando el SHA-256 de cada archivo, y sin
+  tocar el ancla `expected-fingerprint.json` —comprobado por digest antes y
+  después—. Suite completa 121/121 con la expectativa nueva.
+- Diff estructural por objeto completo: **agrega 5, saca 0, cambia 0**. Las dos
+  funciones nuevas y sus tres entradas de ACL. Ni `anon` ni `PUBLIC`: el REVOKE
+  previo al GRANT hizo lo que dice. La forma de los permisos es idéntica a la de
+  `informar_oferta_central` —`authenticated` + `service_role` en el wrapper
+  público, sólo `authenticated` en la implementación—, así que no introduce una
+  asimetría nueva.
+- **No se aplicó SQL en producción.** La aplicación requiere autorización
+  explícita y se avisa antes.

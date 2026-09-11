@@ -75,8 +75,42 @@ assert.match(bloqueSugerencia, /handleSolicitarCambioRag/,
   'la acción debe crear una solicitud, no modificar la intervención')
 assert.match(bloqueSugerencia, /Requiere gerente o supervisor/,
   'la operadora ve la sugerencia pero no puede validarla')
-assert.doesNotMatch(modal, /setRagPorcentaje|type="number"[^>]+rag/i,
-  'el porcentaje RAG no puede ser editable')
+assert.doesNotMatch(modal, /setRagPorcentaje/,
+  'el porcentaje de un RAG vigente no puede ser editable desde el browser')
+assert.doesNotMatch(bloqueSugerencia, /type="number"/,
+  'la sugerencia no se edita: el escalón lo decide el motor y gerencia lo valida o no')
+
+// --- 3b. La única excepción, y acotada --------------------------------------
+//
+// Constatar el PRIMER RAG no es cambiar un precio: es declarar un descuento que
+// la cadena ya puso en góndola. Y si lo que puso está fuera de la escala
+// autorizada, eso ocurrió igual: negarse a registrarlo no lo deshace, sólo deja
+// al sistema ciego sobre un producto intervenido.
+//
+// Por eso hay un campo numérico en la tarjeta, y por eso está cercado acá: vive
+// sólo en la rama donde NO hay RAG, aparece sólo detrás de «Otro porcentaje…» y
+// alimenta `informar_rag`, nunca el circuito de cambio.
+
+const inicioPrimerRag = modal.indexOf('Todavía no hay un RAG registrado')
+assert.ok(inicioPrimerRag !== -1, 'la rama sin RAG tiene que seguir existiendo')
+const bloquePrimerRag = modal.slice(inicioPrimerRag, modal.indexOf('Informar RAG', inicioPrimerRag))
+assert.ok(bloquePrimerRag.length > 0 && bloquePrimerRag.length < 4000,
+  'el bloque del primer RAG se recortó mal: revisá los anclajes')
+
+assert.match(bloquePrimerRag, /escalaRag\.map\(/,
+  'el camino diario es elegir de la escala, no escribir un número')
+assert.match(bloquePrimerRag, /seleccionRagInformado === 'otro'[\s\S]{0,400}?type="number"/,
+  'el campo libre sólo aparece detrás de «Otro porcentaje…»')
+assert.match(bloquePrimerRag, /Fuera de la escala autorizada/,
+  'informar fuera de escala tiene que decir que lo está, no disimularlo')
+assert.match(modal, /supabase\.rpc\('informar_rag'/,
+  'constatar el primer RAG va por su propia RPC, no por el control ni por el circuito')
+
+// El campo libre es uno solo. Si aparece otro `type="number"` ligado al RAG
+// fuera de esta rama, la excepción dejó de estar acotada.
+const camposNumericos = [...modal.matchAll(/type="number"/g)].length
+assert.equal(camposNumericos, 3,
+  'stock, cantidad y el porcentaje fuera de escala: cualquier otro campo numérico hay que justificarlo acá')
 assert.doesNotMatch(modal, /\bUsar \{sugerencia\.hasta\}%|elegir otro porcentaje/,
   'la UI no debe conservar lenguaje del flujo directo anterior')
 
