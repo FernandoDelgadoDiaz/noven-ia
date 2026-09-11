@@ -631,6 +631,75 @@ corre**:
 Las tres capas atacan cosas distintas: la primera detecta, la segunda deja de
 esconder, la tercera previene. Ninguna depende de que alguien se acuerde.
 
+### Fuera de numeración · Política de vencimientos: tres hallazgos diferidos — PENDIENTE
+
+**Por qué están acá y no hechos.** Los tres salieron el 2026-09-11 de una
+pregunta de consistencia, no de un problema en curso. **Ninguno rompe nada hoy**:
+toda la operación viva está en masivos, donde el comportamiento actual es
+correcto, y no hay ni un vencimiento activo en perecederos. Se registran con la
+evidencia para que se retomen cuando empiecen a importar —una segunda cadena, o
+perecederos reales—, no antes. Cerrar el análisis y no ejecutarlo fue decisión
+explícita de Fernando.
+
+**Hallazgo 1 · El umbral de entrada es política de la cadena, escrita en el
+código del producto.** `radar` a 45 días y `urgente` a 20 no son parámetros de
+NoVen: son cuándo la cadena habilita el RAG. Difieren por sector —masivos habilita
+a 45 y vende hasta 10 (ventana comercial 35); perecederos habilita a 14 y vende
+hasta 2 (ventana 12)— y el código aplica 45 uniforme. Un perecedero entraría a
+radar 31 días antes de que se pueda intervenir.
+
+Además los dos números viven duplicados en **seis lugares vivos**, verificados
+contra el catálogo y no contra los archivos —las migraciones son historia; sólo
+la última definición vive—: `public.recalcular_niveles_vencimientos`,
+`noven_private.nivel_riesgo_vencimiento_zonal_v1`,
+`noven_private.sincronizar_problema_economico_v1`, `src/lib/riesgo.ts`,
+`netlify/functions/analisis.ts` y `netlify/functions/problemas-activos.ts`.
+
+También quedó registrado que el nivel y el motor usan relojes distintos: el
+umbral cuenta días hasta el vencimiento y la cobertura cuenta días comerciales,
+que restan la donación. Difieren exactamente en `dias_donacion`. Medido contra la
+091: con base comercial y 45 el tablero pasaría de 7 a 13 de 18 activos; con 35
+queda en 7, o sea el mismo comportamiento expresado en un solo reloj.
+
+Queda sin decidir si `urgente` debe seguir siendo calendario o pasar a ser
+severidad del déficit —`dias_stock / dias_comerciales` sobre un factor—, que es
+lo único que funcionaría igual en una ventana de 35 que en una de 12.
+
+**Hallazgo 2 · `dias_donacion` por sector no alcanza: la política no es uniforme
+dentro de un sector.** En el origen, el sector `030` («FIAMBRES, LACTEOS Y
+CONGELADOS») contiene familias perecederas —`001` FIAMBRERIA, `002` LACTEOS— y
+también `004` CONGELADOS, que sigue la regla de masivos con 10 días. Un solo
+valor por sector no puede representar las dos. El caso `030/004` es la evidencia
+concreta; cualquier rediseño de la política tiene que resolverlo antes de
+modelar umbrales por sector, porque cambia la granularidad de toda la tabla.
+
+**Hallazgo 3 · `LACTEOS`, `FIAMBRES` y `PANADERIA` no son sectores del origen:
+son datos de ejemplo.** Se sembraron el 2026-05-25 en
+`20260525100000_admin_panel_schema.sql`, bajo el comentario literal «DATOS:
+Sectores y Familias de ejemplo», con códigos `010`, `015` y `020` y ocho familias
+propias (`020`–`023`, `030`–`031`, `040`–`041`). Ninguno de esos códigos existe en
+la taxonomía del origen, donde lácteos y fiambres son **familias dentro del
+sector 030**. Las ocho familias tienen **cero productos**: los 823 productos
+cargados están todos en `001 ALMACEN`, en dos de sus dieciocho familias.
+
+Es decir: no son familias promovidas a sector, son fixtures de demo que
+sobrevivieron a producción. No se tocaron. Limpiarlos o remapearlos es parte del
+mismo rediseño, no una corrección suelta —y conviene hacerlo junto con el
+hallazgo 2, porque la granularidad correcta es lo que decide adónde va cada uno.
+
+**Lo único que sí se ejecutó de todo esto** fue sacar `dias_donacion` a `NO
+COMESTIBLES` y `TEXTIL`, que quedaban con 10 estando fuera de alcance por
+decisión. Es la misma decisión que `20260827000350` ya había tomado para
+`ELECTRO` e `INSUMOS`, aplicada a los dos que faltaban; cero familias afectadas.
+
+**Y lo que quedó frenado a propósito:** crear `VERDULERIA`, `PASTAS` y
+`CARNICERIA`, que no existen en `sectores`. `sectores.codigo` es NOT NULL, UNIQUE
+por organización y **refleja la taxonomía del origen** —el parser del 0258 lo
+extrae de `dto_sec_fam`—. Inventar códigos escribiría un dato que la cadena no
+dijo. Mientras no existan, una carga de esos sectores falla de forma ruidosa y
+explícita («Este producto pertenece a un sector fuera del circuito»), no en
+silencio.
+
 ### Fuera de numeración · Deuda que bloqueaba el bloque C2 — HECHO
 
 PR #173 incorporó RPC independientes para informar y finalizar cada tipo de

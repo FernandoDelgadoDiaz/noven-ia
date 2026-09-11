@@ -941,3 +941,18 @@ arreglo de texto sin urgencia, pero es real.
   pendiente, no como defecto silencioso.
 - Mitigación temporal por el calendario, no por diseño: seis de los siete cruzan
   a `radar` entre el 2026-09-12 y el 2026-09-16, y el séptimo el 2026-10-05.
+
+### 2026-09-11 · Claude Code · política de vencimientos, cierre del análisis
+
+- Se cerró el análisis de umbrales **sin ejecutarlo**. Nada de eso rompe hoy: la
+  operación viva está toda en masivos y no hay ningún vencimiento activo en
+  perecederos. Los tres hallazgos quedaron registrados con evidencia en
+  `docs/PRE_PRODUCTION_HARDENING_PLAN.md` para retomarse cuando importen —una
+  segunda cadena o perecederos reales—, no antes.
+- Única escritura productiva: `NO COMESTIBLES` (060) y `TEXTIL` (070) pasaron a
+  `dias_donacion = NULL`, como ya se había hecho con `ELECTRO` e `INSUMOS`. Los
+  cuatro sectores fuera de alcance quedan uniformes; cero familias afectadas.
+- No se crearon `VERDULERIA`, `PASTAS` ni `CARNICERIA`: `sectores.codigo` refleja
+  la taxonomía del origen y no se inventa un código que la cadena no dio.
+- Sin cambios de esquema, sin tocar el cálculo de nivel, sin tocar los seis
+  lugares donde viven los umbrales. El comportamiento actual queda como estaba.
