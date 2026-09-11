@@ -84,6 +84,7 @@ assert.deepEqual([...ledgerDivergences.keys()], [
   'rag_centralizado_validacion_sucursal_timestamp',
   'rag_centralizado_bandeja_zonal_timestamp',
   'rag_centralizado_jornada_zonal_timestamp',
+  'informar_rag_constatacion_timestamp',
 ])
 const cuotaCacheTimestamp = ledgerDivergences.get('cuota_y_cache_timestamp')
 assert.equal(cuotaCacheTimestamp.kind, 'repository_production_version_mismatch')
@@ -204,9 +205,10 @@ assert.ok(legacyBootstrap.includes('LOCAL / CI ONLY'))
 
 
 // Los cuatro bloques del circuito RAG se aplicaron a producción el mismo día y
-// comparten la misma forma de divergencia. Se verifican con un recorrido común:
-// repetir el bloque anterior cuatro veces haría el contrato más largo y no más
-// estricto.
+// comparten la misma forma de divergencia, y `informar_rag` —aplicado después,
+// para cerrar el hueco del primer RAG— tiene exactamente la misma forma. Se
+// verifican con un recorrido común: repetir el bloque anterior cinco veces
+// haría el contrato más largo y no más estricto.
 for (const [id, versionRepo, versionProd, nombreProd] of [
   ['circuito_rag_centralizado_modelo_estados_timestamp', '20260909020007', '20260911010801',
    'circuito_rag_centralizado_modelo_estados_v1'],
@@ -216,6 +218,8 @@ for (const [id, versionRepo, versionProd, nombreProd] of [
    'rag_centralizado_bandeja_zonal_v1'],
   ['rag_centralizado_jornada_zonal_timestamp', '20260910183632', '20260911011704',
    'rag_centralizado_jornada_zonal_v1'],
+  ['informar_rag_constatacion_timestamp', '20260911151500', '20260911181056',
+   'informar_rag_constatacion_v1'],
 ]) {
   const entrada = ledgerDivergences.get(id)
   assert.ok(entrada, `falta la divergencia ${id}`)

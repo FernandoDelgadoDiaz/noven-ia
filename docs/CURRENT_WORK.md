@@ -897,3 +897,47 @@ arreglo de texto sin urgencia, pero es real.
   asimetría nueva.
 - **No se aplicó SQL en producción.** La aplicación requiere autorización
   explícita y se avisa antes.
+
+### 2026-09-11 · Claude Code · aplicación productiva de `informar_rag`
+
+- PR #183 mergeado por squash como `f248fd8`, con CI verde sobre `0b6b2c8`.
+- Migración aplicada a producción. El ledger registró el timestamp de ejecución
+  `20260911181056` frente al `20260911151500` del nombre en Git: misma forma de
+  divergencia que C1, C2A y los cuatro bloques del circuito, documentada como
+  `repository_production_version_mismatch` en `history-manifest.json` y
+  declarada en su contrato, que falla si la entrada no se declara.
+- Verificación contra el catálogo, no contra el archivo: las dos funciones
+  existen con la seguridad y el `search_path` que dice la migración; `anon` no
+  tiene EXECUTE sobre ninguna; `authenticated` la tiene sobre ambas; la forma de
+  permisos coincide con `informar_oferta_central`. Y lo que el `PERFORM`
+  necesita —una única sobrecarga de `instrumentar_sugerencia_rag_impl` con la
+  firma exacta, y el dueño del DEFINER con EXECUTE sobre ella— está verificado
+  en producción, además del gate de exposición que ya lo había ejecutado en CI.
+
+#### El conteo pedido, contra la base
+
+- **Los nueve pueden recibir un RAG informado. Ninguno queda afuera.** Los nueve
+  tienen vencimiento y producto activos, familia asignada, sucursal activa y
+  fila en `producto_sucursal` con VMD. El guard real se evaluó haciéndose pasar
+  por cada usuario de la sucursal: pasa el gerente, y pasa el operador cuya
+  familia cubre a los nueve. El otro operador no pasa, y es correcto: tiene otra
+  familia asignada, así que el alcance está haciendo su trabajo.
+- **Pero hoy sólo dos muestran el botón, y eso no es lo mismo.** El bloque RAG
+  de la tarjeta se dibuja con `nivel_actual IN ('radar','urgente')`. Siete de los
+  nueve están en `seguro`, así que el camino existe y la pantalla no lo ofrece.
+
+#### Hallazgo: la puerta de riesgo y la ventana comercial miden distinto
+
+- Verificado con los datos, no deducido: `nivel_actual` pasa a `radar` a los 45
+  **días hasta el vencimiento**, mientras que `dias_comerciales_restantes` resta
+  los días de donación del sector (10 acá). Un producto con 36 días comerciales
+  tiene 46 hasta el vencimiento y sigue marcado `seguro`.
+- Las dos medidas difieren exactamente en `dias_donacion`, y eso contradice la
+  doctrina del propio proyecto: la ventana comercial real termina en el umbral de
+  donación, no en el vencimiento. La tarjeta usa la medida que el motor dice que
+  no hay que usar.
+- No se cambió nada: tocar el umbral de nivel afecta a todo el tablero y está
+  documentado en `docs/RISK_AND_RAG_RULES_V1.md`. Queda como decisión de producto
+  pendiente, no como defecto silencioso.
+- Mitigación temporal por el calendario, no por diseño: seis de los siete cruzan
+  a `radar` entre el 2026-09-12 y el 2026-09-16, y el séptimo el 2026-10-05.

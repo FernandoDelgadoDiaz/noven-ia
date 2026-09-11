@@ -192,6 +192,21 @@
         "ALTER VIEW public.v_solicitudes_cambio_rag_actual"
       ],
       "resolution": "document_only_no_ledger_normalization"
+    },
+    {
+      "id": "informar_rag_constatacion_timestamp",
+      "kind": "repository_production_version_mismatch",
+      "repository_path": "supabase/migrations/20260911151500_informar_rag_constatacion_v1.sql",
+      "repository_version": "20260911151500",
+      "production_ledger_version": "20260911181056",
+      "production_ledger_name": "informar_rag_constatacion_v1",
+      "universal_replay": true,
+      "reason": "Al aplicar el archivo versionado mediante el mecanismo remoto de Supabase, el ledger registro el timestamp de ejecucion 20260911181056 en lugar del timestamp 20260911151500 del nombre en Git, conservando el mismo nombre y efecto estructural.",
+      "evidence_markers": [
+        "CREATE OR REPLACE FUNCTION noven_private.informar_rag_impl",
+        "CREATE OR REPLACE FUNCTION public.informar_rag"
+      ],
+      "resolution": "document_only_no_ledger_normalization"
     }
   ],
   "known_clean_replay_exceptions": [
