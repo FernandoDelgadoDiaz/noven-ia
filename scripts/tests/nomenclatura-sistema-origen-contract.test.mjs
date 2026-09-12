@@ -48,6 +48,12 @@ const RUTAS_CON_PANTALLA = [
   'src/hooks',
   'src/lib/riesgo.ts',
   'src/lib/importar-glaciar.ts',
+  // Los recorridos E2E también: un `getByLabel('Stock total Glaciar')` sólo pasa
+  // si la pantalla dice eso, así que un nombre de la cadena acá significa o que
+  // la UI lo tiene —defecto— o que el recorrido quedó viejo —defecto—. Entraron
+  // porque este cambio se validó con la suite y el build y no con Playwright, y
+  // tres recorridos rompieron en CI justamente sobre los textos renombrados.
+  'e2e',
 ]
 
 function archivos(destino) {
@@ -57,7 +63,7 @@ function archivos(destino) {
   return fs.readdirSync(abs, { withFileTypes: true }).flatMap((e) =>
     e.isDirectory()
       ? archivos(path.join(destino, e.name))
-      : /\.(?:ts|tsx)$/.test(e.name)
+      : /\.(?:ts|tsx|mjs)$/.test(e.name)
         ? [path.join(abs, e.name)]
         : [],
   )

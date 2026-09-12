@@ -962,5 +962,16 @@ arreglo de texto sin urgencia, pero es real.
   `importar-0258`. Lo que verifican no cambió; cambió la redacción.
 - `LARGO_COD_ART = 7` no se tocó: es un supuesto de formato, no de nomenclatura,
   y la desambiguación contra EAN depende de él. Queda en el plan.
+- **El CI encontró lo que la validación local no miró.** Se validó con la suite
+  de contratos y el build, y no con Playwright —siendo que todo el cambio era
+  texto de pantalla, que es justo lo que Playwright verifica—. Tres recorridos
+  rompieron en CI sobre los textos renombrados: dos `getByLabel('Stock total
+  Glaciar')` y un encabezado «Importar desde Glaciar». Corregidos.
+- Por eso el contrato ahora **también recorre `e2e/`**: un recorrido que busca el
+  nombre de la cadena sólo pasa si la pantalla lo tiene, así que encontrarlo ahí
+  significa o que la UI lo conserva o que el recorrido quedó viejo. Las dos son
+  defectos, y el contrato los ve sin depender de acordarse de correr Playwright.
 - Suite completa en verde, build limpio, lint sin errores (con el warning
-  preexistente de `ScannerModal.tsx:143`).
+  preexistente de `ScannerModal.tsx:143`). Playwright local: 21 de 22, con el
+  único rojo en `catalog-role-boundary:49`, que **falla igual con el árbol
+  limpio** y pasa en CI.

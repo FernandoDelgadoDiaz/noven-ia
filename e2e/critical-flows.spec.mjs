@@ -180,7 +180,7 @@ test.describe('Noven · escrituras críticas Scanner', () => {
     await page.getByRole('button', { name: 'Sí, es este producto' }).click()
     await expect(page.getByRole('heading', { name: 'Cargar vencimiento' })).toBeVisible()
 
-    await page.getByLabel('Stock total Glaciar').fill('15')
+    await page.getByLabel('Stock total del sistema').fill('15')
     await page.getByLabel('Cantidad comprometida').fill('4')
     await page.getByLabel('Fecha de vencimiento').fill('2026-10-20')
     await page.getByLabel('Lote').fill('L-NEW-E2E')
@@ -208,7 +208,7 @@ test.describe('Noven · escrituras críticas Scanner', () => {
     await buscarProductoScanner(page)
 
     await page.getByRole('button', { name: 'Sí, es este producto' }).click()
-    await page.getByLabel('Stock total Glaciar').fill('15')
+    await page.getByLabel('Stock total del sistema').fill('15')
     await page.getByLabel('Cantidad comprometida').fill('4')
     await page.getByLabel('Fecha de vencimiento').fill('2026-10-20')
     await page.getByRole('button', { name: 'Guardar vencimiento' }).click()
