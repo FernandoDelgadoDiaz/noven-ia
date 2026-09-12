@@ -62,6 +62,8 @@ Fecha de corte: **2026-09-12**.
 - Publicación: PR #187 abierto y fusionable contra la base actual. El CI
   `34701787940` terminó completo en verde: replay, aislamiento vivo, cuota,
   exposición y Playwright incluidos.
+- El checkpoint documental posterior repitió todos los gates en verde en el CI
+  `34702034908`; el único pendiente técnico es la autorización de merge.
 - La invitación afectada debe regenerarse después de desplegar el hotfix; el
   enlace anterior no debe reutilizarse.
 - Mientras se preparaba el arreglo se detectó que `master` había avanzado desde
