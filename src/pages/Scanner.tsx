@@ -589,7 +589,7 @@ export default function Scanner() {
     const codArtListo = esCodArtValido(codArtCompletando)
     return (
       <div className="min-h-screen bg-surface-base flex flex-col">
-        <SubHeader paso={2} titulo="Registrar código interno" subtitulo="El código de Glaciar es necesario para identificar el producto" onBack={handleCancelarConfirmacion} />
+        <SubHeader paso={2} titulo="Registrar código interno" subtitulo="El código del sistema es necesario para identificar el producto" onBack={handleCancelarConfirmacion} />
         <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4 flex flex-col gap-4">
           <div className="bg-white rounded-card shadow-card px-4 py-3.5">
             <ProductIdentity producto={productoEncontrado} label="Producto seleccionado" compact imageSize="sm" />
@@ -598,7 +598,7 @@ export default function Scanner() {
             <Package className="h-5 w-5 text-brand shrink-0 mt-0.5" />
             <div>
               <p className="text-brand font-semibold text-sm">Este producto no tiene código interno registrado</p>
-              <p className="text-brand/70 text-xs mt-1">Ingresá el código de 7 dígitos de Glaciar para completar los datos.</p>
+              <p className="text-brand/70 text-xs mt-1">Ingresá el código de 7 dígitos del sistema para completar los datos.</p>
             </div>
           </div>
           {errorCodArtCompletando && (

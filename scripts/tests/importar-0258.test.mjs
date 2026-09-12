@@ -18,7 +18,7 @@ assert.match(parserSource, /codigoSector/, 'debe derivar un sector común cuando
 assert.match(parserSource, /codigoFamilia/, 'debe derivar una familia común para la carga inicial')
 
 assert.match(gatewaySource, /FuenteImportacionGlaciar = 'reposicion_asistida' \| '0258'/, 'la puerta de importación debe aceptar ambas fuentes durante la transición')
-assert.match(gatewaySource, /El 0258 masivo debe corresponder a un único sector/, 'la carga masiva 0258 no debe mezclar sectores')
+assert.match(gatewaySource, /El reporte de ventas masivo debe corresponder a un único sector/, 'la carga masiva 0258 no debe mezclar sectores')
 assert.match(gatewaySource, /Stk NNN/, 'la sucursal 0258 debe verificarse antes de escribir')
 
 console.log('importar-0258 contract: ok')

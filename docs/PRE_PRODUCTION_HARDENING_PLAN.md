@@ -631,6 +631,30 @@ corre**:
 Las tres capas atacan cosas distintas: la primera detecta, la segunda deja de
 esconder, la tercera previene. Ninguna depende de que alguien se acuerde.
 
+### Fuera de numeración · Portabilidad: el formato del sistema de origen — PENDIENTE
+
+**Qué ya se hizo.** El nombre del sistema de la cadena y el de sus reportes
+salieron de todo el texto que ve el usuario: diecinueve cadenas en once
+archivos, más el encabezado del reporte exportable. Quedan en comentarios,
+identificadores y nombres de archivo, donde nombrar el formato real que se
+parsea es información cierta y no un problema de portabilidad.
+`nomenclatura-sistema-origen-contract` impide la reincidencia y protege la otra
+mitad de la regla: los NOMBRES DE COLUMNA —«Cod.Art.», «Stk NNN»,
+«Cód.Familia»— tienen que seguir apareciendo, porque son lo que la persona busca
+en su archivo y un mensaje genérico sería inútil.
+
+**Lo que no se tocó, y no es nomenclatura.** `src/lib/codigos.ts` define
+`LARGO_COD_ART = 7`. Eso no es cómo se llama el sistema: es un supuesto sobre el
+formato de sus códigos, y el archivo explica que ese largo exacto es lo que
+permite distinguir un código interno de un EAN-8, cuyos espacios se solapan. Una
+cadena con códigos de otro largo no se arregla renombrando nada.
+
+Resolverlo tiene dos partes y la segunda es la cara: hacer configurable el
+largo, y **rehacer la desambiguación contra EAN**, que hoy depende de que el
+largo sea 7. Cambiar sólo lo primero dejaría la desambiguación decidiendo con
+una regla que ya no se cumple —silenciosamente, y sobre códigos de producto—.
+Va junto al alta de una segunda cadena, no antes.
+
 ### Fuera de numeración · Deuda que bloqueaba el bloque C2 — HECHO
 
 PR #173 incorporó RPC independientes para informar y finalizar cada tipo de

@@ -37,7 +37,7 @@ eq('Velocidad necesaria: 40 un / 5 días = 8', calcularVelocidadNecesaria(40, 15
 eq('Sin ventana comercial => velocidad infinita', calcularVelocidadNecesaria(1, 10, 10), Infinity)
 
 seccion('Acciones RAG')
-eq('Radar habilita RAG', sugerirAcciones('radar')[0], 'Gestionar RAG en Glaciar')
-eq('Urgente exige revisar RAG', sugerirAcciones('urgente')[0], 'Revisar RAG en Glaciar')
+eq('Radar habilita RAG', sugerirAcciones('radar')[0], 'Gestionar RAG en el sistema')
+eq('Urgente exige revisar RAG', sugerirAcciones('urgente')[0], 'Revisar RAG en el sistema')
 
 process.exitCode = resumen()
