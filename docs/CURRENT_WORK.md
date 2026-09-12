@@ -127,6 +127,12 @@ Fecha de corte: **2026-09-12**.
   Lint, build, replay vivo, aislamiento, cuota, exposición y Playwright quedaron
   omitidos por ese corte temprano y deberán ejecutarse completos después de la
   regeneración.
+- Regeneración manual recibida: run `34720381663`, verde, pero ejecutada sobre
+  `master` (`3076aaf`) en lugar de la rama del PR. Su artefacto no contiene la
+  migración del hotfix y por lo tanto no se incorpora. Se habilitó de forma
+  transitoria un disparador `push` limitado a
+  `fix/incidente-activacion-segura`; debe retirarse al incorporar y revisar el
+  artefacto correcto.
 
 ### Hotfix desplegado · reintento de activación con contraseña ya guardada
 
