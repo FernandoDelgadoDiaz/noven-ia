@@ -59,6 +59,9 @@ Fecha de corte: **2026-09-12**.
 - Pruebas locales sobre `248d1e8`: contrato específico verde; suite completa
   123/123, build y `git diff --check` verdes; lint sin errores y con el warning preexistente de
   `ScannerModal.tsx:143`.
+- Publicación: PR #187 abierto y fusionable contra la base actual. El CI
+  `34701787940` terminó completo en verde: replay, aislamiento vivo, cuota,
+  exposición y Playwright incluidos.
 - La invitación afectada debe regenerarse después de desplegar el hotfix; el
   enlace anterior no debe reutilizarse.
 - Mientras se preparaba el arreglo se detectó que `master` había avanzado desde
@@ -594,10 +597,11 @@ arreglo de texto sin urgencia, pero es real.
 
 ## Próximo paso ejecutable
 
-1. Validar y publicar el hotfix de redirección; confirmar su CI y desplegarlo.
-2. Regenerar la invitación afectada y comprobar que el enlace termina en
+1. Obtener autorización explícita para mergear y desplegar el PR #187.
+2. Comprobar/corregir en Supabase Auth el `Site URL` y la redirección pública.
+3. Regenerar la invitación afectada y comprobar que el enlace termina en
    `https://noven-ia.netlify.app/activar`, nunca en localhost.
-3. Cerrar el hotfix y volver al objetivo que traiga la operación; no reabrir 3B,
+4. Cerrar el hotfix y volver al objetivo que traiga la operación; no reabrir 3B,
    que ya está fusionado y aplicado.
 
 ## Protocolo de relevo
