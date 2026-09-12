@@ -1,6 +1,7 @@
 import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import { adminActionMatchesLane, adminLaneForPath } from './_lib/admin-routing'
+import { activationRedirectUrl, validarRedirectInvitacion } from './_lib/invitation-redirect'
 import { getCorsHeaders } from './_auth'
 import { logServerError } from './_observability'
 
@@ -93,8 +94,14 @@ async function crearInvitacionAuth(
       options: { redirectTo, data: { nombre } },
     })
     if (error) throw error
-    const link = data.properties.action_link
-    if (!data.user?.id || !link) throw new Error('Supabase no devolvió la invitación completa')
+    if (!data.user?.id) throw new Error('Supabase no devolvió la invitación completa')
+    let link: string
+    try {
+      link = validarRedirectInvitacion(data.properties.action_link)
+    } catch (err) {
+      await supabase.auth.admin.deleteUser(data.user.id)
+      throw err
+    }
     return { usuarioId: data.user.id, link }
   }
 
@@ -262,7 +269,7 @@ async function handleAdminInvitaciones(event: HandlerEvent): Promise<HandlerResp
     return jsonResponse(event, 400, { success: false, error: 'Acción inválida' })
   }
 
-  const redirectTo = `${(process.env.URL ?? 'https://noven-ia.netlify.app').replace(/\/$/, '')}/activar`
+  const redirectTo = activationRedirectUrl()
   let nuevaAuth: { usuarioId: string; link: string | null }
   try {
     nuevaAuth = await crearInvitacionAuth(supabase, detalle.email, detalle.nombre, detalle.canal, redirectTo)

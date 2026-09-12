@@ -40,32 +40,38 @@ Fecha de corte: **2026-09-12**.
 
 ## Corte Git verificado
 
-- Base revisada: `origin/master` en `d494d71`, squash merge del PR #182.
-- Rama activa de este corte: `feat/informar-rag-constatacion`, creada desde
-  `d494d71`. Propietario: Claude Code hasta merge o relevo explícito.
-- Alcance de la rama: el camino faltante para constatar el **primer RAG** de un
-  vencimiento —RPC `informar_rag`, selector de escala en la tarjeta, contrato de
-  la frontera constatar/autorizar y la regla en `ai/rules.md`—. Sin aplicación de
-  SQL en producción: la migración se aplica recién con autorización explícita.
-- Registro histórico del corte anterior (bloque 3B), que se conserva:
-- Base revisada: `origin/master` en `33a8c5e`, squash merge del PR #180.
-- PR #180 mergeado; `origin/master` y `origin/feat/rag-centralizado-bandeja-zonal`
-  no tienen diferencias de contenido, por lo que el bloque 3A entró completo.
-- Contradicción detectada y corregida en este corte: el checkpoint anterior
-  declaraba el corte en `f0fd20f`, la rama activa en
-  `feat/rag-centralizado-bandeja-zonal` y el PR #180 pendiente de revisión y
-  merge. Git muestra el merge ya hecho. El paso 1 del plan anterior queda
-  cerrado por evidencia, no por decisión nueva.
+### Hotfix activo · redirección de invitaciones
+
+- Base revisada: `origin/master` en `248d1e8`, cierre documental del PR #186.
+- Rama activa: `fix/invitaciones-redirect-produccion`.
+- Hallazgo reproducido desde una invitación real: el enlace de activación fue
+  emitido con destino `localhost`, por lo que no puede completarse desde el
+  dispositivo de la persona invitada. No se registra el token ni el enlace.
+- Alcance: fijar el destino público de activación en las tres rutas de
+  invitaciones, rechazar antes de entregar cualquier link que Supabase devuelva
+  con otro destino y limpiar la cuenta Auth parcial en ese fallo.
+- Implementación local: las altas jerárquicas, locales y la regeneración usan
+  un único destino canónico. El servidor valida el `redirect_to` contenido en
+  cada link generado; ante desvío no lo devuelve y compensa la cuenta Auth.
+- Configuración externa pendiente de comprobar en Supabase Auth: `Site URL` y
+  la lista exacta de redirecciones deben admitir el sitio público y
+  `/activar`. Este ajuste de control no requiere ni autoriza SQL productivo.
+- Pruebas locales sobre `248d1e8`: contrato específico verde; suite completa
+  123/123, build y `git diff --check` verdes; lint sin errores y con el warning preexistente de
+  `ScannerModal.tsx:143`.
+- Publicación: PR #187 abierto y fusionable contra la base actual. El CI
+  `34701787940` terminó completo en verde: replay, aislamiento vivo, cuota,
+  exposición y Playwright incluidos.
+- El checkpoint documental posterior repitió todos los gates en verde en el CI
+  `34702034908`; el único pendiente técnico es la autorización de merge.
+- La invitación afectada debe regenerarse después de desplegar el hotfix; el
+  enlace anterior no debe reutilizarse.
+- Mientras se preparaba el arreglo se detectó que `master` había avanzado desde
+  `33a8c5e`; el hotfix se reconcilió con la base actual en vez de forzar el PR
+  obsoleto. El bloque 3B, la constatación inicial y sus cierres documentales ya
+  están incorporados en `master` y no se reabren ni se sobrescriben.
 - El conector disponible no enumera runs disparados por push a `master`; la
-  validación local y el CI de la nueva rama siguen siendo obligatorios.
-- Rama activa: `feat/rag-centralizado-jornada-zonal`.
-- Propietario de la rama: Claude Code hasta merge o relevo explícito.
-- Alcance de la rama: bloque 3B del circuito RAG centralizado —ventana de
-  jornada configurable por zona, asignación de jornada en servidor, corte de
-  visibilidad y exportación `.xlsx` por sucursal o por zona— sin confirmación en
-  góndola, sin operación por lote y sin aplicación de SQL en producción.
-- Ningún PR abierto compite por este alcance: el único PR abierto es el #118, en
-  draft y explícitamente fuera del trabajo activo.
+  validación local y el CI de esta rama siguen siendo obligatorios.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -593,17 +599,12 @@ arreglo de texto sin urgencia, pero es real.
 
 ## Próximo paso ejecutable
 
-**No hay ninguno pendiente.** El trabajo de esta sesión está cerrado y nada
-quedó a medias.
-
-Lo que sigue anotado en `docs/PRE_PRODUCTION_HARDENING_PLAN.md` está ahí a
-propósito y **no es un pendiente en curso**: son ítems que se retoman cuando
-haya una razón —una segunda cadena, perecederos reales, el bloque 4 del
-circuito—, no por orden de lista. Ninguno bloquea la operación de hoy.
-
-Quien retome: arrancar por el objetivo que traiga, no por un relevamiento
-abierto del estado. El relevamiento siempre encuentra algo, y siempre parece que
-vale la pena.
+1. Obtener autorización explícita para mergear y desplegar el PR #187.
+2. Comprobar/corregir en Supabase Auth el `Site URL` y la redirección pública.
+3. Regenerar la invitación afectada y comprobar que el enlace termina en
+   `https://noven-ia.netlify.app/activar`, nunca en localhost.
+4. Cerrar el hotfix y volver al objetivo que traiga la operación; no reabrir 3B,
+   que ya está fusionado y aplicado.
 
 ## Protocolo de relevo
 
