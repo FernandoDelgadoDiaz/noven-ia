@@ -40,6 +40,22 @@ Fecha de corte: **2026-09-12**.
 
 ## Corte Git verificado
 
+### Hotfix activo · reintento de activación con contraseña ya guardada
+
+- Base revisada: `origin/master` en `5c95fa4`, cierre documental del PR #189.
+- Rama activa: `fix/activar-invitacion-password-guardada`.
+- Evidencia operativa: la invitación regenerada llegó a `/activar`; el primer
+  intento guardó la contraseña pero no habilitó el acceso. Al repetir, Supabase
+  respondió `same_password` antes de que la UI pudiera reintentar la aceptación.
+- Consulta productiva de sólo lectura: la invitación está pendiente y vigente;
+  identidad Auth, email, organización, zona y rol coinciden; el usuario y el
+  acceso zonal existen inactivos. No se modificaron datos.
+- Corrección local: sólo `same_password` permite continuar al RPC de aceptación;
+  cualquier otro error de contraseña sigue deteniendo el flujo. El RPC conserva
+  todas sus validaciones de identidad, vencimiento y alcance.
+- Pendiente: validar suite, publicar PR, esperar CI verde y obtener autorización
+  explícita antes de fusionar y desplegar.
+
 ### Hotfix desplegado · redirección de invitaciones
 
 - Base revisada: `origin/master` en `248d1e8`, cierre documental del PR #186.
@@ -598,10 +614,11 @@ arreglo de texto sin urgencia, pero es real.
 
 ## Próximo paso ejecutable
 
-1. Comprobar/corregir en Supabase Auth el `Site URL` y la redirección pública.
-2. Regenerar la invitación afectada y comprobar que el enlace termina en
-   `https://noven-ia.netlify.app/activar`, nunca en localhost.
-3. Cerrar el hotfix y volver al objetivo que traiga la operación; no reabrir 3B,
+1. Validar y publicar el hotfix de reintento de activación.
+2. Con CI verde y autorización explícita, fusionarlo y desplegarlo.
+3. Reabrir el mismo enlace, repetir la contraseña ya guardada y comprobar que
+   el acceso de Administración zonal de precios queda activo.
+4. Cerrar el hotfix y volver al objetivo que traiga la operación; no reabrir 3B,
    que ya está fusionado y aplicado.
 
 ## Protocolo de relevo
