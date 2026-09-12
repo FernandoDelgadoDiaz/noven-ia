@@ -75,8 +75,42 @@ assert.match(bloqueSugerencia, /handleSolicitarCambioRag/,
   'la acción debe crear una solicitud, no modificar la intervención')
 assert.match(bloqueSugerencia, /Requiere gerente o supervisor/,
   'la operadora ve la sugerencia pero no puede validarla')
-assert.doesNotMatch(modal, /setRagPorcentaje|type="number"[^>]+rag/i,
-  'el porcentaje RAG no puede ser editable')
+assert.doesNotMatch(modal, /setRagPorcentaje/,
+  'el porcentaje de un RAG vigente no puede ser editable desde el browser')
+assert.doesNotMatch(bloqueSugerencia, /type="number"/,
+  'la sugerencia no se edita: el escalón lo decide el motor y gerencia lo valida o no')
+
+// --- 3b. La única excepción, y acotada --------------------------------------
+//
+// Constatar el PRIMER RAG no es cambiar un precio: es declarar un descuento que
+// la cadena ya puso en góndola. Y si lo que puso está fuera de la escala
+// autorizada, eso ocurrió igual: negarse a registrarlo no lo deshace, sólo deja
+// al sistema ciego sobre un producto intervenido.
+//
+// Por eso hay un campo numérico en la tarjeta, y por eso está cercado acá: vive
+// sólo en la rama donde NO hay RAG, aparece sólo detrás de «Otro porcentaje…» y
+// alimenta `informar_rag`, nunca el circuito de cambio.
+
+const inicioPrimerRag = modal.indexOf('Todavía no hay un RAG registrado')
+assert.ok(inicioPrimerRag !== -1, 'la rama sin RAG tiene que seguir existiendo')
+const bloquePrimerRag = modal.slice(inicioPrimerRag, modal.indexOf('Informar RAG', inicioPrimerRag))
+assert.ok(bloquePrimerRag.length > 0 && bloquePrimerRag.length < 4000,
+  'el bloque del primer RAG se recortó mal: revisá los anclajes')
+
+assert.match(bloquePrimerRag, /escalaRag\.map\(/,
+  'el camino diario es elegir de la escala, no escribir un número')
+assert.match(bloquePrimerRag, /seleccionRagInformado === 'otro'[\s\S]{0,400}?type="number"/,
+  'el campo libre sólo aparece detrás de «Otro porcentaje…»')
+assert.match(bloquePrimerRag, /Fuera de la escala autorizada/,
+  'informar fuera de escala tiene que decir que lo está, no disimularlo')
+assert.match(modal, /supabase\.rpc\('informar_rag'/,
+  'constatar el primer RAG va por su propia RPC, no por el control ni por el circuito')
+
+// El campo libre es uno solo. Si aparece otro `type="number"` ligado al RAG
+// fuera de esta rama, la excepción dejó de estar acotada.
+const camposNumericos = [...modal.matchAll(/type="number"/g)].length
+assert.equal(camposNumericos, 3,
+  'stock, cantidad y el porcentaje fuera de escala: cualquier otro campo numérico hay que justificarlo acá')
 assert.doesNotMatch(modal, /\bUsar \{sugerencia\.hasta\}%|elegir otro porcentaje/,
   'la UI no debe conservar lenguaje del flujo directo anterior')
 
@@ -162,3 +196,36 @@ assert.match(hook, /setEscala\(\[\]\)/,
 
 console.log('✓ La sugerencia vive en la tarjeta existente, con un solo motor para los dos lugares')
 console.log('✓ Human-in-the-loop: gerencia informa el escalón y nunca cambia el precio desde el browser')
+
+// --- Tope de escala: el motor evaluó y no tiene nada que ofrecer ------------
+//
+// Sin esta frase la tarjeta queda muda justo donde iría la sugerencia, y el
+// operador no puede distinguir «el motor evaluó y no hay margen» de «el motor
+// se olvidó de responder». El motivo existía en el motor desde siempre; lo que
+// faltaba era mostrarlo.
+
+const modalTope = fs.readFileSync(
+  path.join(process.cwd(), 'src/components/dashboard/EditarVencimientoModalSeguro.tsx'),
+  'utf8',
+)
+
+assert.match(
+  modalTope,
+  /sugerencia\?\.motivo === 'tope_de_escala'/,
+  'la tarjeta tiene que reconocer el tope de escala, no sólo la ausencia de sugerencia',
+)
+assert.match(modalTope, /Sin escalón superior/)
+assert.match(
+  modalTope,
+  /el máximo de la escala[\s\S]{0,120}No hay más margen de descuento para sugerir/,
+  'la frase tiene que decir por qué no hay sugerencia, no sólo que no la hay',
+)
+// Mismo contenedor y mismas clases que el aviso de «el salto puede no alcanzar»:
+// el operador debe leerlo con el mismo peso, no como una nota al pie.
+assert.match(
+  modalTope,
+  /tope_de_escala'[\s\S]{0,200}rounded-lg border border-amber-300 bg-amber-100\/70 p-2\.5/,
+  'el aviso de tope va con el mismo peso visual que el resto de los avisos del bloque',
+)
+
+console.log('✓ Tope de escala: la tarjeta explica por qué no hay sugerencia')

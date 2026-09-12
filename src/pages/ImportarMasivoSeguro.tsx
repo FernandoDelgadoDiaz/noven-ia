@@ -123,7 +123,7 @@ export default function ImportarMasivoSeguro() {
 
   const procesarArchivo = useCallback(async (file: File): Promise<void> => {
     if (!file.name.toLowerCase().endsWith('.csv')) {
-      setError('El archivo debe ser un CSV exportado desde Reposición Asistida de Glaciar.')
+      setError('El archivo debe ser un CSV de reposición exportado desde el sistema.')
       return
     }
     if (!sucursalId) {
@@ -353,7 +353,7 @@ export default function ImportarMasivoSeguro() {
               <Upload className={`h-10 w-10 ${dragging ? 'text-brand' : 'text-muted-foreground'}`} />
             </div>
             <div className="text-center">
-              <p className="text-foreground font-bold text-base">Subí la Reposición Asistida completa</p>
+              <p className="text-foreground font-bold text-base">Subí la reposición completa</p>
               <p className="text-muted-foreground text-sm mt-1">Puede contener varias familias en el mismo CSV.</p>
             </div>
             <span className="px-5 py-2.5 bg-brand text-white font-semibold text-sm rounded-lg shadow-brand">Seleccionar CSV</span>

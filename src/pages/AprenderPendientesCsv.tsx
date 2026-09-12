@@ -51,7 +51,7 @@ export default function AprenderPendientesCsv() {
 
     try {
       if (!archivo.name.toLowerCase().endsWith('.csv')) {
-        throw new Error('El archivo debe ser un CSV de Reposición Asistida filtrado por familia.')
+        throw new Error('El archivo debe ser un CSV de reposición filtrado por familia.')
       }
       if (archivo.size > 3_500_000) throw new Error('El archivo es demasiado grande para esta carga web.')
 
@@ -143,7 +143,7 @@ export default function AprenderPendientesCsv() {
                 </div>
                 <div className="text-center">
                   <p className="text-sm font-bold text-foreground">Seleccionar CSV filtrado</p>
-                  <p className="text-xs text-muted-foreground mt-1">Debe incluir el encabezado de Reposición Asistida y Cód.Familia.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Debe incluir el encabezado de reposición y Cód.Familia.</p>
                 </div>
               </button>
             ) : (

@@ -53,21 +53,33 @@ function indexar(lista) {
   return m
 }
 
-function diferencias(antes, despues) {
+const esObjetoPlano = (x) => x !== null && typeof x === 'object' && !Array.isArray(x)
+
+function diferencias(antes, despues, prefijo = '') {
   const salida = []
   const secciones = new Set([...Object.keys(antes), ...Object.keys(despues)])
 
   for (const sec of [...secciones].sort()) {
     const a = antes[sec], b = despues[sec]
+    const nombre = prefijo ? `${prefijo}.${sec}` : sec
+
+    // Una seccion puede agrupar otras: `acl` contiene schemas, tables y
+    // functions. Volcarla como un valor unico deja el diff ilegible justo en
+    // la parte mas sensible, asi que se baja un nivel y se indexa igual.
+    if (esObjetoPlano(a) && esObjetoPlano(b)) {
+      salida.push(...diferencias(a, b, nombre))
+      continue
+    }
+
     if (!Array.isArray(a) || !Array.isArray(b)) {
       if (JSON.stringify(a) !== JSON.stringify(b)) {
-        salida.push({ seccion: sec, tipo: 'valor', antes: a, despues: b })
+        salida.push({ seccion: nombre, tipo: 'valor', antes: a, despues: b })
       }
       continue
     }
     const ma = indexar(a), mb = indexar(b)
-    for (const k of mb.keys()) if (!ma.has(k)) salida.push({ seccion: sec, tipo: 'AGREGA', clave: k })
-    for (const k of ma.keys()) if (!mb.has(k)) salida.push({ seccion: sec, tipo: 'SACA', clave: k })
+    for (const k of mb.keys()) if (!ma.has(k)) salida.push({ seccion: nombre, tipo: 'AGREGA', clave: k })
+    for (const k of ma.keys()) if (!mb.has(k)) salida.push({ seccion: nombre, tipo: 'SACA', clave: k })
     for (const [k, oa] of ma) {
       const ob = mb.get(k)
       if (!ob) continue
@@ -78,7 +90,7 @@ function diferencias(antes, despues) {
           cambios.push({ campo: c, antes: oa[c], despues: ob[c] })
         }
       }
-      if (cambios.length) salida.push({ seccion: sec, tipo: 'CAMBIA', clave: k, cambios })
+      if (cambios.length) salida.push({ seccion: nombre, tipo: 'CAMBIA', clave: k, cambios })
     }
   }
   return salida

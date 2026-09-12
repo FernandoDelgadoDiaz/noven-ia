@@ -16,13 +16,15 @@
     "20260908103000_intervenciones_explicitas_por_tipo_v1.sql",
     "20260909020007_circuito_rag_centralizado_modelo_estados_v1.sql",
     "20260909092814_rag_centralizado_validacion_sucursal_v1.sql",
-    "20260909144530_rag_centralizado_bandeja_zonal_v1.sql"
+    "20260909144530_rag_centralizado_bandeja_zonal_v1.sql",
+    "20260910183632_rag_centralizado_jornada_zonal_v1.sql",
+    "20260911151500_informar_rag_constatacion_v1.sql"
   ],
-  "forward_migrations_sha256": "707c2682e18f52b7a45636834aa04b984d6e212260788b456c0efb4a25df90d7",
-  "replay_fingerprint_sha256": "ae0cdf7359729a3de2d1847158ef570d47fb13f23d986fc11f551fe03924f362",
+  "forward_migrations_sha256": "6ef06070becfbe5a289344561e2d6ddad717138fc8d36f1cdd6948099ce0be54",
+  "replay_fingerprint_sha256": "6c02c09e0985d0a9490a55ecf6d03541dee8a31589a58b53bb3f9a3865442eec",
   "anchor_fingerprint_sha256": "837771691ffc6e2276c66a26f9ae010c872f12ea33b118406d48b2ad6fca38af",
   "anchor_materialized_at": "2026-09-01",
   "anchor_materialized_from": "catalogo productivo meqvjabgyrgwkxpclqxp (PR #129)",
   "anchor_revalidacion_maxima_dias": 180,
-  "regenerado_at": "2026-09-09"
+  "regenerado_at": "2026-09-11"
 }

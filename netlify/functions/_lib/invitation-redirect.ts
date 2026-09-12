@@ -3,7 +3,6 @@ const ACTIVATION_REDIRECT_URL = 'https://noven-ia.netlify.app/activar'
 export function activationRedirectUrl(): string {
   return ACTIVATION_REDIRECT_URL
 }
-
 export function validarRedirectInvitacion(actionLink: string): string {
   let redirectTo: string | null = null
 
@@ -21,4 +20,3 @@ export function validarRedirectInvitacion(actionLink: string): string {
 
   return actionLink
 }
-

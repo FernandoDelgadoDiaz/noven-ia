@@ -429,7 +429,7 @@ export default function Dashboard() {
 
                 <div className="mt-2.5 pt-2 border-t border-border/60 flex items-center justify-between gap-2 text-[9px] text-muted-foreground">
                   <span>Donación: {donaciones} un. · Decomiso: {decomisosTrimestrales} un.</span>
-                  {hayValorizacionRetrospectiva && <span title="Acciones anteriores al registro de costos 0258 se valorizaron con el primer costo disponible." className="text-right">histórico valorizado*</span>}
+                  {hayValorizacionRetrospectiva && <span title="Acciones anteriores al registro de costos se valorizaron con el primer costo disponible." className="text-right">histórico valorizado*</span>}
                 </div>
               </div>
             </section>

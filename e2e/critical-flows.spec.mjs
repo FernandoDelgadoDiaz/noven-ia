@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { test, expect } from '@playwright/test'
 import { IDS, installNovenFixture, login } from './fixtures/noven-fixture.mjs'
 import { SCANNER_IDS, installScannerWriteFixture } from './fixtures/scanner-write-fixture.mjs'
@@ -179,7 +180,7 @@ test.describe('Noven · escrituras críticas Scanner', () => {
     await page.getByRole('button', { name: 'Sí, es este producto' }).click()
     await expect(page.getByRole('heading', { name: 'Cargar vencimiento' })).toBeVisible()
 
-    await page.getByLabel('Stock total Glaciar').fill('15')
+    await page.getByLabel('Stock total del sistema').fill('15')
     await page.getByLabel('Cantidad comprometida').fill('4')
     await page.getByLabel('Fecha de vencimiento').fill('2026-10-20')
     await page.getByLabel('Lote').fill('L-NEW-E2E')
@@ -207,7 +208,7 @@ test.describe('Noven · escrituras críticas Scanner', () => {
     await buscarProductoScanner(page)
 
     await page.getByRole('button', { name: 'Sí, es este producto' }).click()
-    await page.getByLabel('Stock total Glaciar').fill('15')
+    await page.getByLabel('Stock total del sistema').fill('15')
     await page.getByLabel('Cantidad comprometida').fill('4')
     await page.getByLabel('Fecha de vencimiento').fill('2026-10-20')
     await page.getByRole('button', { name: 'Guardar vencimiento' }).click()
@@ -272,6 +273,73 @@ test.describe('Noven · escrituras críticas Scanner', () => {
       p_vencimiento_id: SCANNER_IDS.control,
     })
     expect(fixture.rpcCalls.filter((item) => item.name === 'registrar_control_vencimiento_dashboard')).toHaveLength(0)
+    expect(fixture.directTableWrites).toEqual([])
+  })
+
+  test('el primer RAG se informa desde la escala, sin pasar por el control', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-08-31T12:00:00Z'))
+
+    const fixture = await installScannerWriteFixture(page, {
+      hasActiveControl: true,
+      activeControlQuantity: 20,
+      activeControlDate: '2026-09-12',
+      productStock: 30,
+      productVmd: 2,
+      ragPorcentaje: null,
+    })
+    await login(page)
+    await buscarProductoScanner(page)
+
+    const dialog = page.getByRole('dialog', { name: 'Control de vencimiento' })
+    await expect(dialog.getByText('Todavía no hay un RAG registrado.')).toBeVisible()
+
+    const informar = dialog.getByRole('button', { name: 'Informar RAG' })
+    await expect(informar).toBeDisabled()
+
+    await dialog.getByRole('combobox').selectOption('30')
+    await expect(informar).toBeEnabled()
+    await informar.click()
+
+    await expect.poll(() => fixture.rpcCalls.filter((call) => call.name === 'informar_rag').length).toBe(1)
+    expect(fixture.rpcCalls.find((call) => call.name === 'informar_rag')?.body).toEqual({
+      p_vencimiento_id: SCANNER_IDS.control,
+      p_porcentaje: 30,
+      p_nota: null,
+    })
+    // Constatar no es controlar: el informe no arrastra un control ni el
+    // circuito de cambio, que necesita un RAG vigente que todavía no existe.
+    expect(fixture.rpcCalls.filter((call) => call.name === 'registrar_control_vencimiento_dashboard')).toHaveLength(0)
+    expect(fixture.rpcCalls.filter((call) => call.name === 'solicitar_cambio_rag')).toHaveLength(0)
+    expect(fixture.directTableWrites).toEqual([])
+  })
+
+  test('un RAG fuera de la escala también se puede informar: ya está en góndola', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-08-31T12:00:00Z'))
+
+    const fixture = await installScannerWriteFixture(page, {
+      hasActiveControl: true,
+      activeControlQuantity: 20,
+      activeControlDate: '2026-09-12',
+      productStock: 30,
+      productVmd: 2,
+      ragPorcentaje: null,
+    })
+    await login(page)
+    await buscarProductoScanner(page)
+
+    const dialog = page.getByRole('dialog', { name: 'Control de vencimiento' })
+    await dialog.getByRole('combobox').selectOption('otro')
+    await expect(dialog.getByText('Fuera de la escala autorizada.', { exact: false })).toBeVisible()
+
+    await dialog.getByPlaceholder('%').fill('35')
+    await dialog.getByRole('button', { name: 'Informar RAG' }).click()
+
+    await expect.poll(() => fixture.rpcCalls.filter((call) => call.name === 'informar_rag').length).toBe(1)
+    expect(fixture.rpcCalls.find((call) => call.name === 'informar_rag')?.body).toEqual({
+      p_vencimiento_id: SCANNER_IDS.control,
+      p_porcentaje: 35,
+      p_nota: null,
+    })
     expect(fixture.directTableWrites).toEqual([])
   })
 
@@ -369,17 +437,39 @@ test.describe('Noven · bandeja RAG zonal', () => {
     await expect(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Scanner' })).toHaveCount(0)
 
+    // La jornada visible y el estado de la ventana se muestran antes de operar:
+    // sin eso, la administrativa no sabe a qué día pertenece lo que está viendo.
+    await expect(page.getByText('08:00 a 12:00')).toBeVisible()
+    await expect(page.getByText(/Jornada del 10\/09\/2026/)).toBeVisible()
+
+    // El archivo se arma en el browser y tiene que ser un .xlsx real: un ZIP
+    // OOXML, no un CSV renombrado.
+    const [descarga] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Exportar toda la zona' }).click(),
+    ])
+    expect(descarga.suggestedFilename()).toMatch(/^rag-zona-scs-2026-09-10\.xlsx$/)
+    const rutaDescarga = await descarga.path()
+    const bytes = await readFile(rutaDescarga)
+    expect(bytes.subarray(0, 4)).toEqual(Buffer.from([0x50, 0x4b, 0x03, 0x04]))
+    expect(bytes.includes(Buffer.from('xl/worksheets/sheet1.xml'))).toBe(true)
+    expect(bytes.includes(Buffer.from('PRODUCTO RAG ZONAL E2E'))).toBe(true)
+
     page.once('dialog', (dialog) => dialog.accept())
-    await page.getByRole('button', { name: 'Marcar como ejecutada' }).click()
+    await page.getByRole('button', { name: 'Marcar Activo' }).click()
 
     await expect.poll(() => fixture.rpcCalls.filter((call) => call.name === 'ejecutar_solicitud_cambio_rag').length).toBe(1)
     expect(fixture.rpcCalls.find((call) => call.name === 'ejecutar_solicitud_cambio_rag')?.body).toEqual({
       p_solicitud_id: RAG_ZONAL_IDS.request,
     })
     expect(fixture.directTableWrites).toEqual([])
-    await expect(page.getByText('EJECUTADA')).toBeVisible()
+    // Exacto a propósito: la tarjeta muestra además el estado completo
+    // —«Ejecutada · disponible mañana»—, y una coincidencia por subcadena
+    // confundiría la pastilla breve con esa línea.
+    await expect(page.getByText('EJECUTADA', { exact: true })).toBeVisible()
+    await expect(page.getByText('Ejecutada · disponible mañana')).toBeVisible()
     await expect(page.getByText(/La sucursal podrá verificarla en góndola desde 10\/09\/2026/)).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Marcar como ejecutada' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Marcar Activo' })).toHaveCount(0)
 
     await page.goto('/dashboard')
     await page.waitForURL('**/rag/zona')

@@ -7,7 +7,7 @@ export default function ImportarInicio() {
   return (
     <div className="min-h-screen bg-surface-base">
       <header className="sticky top-0 z-10 bg-white border-b border-border/40 px-4 md:px-8 py-4 md:py-5">
-        <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight leading-none">Importar desde Glaciar</h1>
+        <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight leading-none">Importar desde el sistema</h1>
         <p className="text-sm text-muted-foreground mt-1">Elegí el tipo de carga según el objetivo.</p>
       </header>
 
@@ -18,7 +18,7 @@ export default function ImportarInicio() {
             <p className="text-foreground font-semibold text-sm">Aprendizaje compartido por toda la organización</p>
             <p className="text-muted-foreground text-xs mt-1 leading-relaxed">
               El asistido completo actualiza lo conocido. Los códigos nuevos quedan en una bandeja global y pueden resolverse manualmente
-              o usando un CSV filtrado de Glaciar. Una vez clasificados, todas las sucursales reutilizan esa decisión.
+              o usando un CSV filtrado del sistema. Una vez clasificados, todas las sucursales reutilizan esa decisión.
             </p>
           </div>
         </div>
@@ -53,7 +53,7 @@ export default function ImportarInicio() {
             <p className="text-xs uppercase tracking-wide text-brand font-bold">Mantenimiento</p>
             <h2 className="text-foreground font-bold text-lg mt-1">Asistido completo</h2>
             <p className="text-muted-foreground text-sm mt-2 leading-relaxed">
-              Para toda la Reposición Asistida. Actualiza stock/VMD por sucursal y registra automáticamente los códigos desconocidos.
+              Para toda la reposición. Actualiza stock/VMD por sucursal y registra automáticamente los códigos desconocidos.
             </p>
             <div className="mt-5 flex items-center gap-2 text-brand text-sm font-semibold">
               Abrir actualización masiva <ArrowRight className="h-4 w-4" />

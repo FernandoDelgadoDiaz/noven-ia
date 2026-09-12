@@ -26,6 +26,8 @@ const IDS = Object.freeze({
   productStoreB1: '17000000-0000-4000-8000-000000000004',
   expiryA1: '18000000-0000-4000-8000-000000000001',
   ragRequestA1: '19000000-0000-4000-8000-000000000001',
+  ragRequestA1Diferida: '19000000-0000-4000-8000-000000000002',
+  ragRequestA1Hoy: '19000000-0000-4000-8000-000000000003',
 })
 
 const USERS = Object.freeze({
@@ -216,6 +218,34 @@ async function selectAsService(environment, table, query) {
   const rows = assertOk(`service select ${table}`, result)
   assert.ok(Array.isArray(rows), `${table}: expected a service array`)
   return rows
+}
+
+// Dos ventanas construidas para no depender de la hora del CI. La primera está
+// abierta durante todo el día; la segunda no llega a abrir nunca en la práctica,
+// porque su inicio es el último microsegundo de la jornada.
+const VENTANA_SIEMPRE_ABIERTA = Object.freeze({ inicio: '00:00:00', corte: '24:00:00' })
+const VENTANA_NUNCA_ABIERTA = Object.freeze({ inicio: '23:59:59.999999', corte: '24:00:00' })
+
+/** Fecha operativa argentina, que es la que gobierna la jornada zonal. */
+function fechaArgentina(offsetDias = 0) {
+  const ahora = new Date()
+  const local = new Date(ahora.getTime() + offsetDias * 24 * 60 * 60 * 1000)
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(local)
+}
+
+async function updateAsService(environment, table, query, cambios) {
+  const result = await requestJson(`${environment.apiUrl}/rest/v1/${table}?${query}`, {
+    ...serviceHeaders(environment),
+    method: 'PATCH',
+    prefer: 'return=representation',
+    body: cambios,
+  })
+  return assertOk(`service update ${table}`, result)
 }
 
 function sortedIds(rows, field) {
@@ -445,9 +475,85 @@ async function installFixtures(environment) {
     producto_descripcion: 'Gate Product A',
     sector_nombre: 'Sector A',
     familia_nombre: 'Family A',
+    // Una solicitud de una jornada anterior se creo ese dia: el esquema no
+    // admite una jornada anterior a su propia fecha de creacion, y sembrar una
+    // seria construir un estado que el circuito no puede producir. 15:00 UTC
+    // son las 12:00 en Argentina, lejos de cualquier borde de dia.
+    creada_at: `${fechaArgentina(-1)}T15:00:00Z`,
+    jornada_zonal: fechaArgentina(-1),
   }])
+  // Una segunda solicitud diferida a la jornada siguiente: es la que prueba que
+  // el corte esconde y bloquea, en vez de sólo ordenar la pantalla.
+  await insertRows(environment, 'solicitudes_cambio_rag', [{
+    id: IDS.ragRequestA1Diferida,
+    organizacion_id: IDS.orgA,
+    zona_id: IDS.zoneA1,
+    sucursal_id: IDS.storeA1,
+    producto_id: IDS.productA,
+    vencimiento_id: IDS.expiryA1,
+    solicitada_por: users.managerA1.id,
+    porcentaje_rag_vigente: 20,
+    porcentaje_solicitado: 30,
+    cobertura_al_sugerir: 0.4,
+    escalones_sugeridos: 1,
+    velocidad_observada: 0.4,
+    velocidad_necesaria: 1,
+    dias_comerciales_restantes: 9,
+    cantidad_comprometida: 8,
+    vmd_glaciar: 1,
+    fecha_vencimiento: '2030-12-31',
+    fin_accion: '2030-12-22',
+    producto_codigo: '1000001',
+    producto_descripcion: 'Gate Product A',
+    sector_nombre: 'Sector A',
+    familia_nombre: 'Family A',
+    jornada_zonal: fechaArgentina(1),
+  }])
+  // Una tercera en la jornada de hoy: es la que aparece o espera según la
+  // ventana, mientras que la de ayer se muestra siempre por estar pendiente.
+  await insertRows(environment, 'solicitudes_cambio_rag', [{
+    id: IDS.ragRequestA1Hoy,
+    organizacion_id: IDS.orgA,
+    zona_id: IDS.zoneA1,
+    sucursal_id: IDS.storeA1,
+    producto_id: IDS.productA,
+    vencimiento_id: IDS.expiryA1,
+    solicitada_por: users.managerA1.id,
+    porcentaje_rag_vigente: 20,
+    porcentaje_solicitado: 30,
+    cobertura_al_sugerir: 0.45,
+    escalones_sugeridos: 1,
+    velocidad_observada: 0.45,
+    velocidad_necesaria: 1,
+    dias_comerciales_restantes: 9,
+    cantidad_comprometida: 6,
+    vmd_glaciar: 1,
+    fecha_vencimiento: '2030-12-31',
+    fin_accion: '2030-12-23',
+    producto_codigo: '1000001',
+    producto_descripcion: 'Gate Product A',
+    sector_nombre: 'Sector A',
+    familia_nombre: 'Family A',
+    jornada_zonal: fechaArgentina(0),
+  }])
+  // La ventana por defecto depende de la hora en que corra el CI. Se fija una
+  // que esté abierta a cualquier hora para que los gates no dependan del reloj.
+  await updateAsService(
+    environment,
+    'zonas',
+    `id=eq.${IDS.zoneA1}`,
+    { rag_jornada_inicio: VENTANA_SIEMPRE_ABIERTA.inicio, rag_jornada_corte: VENTANA_SIEMPRE_ABIERTA.corte },
+  )
   await insertRows(environment, 'solicitud_cambio_rag_eventos', [{
     solicitud_id: IDS.ragRequestA1,
+    tipo: 'solicitada',
+    actor_id: users.managerA1.id,
+  }, {
+    solicitud_id: IDS.ragRequestA1Diferida,
+    tipo: 'solicitada',
+    actor_id: users.managerA1.id,
+  }, {
+    solicitud_id: IDS.ragRequestA1Hoy,
     tipo: 'solicitada',
     actor_id: users.managerA1.id,
   }])
@@ -640,8 +746,16 @@ async function gate4(environment, tokens, users) {
     { apikey: environment.anonKey, token: tokens.priceAdminA1, method: 'POST', body: {} },
   ))
   assert.deepEqual(zoneA1List.zonas.map((zone) => zone.id), [IDS.zoneA1])
-  assert.deepEqual(zoneA1List.solicitudes.map((request) => request.id), [IDS.ragRequestA1])
-  assert.equal(zoneA1List.solicitudes[0].requiere_ejecucion, true)
+  const idsVisibles = zoneA1List.solicitudes.map((request) => request.id)
+  assert.ok(idsVisibles.includes(IDS.ragRequestA1), 'la solicitud pendiente de su zona no llegó')
+  assert.ok(
+    !idsVisibles.includes(IDS.ragRequestA1Diferida),
+    'una solicitud diferida a la jornada siguiente entró en la bandeja',
+  )
+  assert.equal(
+    zoneA1List.solicitudes.find((request) => request.id === IDS.ragRequestA1).requiere_ejecucion,
+    true,
+  )
 
   const directEvent = await requestJson(
     `${environment.apiUrl}/rest/v1/solicitud_cambio_rag_eventos`,
@@ -705,9 +819,94 @@ async function gate4(environment, tokens, users) {
     `${environment.apiUrl}/rest/v1/rpc/listar_bandeja_rag_zonal`,
     { apikey: environment.anonKey, token: tokens.priceAdminA1, method: 'POST', body: {} },
   ))
-  assert.equal(afterExecution.solicitudes[0].requiere_ejecucion, false)
+  assert.equal(
+    afterExecution.solicitudes.find((request) => request.id === IDS.ragRequestA1).requiere_ejecucion,
+    false,
+  )
 
   console.log('✓ Gate 4: administrativa ejecuta sólo su zona, sin DML directo, duplicados ni intervención')
+}
+
+async function gate5(environment, tokens) {
+  async function ventana(inicio, corte) {
+    await updateAsService(
+      environment,
+      'zonas',
+      `id=eq.${IDS.zoneA1}`,
+      { rag_jornada_inicio: inicio, rag_jornada_corte: corte },
+    )
+  }
+  async function bandeja() {
+    return assertOk('price admin A1 tray', await requestJson(
+      `${environment.apiUrl}/rest/v1/rpc/listar_bandeja_rag_zonal`,
+      { apikey: environment.anonKey, token: tokens.priceAdminA1, method: 'POST', body: {} },
+    ))
+  }
+  async function ejecutar(solicitudId) {
+    return requestJson(
+      `${environment.apiUrl}/rest/v1/rpc/ejecutar_solicitud_cambio_rag`,
+      {
+        apikey: environment.anonKey,
+        token: tokens.priceAdminA1,
+        method: 'POST',
+        body: { p_solicitud_id: solicitudId },
+      },
+    )
+  }
+
+  const hoy = fechaArgentina(0)
+
+  // --- Ventana abierta: la jornada de hoy se ve, la diferida no --------------
+  await ventana(VENTANA_SIEMPRE_ABIERTA.inicio, VENTANA_SIEMPRE_ABIERTA.corte)
+  const abierta = await bandeja()
+  assert.equal(abierta.zonas[0].jornada_visible, hoy)
+  assert.equal(abierta.zonas[0].ventana_abierta, true)
+  const idsAbierta = abierta.solicitudes.map((request) => request.id)
+  assert.ok(idsAbierta.includes(IDS.ragRequestA1Hoy), 'la jornada de hoy no se ve con la ventana abierta')
+  assert.ok(idsAbierta.includes(IDS.ragRequestA1), 'un pendiente de una jornada anterior dejó de verse')
+  assert.ok(!idsAbierta.includes(IDS.ragRequestA1Diferida), 'la solicitud diferida entró en la bandeja')
+
+  const diferidaBloqueada = await ejecutar(IDS.ragRequestA1Diferida)
+  assert.ok(
+    diferidaBloqueada.response.status >= 400,
+    `deferred request was executed: ${responseSummary(diferidaBloqueada.response, diferidaBloqueada.raw)}`,
+  )
+
+  // --- Ventana sin abrir: lo de hoy espera, lo viejo sigue visible -----------
+  await ventana(VENTANA_NUNCA_ABIERTA.inicio, VENTANA_NUNCA_ABIERTA.corte)
+  const cerrada = await bandeja()
+  assert.equal(cerrada.zonas[0].jornada_visible, null)
+  assert.equal(cerrada.zonas[0].ventana_abierta, false)
+  const idsCerrada = cerrada.solicitudes.map((request) => request.id)
+  assert.ok(
+    !idsCerrada.includes(IDS.ragRequestA1Hoy),
+    'la jornada de hoy se mostró antes de que abriera la ventana',
+  )
+  assert.ok(
+    idsCerrada.includes(IDS.ragRequestA1),
+    'un pendiente de una jornada anterior desapareció al cerrar la ventana',
+  )
+
+  const hoyBloqueada = await ejecutar(IDS.ragRequestA1Hoy)
+  assert.ok(
+    hoyBloqueada.response.status >= 400,
+    `request of an unopened journey was executed: ${responseSummary(hoyBloqueada.response, hoyBloqueada.raw)}`,
+  )
+
+  // --- La ventana es configuración de la zona, y la bandeja la refleja -------
+  await ventana('08:00:00', '12:00:00')
+  const configurada = await bandeja()
+  assert.equal(configurada.zonas[0].jornada_inicio, '08:00')
+  assert.equal(configurada.zonas[0].jornada_corte, '12:00')
+
+  const eventos = await selectAsService(
+    environment,
+    'solicitud_cambio_rag_eventos',
+    `select=id&solicitud_id=eq.${IDS.ragRequestA1Diferida}&tipo=eq.ejecutada`,
+  )
+  assert.deepEqual(eventos, [], 'el rechazo por jornada dejó igual un evento de ejecución')
+
+  console.log('✓ Gate 5: la jornada zonal esconde lo diferido, espera al inicio y bloquea su ejecución')
 }
 
 export async function runGates(env = process.env) {
@@ -734,6 +933,7 @@ export async function runGates(env = process.env) {
   await gate2(environment, tokens.managerA1)
   await gate3(environment, tokens.zoneManagerA1)
   await gate4(environment, tokens, users)
+  await gate5(environment, tokens)
 }
 
 const isCli = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])

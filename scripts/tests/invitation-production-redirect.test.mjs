@@ -47,4 +47,3 @@ assert.match(read('netlify/functions/admin-sucursal.ts'), /if \(usuarioId\) awai
 assert.match(read('netlify/functions/admin-invitaciones.ts'), /validarRedirectInvitacion[\s\S]*?deleteUser\(data\.user\.id\)/)
 
 console.log('✓ las invitaciones sólo se entregan con activación pública y nunca hacia localhost')
-

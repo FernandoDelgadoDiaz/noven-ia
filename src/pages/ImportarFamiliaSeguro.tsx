@@ -176,7 +176,7 @@ export default function ImportarFamiliaSeguro() {
 
   const procesarArchivo = useCallback(async (file: File): Promise<void> => {
     if (!file.name.toLowerCase().endsWith('.csv')) {
-      setError('El archivo debe ser un CSV exportado desde Reposición Asistida de Glaciar.')
+      setError('El archivo debe ser un CSV de reposición exportado desde el sistema.')
       return
     }
     if (!sucursalId) {
@@ -451,7 +451,7 @@ export default function ImportarFamiliaSeguro() {
     if (!preview || !resultado || !archivo) return ''
     const { reconciliacion, familia, sucursal, parser } = preview
     const lineas = [
-      `IMPORTACIÓN GLACIAR · SUCURSAL ${sucursal.codigo} · FAMILIA ${familia.codigo} ${familia.nombre}`,
+      `IMPORTACIÓN DEL SISTEMA · SUCURSAL ${sucursal.codigo} · FAMILIA ${familia.codigo} ${familia.nombre}`,
       `Archivo: ${archivo.name}`,
       `Importación: ${resultado.importacionId ?? '—'}`,
       `Resultado: ${resultado.duplicada ? 'archivo ya aplicado anteriormente' : 'aplicada atómicamente'}`,
@@ -562,7 +562,7 @@ export default function ImportarFamiliaSeguro() {
             </div>
             <div className="text-center">
               <p className="text-foreground font-bold text-base">Subí el CSV filtrado por familia</p>
-              <p className="text-muted-foreground text-sm mt-1">Reposición Asistida completa desde la línea 00 del reporte</p>
+              <p className="text-muted-foreground text-sm mt-1">Reposición completa desde la línea 00 del reporte</p>
             </div>
             <span className="px-5 py-2.5 bg-brand text-white font-semibold text-sm rounded-lg shadow-brand">Seleccionar CSV</span>
             <input

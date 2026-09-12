@@ -132,6 +132,81 @@
         "CREATE OR REPLACE FUNCTION public.finalizar_oferta_central"
       ],
       "resolution": "document_only_no_ledger_normalization"
+    },
+    {
+      "id": "circuito_rag_centralizado_modelo_estados_timestamp",
+      "kind": "repository_production_version_mismatch",
+      "repository_path": "supabase/migrations/20260909020007_circuito_rag_centralizado_modelo_estados_v1.sql",
+      "repository_version": "20260909020007",
+      "production_ledger_version": "20260911010801",
+      "production_ledger_name": "circuito_rag_centralizado_modelo_estados_v1",
+      "universal_replay": true,
+      "reason": "Al aplicar el archivo versionado mediante el mecanismo remoto de Supabase, el ledger registro el timestamp de ejecucion 20260911010801 en lugar del timestamp 20260909020007 del nombre en Git, conservando el mismo nombre y efecto estructural.",
+      "evidence_markers": [
+        "CREATE TABLE public.solicitudes_cambio_rag",
+        "CREATE TRIGGER solicitud_cambio_rag_eventos_validar"
+      ],
+      "resolution": "document_only_no_ledger_normalization"
+    },
+    {
+      "id": "rag_centralizado_validacion_sucursal_timestamp",
+      "kind": "repository_production_version_mismatch",
+      "repository_path": "supabase/migrations/20260909092814_rag_centralizado_validacion_sucursal_v1.sql",
+      "repository_version": "20260909092814",
+      "production_ledger_version": "20260911011059",
+      "production_ledger_name": "rag_centralizado_validacion_sucursal_v1",
+      "universal_replay": true,
+      "reason": "Al aplicar el archivo versionado mediante el mecanismo remoto de Supabase, el ledger registro el timestamp de ejecucion 20260911011059 en lugar del timestamp 20260909092814 del nombre en Git, conservando el mismo nombre y efecto estructural.",
+      "evidence_markers": [
+        "CREATE OR REPLACE FUNCTION public.solicitar_cambio_rag",
+        "El RAG se gestiona mediante el circuito centralizado"
+      ],
+      "resolution": "document_only_no_ledger_normalization"
+    },
+    {
+      "id": "rag_centralizado_bandeja_zonal_timestamp",
+      "kind": "repository_production_version_mismatch",
+      "repository_path": "supabase/migrations/20260909144530_rag_centralizado_bandeja_zonal_v1.sql",
+      "repository_version": "20260909144530",
+      "production_ledger_version": "20260911011425",
+      "production_ledger_name": "rag_centralizado_bandeja_zonal_v1",
+      "universal_replay": true,
+      "reason": "Al aplicar el archivo versionado mediante el mecanismo remoto de Supabase, el ledger registro el timestamp de ejecucion 20260911011425 en lugar del timestamp 20260909144530 del nombre en Git, conservando el mismo nombre y efecto estructural.",
+      "evidence_markers": [
+        "CREATE OR REPLACE FUNCTION public.listar_bandeja_rag_zonal",
+        "CREATE OR REPLACE FUNCTION public.ejecutar_solicitud_cambio_rag"
+      ],
+      "resolution": "document_only_no_ledger_normalization"
+    },
+    {
+      "id": "rag_centralizado_jornada_zonal_timestamp",
+      "kind": "repository_production_version_mismatch",
+      "repository_path": "supabase/migrations/20260910183632_rag_centralizado_jornada_zonal_v1.sql",
+      "repository_version": "20260910183632",
+      "production_ledger_version": "20260911011704",
+      "production_ledger_name": "rag_centralizado_jornada_zonal_v1",
+      "universal_replay": true,
+      "reason": "Al aplicar el archivo versionado mediante el mecanismo remoto de Supabase, el ledger registro el timestamp de ejecucion 20260911011704 en lugar del timestamp 20260910183632 del nombre en Git, conservando el mismo nombre y efecto estructural.",
+      "evidence_markers": [
+        "ADD COLUMN rag_jornada_inicio",
+        "ALTER VIEW public.v_solicitudes_cambio_rag_actual"
+      ],
+      "resolution": "document_only_no_ledger_normalization"
+    },
+    {
+      "id": "informar_rag_constatacion_timestamp",
+      "kind": "repository_production_version_mismatch",
+      "repository_path": "supabase/migrations/20260911151500_informar_rag_constatacion_v1.sql",
+      "repository_version": "20260911151500",
+      "production_ledger_version": "20260911181056",
+      "production_ledger_name": "informar_rag_constatacion_v1",
+      "universal_replay": true,
+      "reason": "Al aplicar el archivo versionado mediante el mecanismo remoto de Supabase, el ledger registro el timestamp de ejecucion 20260911181056 en lugar del timestamp 20260911151500 del nombre en Git, conservando el mismo nombre y efecto estructural.",
+      "evidence_markers": [
+        "CREATE OR REPLACE FUNCTION noven_private.informar_rag_impl",
+        "CREATE OR REPLACE FUNCTION public.informar_rag"
+      ],
+      "resolution": "document_only_no_ledger_normalization"
     }
   ],
   "known_clean_replay_exceptions": [

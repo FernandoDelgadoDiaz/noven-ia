@@ -23,7 +23,14 @@ interface InviteBody {
   canal?: CanalInvitacion
 }
 
-type Body = ListBody | InviteBody
+interface JornadaBody {
+  accion: 'jornada'
+  zonaId?: string
+  inicio?: string
+  corte?: string
+}
+
+type Body = ListBody | InviteBody | JornadaBody
 
 interface ContextoAltas {
   puede_crear_zonal?: boolean
@@ -122,6 +129,42 @@ async function handleAdminAccesos(event: HandlerEvent): Promise<HandlerResponse>
       return jsonResponse(event, status, {
         success: false,
         error: status >= 500 ? 'No se pudo consultar el contexto de accesos.' : error.message,
+      })
+    }
+    return jsonResponse(event, 200, { success: true, ...(data as Record<string, unknown>) })
+  }
+
+  // La ventana de recepción de la bandeja zonal la fija la administración de
+  // jerarquía, no la administrativa ni el reloj del navegador. El servidor
+  // vuelve a validar permiso y orden dentro de la RPC.
+  if (body.accion === 'jornada') {
+    const zonaId = body.zonaId?.trim() || ''
+    const inicio = body.inicio?.trim() || ''
+    const corte = body.corte?.trim() || ''
+    const HORA = /^([01]\d|2[0-3]):[0-5]\d$/
+
+    if (!zonaId) return jsonResponse(event, 400, { success: false, error: 'Seleccioná una zona' })
+    if (!HORA.test(inicio) || !HORA.test(corte)) {
+      return jsonResponse(event, 400, { success: false, error: 'Las horas deben tener formato HH:MM' })
+    }
+    if (inicio >= corte) {
+      return jsonResponse(event, 400, { success: false, error: 'El corte debe ser posterior al inicio' })
+    }
+
+    const { data, error } = await supabase.rpc('configurar_jornada_rag_zonal_v1', {
+      p_actor_id: sesion.uid,
+      p_zona_id: zonaId,
+      p_inicio: inicio,
+      p_corte: corte,
+    })
+    if (error) {
+      const status = statusRpc(error.message)
+      if (status >= 500) {
+        logServerError(event, { endpoint: ENDPOINT, operation: 'configurar_jornada_rag_zonal_v1', statusCode: status, error })
+      }
+      return jsonResponse(event, status, {
+        success: false,
+        error: status >= 500 ? 'No se pudo configurar la jornada zonal.' : error.message,
       })
     }
     return jsonResponse(event, 200, { success: true, ...(data as Record<string, unknown>) })

@@ -154,6 +154,11 @@ export default function EditarVencimientoModalSeguro({
   const { escala: escalaRag } = useEscalaRag()
   const [motivoFinalizacionRag, setMotivoFinalizacionRag] = useState<MotivoFinalizacionRag>('decision_comercial')
   const [notaFinalizacionRag, setNotaFinalizacionRag] = useState('')
+  // Informar el primer RAG: el valor del selector es el porcentaje como texto,
+  // o 'otro' cuando la cadena puso algo fuera de la escala autorizada.
+  const [seleccionRagInformado, setSeleccionRagInformado] = useState('')
+  const [porcentajeRagFueraEscala, setPorcentajeRagFueraEscala] = useState('')
+  const [informandoRag, setInformandoRag] = useState(false)
   const [notaOfertaCentral, setNotaOfertaCentral] = useState('')
   const [gestionandoOfertaCentral, setGestionandoOfertaCentral] = useState(false)
   const [confirmarFinalizarOferta, setConfirmarFinalizarOferta] = useState(false)
@@ -459,6 +464,50 @@ export default function EditarVencimientoModalSeguro({
     onGuardado()
   }
 
+  /**
+   * Porcentaje elegido para informar, o null si todavía no hay uno válido.
+   *
+   * La escala gobierna lo que se SUGIERE, no lo que se puede declarar: si la
+   * cadena puso un porcentaje fuera de escala, eso ya ocurrió en la góndola y
+   * tiene que poder informarse igual. El servidor lo marca `fuera_de_escala` y
+   * lo excluye de los promedios, que es lo correcto — pero lo registra.
+   */
+  function porcentajeRagAInformar(): number | null {
+    const crudo = seleccionRagInformado === 'otro'
+      ? porcentajeRagFueraEscala
+      : seleccionRagInformado
+    const valor = Number(crudo)
+    if (!Number.isFinite(valor) || valor <= 0 || valor > 100) return null
+    return valor
+  }
+
+  async function handleInformarRag(): Promise<void> {
+    setError(null)
+    const porcentaje = porcentajeRagAInformar()
+    if (porcentaje == null) {
+      setError('Elegí el porcentaje que ya está aplicado en góndola.')
+      return
+    }
+    if (hayControlSinGuardar()) {
+      setError('Registrá primero el control para que el RAG comience con ese stock conocido.')
+      return
+    }
+
+    setInformandoRag(true)
+    const { error: rpcError } = await supabase.rpc('informar_rag', {
+      p_vencimiento_id: vencimiento.id,
+      p_porcentaje: porcentaje,
+      p_nota: null,
+    })
+    setInformandoRag(false)
+    if (rpcError) {
+      setError(`No se pudo informar el RAG: ${rpcError.message}`)
+      return
+    }
+    onGuardado()
+    onClose()
+  }
+
   async function handleInformarOfertaCentral(): Promise<void> {
     setError(null)
     if (hayControlSinGuardar()) {
@@ -551,7 +600,7 @@ export default function EditarVencimientoModalSeguro({
 
   const badge = BADGE_CONFIG[nivelCalculado]
   const riskViz = RISK_VISUAL[nivelCalculado]
-  const ocupado = guardando || cerrandoVendido || anulando || subiendoFoto
+  const ocupado = guardando || cerrandoVendido || anulando || subiendoFoto || informandoRag
     || finalizandoRag || gestionandoOfertaCentral || declarandoSalida || solicitandoRag
   const puedeEditarFoto = modoFoto === 'agregar' || modoFoto === 'reemplazar'
   const inputCls = 'w-full h-11 px-3 bg-surface-base border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150'
@@ -584,7 +633,7 @@ export default function EditarVencimientoModalSeguro({
             </div>
             <ProductIdentity producto={vencimiento.productos} showImage={false} label="Control del producto" compact>
               <p className="text-[11px] text-muted-foreground mt-1.5">
-                <span className="font-semibold text-foreground/70">VMD Glaciar:</span>{' '}
+                <span className="font-semibold text-foreground/70">Venta media del sistema:</span>{' '}
                 <span className="font-semibold text-foreground/80">{vencimiento.productos.venta_media_diaria} un/día</span>
               </p>
             </ProductIdentity>
@@ -604,7 +653,7 @@ export default function EditarVencimientoModalSeguro({
         </div>
 
         <div className="px-5 py-4 space-y-3">
-          <Campo label="Stock total Glaciar" htmlFor="ev-stock"><input id="ev-stock" type="number" min={0} value={stockActual} onChange={(e) => setStockActual(Number(e.target.value))} className={inputCls} /></Campo>
+          <Campo label="Stock total del sistema" htmlFor="ev-stock"><input id="ev-stock" type="number" min={0} value={stockActual} onChange={(e) => setStockActual(Number(e.target.value))} className={inputCls} /></Campo>
           <Campo label="Fecha de vencimiento" htmlFor="ev-fecha"><input id="ev-fecha" type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} className={inputCls} /></Campo>
           <Campo label="Cantidad comprometida observada hoy" htmlFor="ev-cantidad">
             <input id="ev-cantidad" type="number" min={0} value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} className={inputCls} />
@@ -633,6 +682,15 @@ export default function EditarVencimientoModalSeguro({
                       <span>Días comerciales</span><span className="text-right font-medium text-foreground">{seguimientoRag.dias_comerciales_restantes}</span>
                     </>)}
                   </div>
+                  {sugerencia?.motivo === 'tope_de_escala' && (
+                    <div className="mt-2.5 rounded-lg border border-amber-300 bg-amber-100/70 p-2.5">
+                      <p className="font-bold text-[11px]">Sin escalón superior</p>
+                      <p className="text-[11px] mt-0.5">
+                        El RAG ya está en {seguimientoRag?.rag_porcentaje}%, el máximo de la escala.
+                        No hay más margen de descuento para sugerir.
+                      </p>
+                    </div>
+                  )}
                   {sugerencia?.hay && (
                     <div className="mt-2.5 rounded-lg border border-amber-300 bg-amber-100/70 p-2.5">
                       <p className="font-bold text-[11px]">Sugerencia por urgencia</p>
@@ -695,7 +753,66 @@ export default function EditarVencimientoModalSeguro({
                     <CircleOff className="h-3.5 w-3.5" />Finalizar RAG vigente
                   </button>
                 </div>
-              ) : <p className="text-[11px] text-muted-foreground">Todavía no hay un RAG registrado.</p>}
+              ) : (
+                /*
+                 * El hueco que esto cierra: antes acá sólo decía "Todavía no hay
+                 * un RAG registrado" y no había forma de registrar el primero.
+                 * Sin intervención no hay tramo, y sin tramo el motor no mide.
+                 *
+                 * Es el camino diario, así que son dos gestos: elegir el
+                 * porcentaje que ya está en góndola y confirmarlo. No hay
+                 * selector de tipo antes del número ni un paso entre el número y
+                 * el informe.
+                 */
+                <div className="rounded-lg bg-white/80 border border-amber-100 p-3 space-y-2">
+                  <p className="text-[11px] text-muted-foreground">
+                    Todavía no hay un RAG registrado. Si la góndola ya tiene uno, informalo:
+                    hasta entonces el producto queda fuera del seguimiento.
+                  </p>
+                  <div className="flex gap-2">
+                    <select
+                      value={seleccionRagInformado}
+                      onChange={(e) => setSeleccionRagInformado(e.target.value)}
+                      className={`${inputCls} flex-1`}
+                    >
+                      <option value="">RAG en góndola…</option>
+                      {escalaRag.map((escalon) => (
+                        <option key={escalon.escalon} value={String(escalon.porcentaje)}>
+                          {escalon.porcentaje}%
+                        </option>
+                      ))}
+                      <option value="otro">Otro porcentaje…</option>
+                    </select>
+                    {seleccionRagInformado === 'otro' && (
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        inputMode="numeric"
+                        value={porcentajeRagFueraEscala}
+                        onChange={(e) => setPorcentajeRagFueraEscala(e.target.value)}
+                        placeholder="%"
+                        className={`${inputCls} w-24`}
+                      />
+                    )}
+                  </div>
+                  {seleccionRagInformado === 'otro' && (
+                    <p className="text-[10px] text-amber-900/80">
+                      Fuera de la escala autorizada. Se registra igual, porque ya está en góndola:
+                      queda marcado como fuera de escala y no entra en los promedios.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void handleInformarRag()}
+                    disabled={ocupado || porcentajeRagAInformar() == null}
+                    className="w-full h-9 flex items-center justify-center gap-2 rounded-lg border border-amber-400 bg-white text-amber-900 font-semibold text-xs disabled:opacity-50"
+                  >
+                    <Percent className="h-3.5 w-3.5" />
+                    {informandoRag ? 'Informando…' : 'Informar RAG'}
+                  </button>
+                </div>
+              )}
               {!cargandoSolicitudRag && solicitudCambioRag && solicitudCambioRag.estado_actual === 'confirmada' && (
                 <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-emerald-800">
                   <CheckCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />

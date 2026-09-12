@@ -86,7 +86,7 @@ test.describe('Noven · frontera de catálogo por rol', () => {
     await expect(page.getByRole('link', { name: 'Admin', exact: true })).toHaveCount(0)
 
     await importar.click()
-    await expect(page.getByRole('heading', { name: 'Importar desde Glaciar' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Importar desde el sistema' })).toBeVisible()
 
     await page.goto('/importar/pendientes/aprender')
     await expect(page.getByRole('heading', { name: 'Aprender desde CSV filtrado' })).toBeVisible()

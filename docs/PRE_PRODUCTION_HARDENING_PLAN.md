@@ -557,6 +557,30 @@ coordinación y su trazabilidad. Mientras la muestra no exista, el porcentaje
 sale únicamente del motor determinístico vigente y la interfaz debe expresar
 “evidencia insuficiente” cuando corresponda.
 
+**Riesgo asumido, registrado el 2026-09-10.** Estaba escrito que convenía tener
+veinte o treinta sugerencias aceptadas y medidas antes de construir el circuito,
+para saber si el consejo del motor sirve. Se avanzó igual, por decisión
+explícita del responsable del producto. Queda anotado como decisión consciente y
+riesgo conocido, no como un supuesto implícito:
+
+- **Qué se está asumiendo.** Que la recomendación del motor determinístico es lo
+  bastante buena como para que valga la pena construirle encima un circuito de
+  autorización. Esa recomendación todavía no se validó en producción.
+- **Qué pasa si la evidencia no acompaña.** Si en la práctica se elige con
+  frecuencia un porcentaje distinto al sugerido, el circuito va a necesitar
+  ajustes. Hoy el circuito está construido sobre la premisa contraria —“si el
+  cálculo está bien hecho, la sugerencia no se discute”— y por eso el botón es
+  confirmación y no decisión: la administrativa no puede cambiar el porcentaje y
+  no existe un camino para negociarlo.
+- **Qué habría que revisar entonces.** Tres cosas, en este orden: si el
+  porcentaje debe volver a ser editable por el gerente al validar, y con qué
+  registro de la diferencia entre lo sugerido y lo pedido; si el motor necesita
+  recalibrar sus umbrales antes que la interfaz; y si la sugerencia debe pasar de
+  ser una instrucción a ser un default con alternativa explícita. Ninguna de las
+  tres se toca antes de tener la muestra.
+- **Qué lo va a hacer visible.** El propio circuito, que registra qué sugirió
+  Noven, qué se validó y qué se ejecutó. Si empiezan a diferir, se ve ahí.
+
 **Un punto que toca el bloque B, ahora y no después.** Si una rebaja entra en
 vigencia al día siguiente, el inicio del tramo no puede ser el click de
 autorización. El circuito lo resuelve haciendo que el tramo arranque en la
@@ -568,6 +592,136 @@ que el inicio del tramo coincide con el momento en que se decide el descuento.
 dividida en modelo y estados, validación gerencial, bandeja zonal, confirmación
 en góndola y operación por lote. Cada bloque debe registrar sus pruebas y
 pendientes en `docs/CURRENT_WORK.md` dentro de la misma rama.
+
+### Fuera de numeración · Detectar migraciones mergeadas sin aplicar — PENDIENTE
+
+**Por qué existe este ítem.** El 2026-09-11 se descubrió que los bloques 1, 2 y
+3A del circuito RAG estaban mergeados en `master` y **no aplicados a
+producción**. La regla era migración primero, merge después, justamente para que
+el código nunca pida columnas que no existen. Se invirtió tres veces seguidas y
+nadie lo notó. Lo detectó el cuarto bloque porque casualmente empezaba con un
+`ALTER` sobre una tabla ausente: eso es suerte, no diseño. Si 3B no hubiera
+tocado esa tabla, el desfasaje seguía creciendo.
+
+**El costo mientras duró.** El frontend desplegado quedó tres bloques adelante
+de la base y la operación se quedó sin forma de poner un RAG. Estuvo enmascarado
+porque el cliente degrada ante tabla ausente, así que se veía como una ausencia
+y no como un error.
+
+**Propuesta.** La idea de comparar las migraciones del repositorio contra el
+ledger productivo es correcta en sustancia. Lo que conviene cambiar es **dónde
+corre**:
+
+1. **Un workflow programado, no un gate de PR.** Comparar contra el ledger exige
+   credenciales productivas. Ponerlas en cada corrida de PR amplía la exposición
+   sin necesidad, y además haría fallar un PR por una condición que su autor no
+   causó ni puede arreglar —la migración pendiente puede ser de otro, o estar
+   deliberadamente sin aplicar esperando autorización—. El desfasaje es un hecho
+   de **producción**, no del código; por eso va donde ya viven esas credenciales
+   y con la cadencia de lo que vigila. Falla el workflow, no el PR.
+2. **Que la degradación deje de ser silenciosa.** Lo que ocultó el problema no
+   fue la falta de un gate: fue que el cliente esconde la ausencia de los objetos
+   del circuito para no romperle la pantalla al operador. Eso está bien para el
+   operador y mal para quien puede actuar. La degradación debe seguir, y además
+   registrarse y hacerse visible a un rol de conducción.
+3. **El orden, en el checklist de merge.** Migración aplicada antes del merge
+   como condición de entrada explícita de cada bloque con esquema, escrita en
+   `docs/CURRENT_WORK.md`, que ya es lectura obligatoria antes de continuar.
+
+Las tres capas atacan cosas distintas: la primera detecta, la segunda deja de
+esconder, la tercera previene. Ninguna depende de que alguien se acuerde.
+
+### Fuera de numeración · Política de vencimientos: tres hallazgos diferidos — PENDIENTE
+
+**Por qué están acá y no hechos.** Los tres salieron el 2026-09-11 de una
+pregunta de consistencia, no de un problema en curso. **Ninguno rompe nada hoy**:
+toda la operación viva está en masivos, donde el comportamiento actual es
+correcto, y no hay ni un vencimiento activo en perecederos. Se registran con la
+evidencia para que se retomen cuando empiecen a importar —una segunda cadena, o
+perecederos reales—, no antes. Cerrar el análisis y no ejecutarlo fue decisión
+explícita de Fernando.
+
+**Hallazgo 1 · El umbral de entrada es política de la cadena, escrita en el
+código del producto.** `radar` a 45 días y `urgente` a 20 no son parámetros de
+NoVen: son cuándo la cadena habilita el RAG. Difieren por sector —masivos habilita
+a 45 y vende hasta 10 (ventana comercial 35); perecederos habilita a 14 y vende
+hasta 2 (ventana 12)— y el código aplica 45 uniforme. Un perecedero entraría a
+radar 31 días antes de que se pueda intervenir.
+
+Además los dos números viven duplicados en **seis lugares vivos**, verificados
+contra el catálogo y no contra los archivos —las migraciones son historia; sólo
+la última definición vive—: `public.recalcular_niveles_vencimientos`,
+`noven_private.nivel_riesgo_vencimiento_zonal_v1`,
+`noven_private.sincronizar_problema_economico_v1`, `src/lib/riesgo.ts`,
+`netlify/functions/analisis.ts` y `netlify/functions/problemas-activos.ts`.
+
+También quedó registrado que el nivel y el motor usan relojes distintos: el
+umbral cuenta días hasta el vencimiento y la cobertura cuenta días comerciales,
+que restan la donación. Difieren exactamente en `dias_donacion`. Medido contra la
+091: con base comercial y 45 el tablero pasaría de 7 a 13 de 18 activos; con 35
+queda en 7, o sea el mismo comportamiento expresado en un solo reloj.
+
+Queda sin decidir si `urgente` debe seguir siendo calendario o pasar a ser
+severidad del déficit —`dias_stock / dias_comerciales` sobre un factor—, que es
+lo único que funcionaría igual en una ventana de 35 que en una de 12.
+
+**Hallazgo 2 · `dias_donacion` por sector no alcanza: la política no es uniforme
+dentro de un sector.** En el origen, el sector `030` («FIAMBRES, LACTEOS Y
+CONGELADOS») contiene familias perecederas —`001` FIAMBRERIA, `002` LACTEOS— y
+también `004` CONGELADOS, que sigue la regla de masivos con 10 días. Un solo
+valor por sector no puede representar las dos. El caso `030/004` es la evidencia
+concreta; cualquier rediseño de la política tiene que resolverlo antes de
+modelar umbrales por sector, porque cambia la granularidad de toda la tabla.
+
+**Hallazgo 3 · `LACTEOS`, `FIAMBRES` y `PANADERIA` no son sectores del origen:
+son datos de ejemplo.** Se sembraron el 2026-05-25 en
+`20260525100000_admin_panel_schema.sql`, bajo el comentario literal «DATOS:
+Sectores y Familias de ejemplo», con códigos `010`, `015` y `020` y ocho familias
+propias (`020`–`023`, `030`–`031`, `040`–`041`). Ninguno de esos códigos existe en
+la taxonomía del origen, donde lácteos y fiambres son **familias dentro del
+sector 030**. Las ocho familias tienen **cero productos**: los 823 productos
+cargados están todos en `001 ALMACEN`, en dos de sus dieciocho familias.
+
+Es decir: no son familias promovidas a sector, son fixtures de demo que
+sobrevivieron a producción. No se tocaron. Limpiarlos o remapearlos es parte del
+mismo rediseño, no una corrección suelta —y conviene hacerlo junto con el
+hallazgo 2, porque la granularidad correcta es lo que decide adónde va cada uno.
+
+**Lo único que sí se ejecutó de todo esto** fue sacar `dias_donacion` a `NO
+COMESTIBLES` y `TEXTIL`, que quedaban con 10 estando fuera de alcance por
+decisión. Es la misma decisión que `20260827000350` ya había tomado para
+`ELECTRO` e `INSUMOS`, aplicada a los dos que faltaban; cero familias afectadas.
+
+**Y lo que quedó frenado a propósito:** crear `VERDULERIA`, `PASTAS` y
+`CARNICERIA`, que no existen en `sectores`. `sectores.codigo` es NOT NULL, UNIQUE
+por organización y **refleja la taxonomía del origen** —el parser del 0258 lo
+extrae de `dto_sec_fam`—. Inventar códigos escribiría un dato que la cadena no
+dijo. Mientras no existan, una carga de esos sectores falla de forma ruidosa y
+explícita («Este producto pertenece a un sector fuera del circuito»), no en
+silencio.
+### Fuera de numeración · Portabilidad: el formato del sistema de origen — PENDIENTE
+
+**Qué ya se hizo.** El nombre del sistema de la cadena y el de sus reportes
+salieron de todo el texto que ve el usuario: diecinueve cadenas en once
+archivos, más el encabezado del reporte exportable. Quedan en comentarios,
+identificadores y nombres de archivo, donde nombrar el formato real que se
+parsea es información cierta y no un problema de portabilidad.
+`nomenclatura-sistema-origen-contract` impide la reincidencia y protege la otra
+mitad de la regla: los NOMBRES DE COLUMNA —«Cod.Art.», «Stk NNN»,
+«Cód.Familia»— tienen que seguir apareciendo, porque son lo que la persona busca
+en su archivo y un mensaje genérico sería inútil.
+
+**Lo que no se tocó, y no es nomenclatura.** `src/lib/codigos.ts` define
+`LARGO_COD_ART = 7`. Eso no es cómo se llama el sistema: es un supuesto sobre el
+formato de sus códigos, y el archivo explica que ese largo exacto es lo que
+permite distinguir un código interno de un EAN-8, cuyos espacios se solapan. Una
+cadena con códigos de otro largo no se arregla renombrando nada.
+
+Resolverlo tiene dos partes y la segunda es la cara: hacer configurable el
+largo, y **rehacer la desambiguación contra EAN**, que hoy depende de que el
+largo sea 7. Cambiar sólo lo primero dejaría la desambiguación decidiendo con
+una regla que ya no se cumple —silenciosamente, y sobre códigos de producto—.
+Va junto al alta de una segunda cadena, no antes.
 
 ### Fuera de numeración · Deuda que bloqueaba el bloque C2 — HECHO
 
