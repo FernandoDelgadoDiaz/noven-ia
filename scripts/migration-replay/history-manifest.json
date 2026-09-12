@@ -207,6 +207,21 @@
         "CREATE OR REPLACE FUNCTION public.informar_rag"
       ],
       "resolution": "document_only_no_ledger_normalization"
+    },
+    {
+      "id": "reparar_grant_puede_ver_solicitud_cambio_rag_timestamp",
+      "kind": "repository_production_version_mismatch",
+      "repository_path": "supabase/migrations/20260912013000_reparar_grant_puede_ver_solicitud_cambio_rag_v1.sql",
+      "repository_version": "20260912013000",
+      "production_ledger_version": "20260912134150",
+      "production_ledger_name": "reparar_grant_puede_ver_solicitud_cambio_rag_v1",
+      "universal_replay": true,
+      "reason": "Al aplicar el archivo versionado mediante el mecanismo remoto de Supabase, el ledger registro el timestamp de ejecucion 20260912134150 en lugar del timestamp 20260912013000 del nombre en Git, conservando el mismo nombre y efecto estructural.",
+      "evidence_markers": [
+        "GRANT EXECUTE ON FUNCTION",
+        "noven_private.puede_ver_solicitud_cambio_rag(uuid, uuid, uuid, uuid)"
+      ],
+      "resolution": "document_only_no_ledger_normalization"
     }
   ],
   "known_clean_replay_exceptions": [
