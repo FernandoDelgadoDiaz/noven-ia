@@ -2,6 +2,7 @@ import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions'
 import { createClient } from '@supabase/supabase-js'
 import { esEmailDuplicadoAuth, resolverEmailsAuthPorIds } from './_lib/auth-directory'
 import { adminActionMatchesLane, adminLaneForPath } from './_lib/admin-routing'
+import { activationRedirectUrl, validarRedirectInvitacion } from './_lib/invitation-redirect'
 import { getCorsHeaders } from './_auth'
 import { logServerError } from './_observability'
 
@@ -222,7 +223,7 @@ async function handleAdminSucursal(event: HandlerEvent): Promise<HandlerResponse
       })
     }
 
-    const redirectTo = `${(process.env.URL ?? 'https://noven-ia.netlify.app').replace(/\/$/, '')}/activar`
+    const redirectTo = activationRedirectUrl()
     let usuarioId = ''
     let link: string | null = null
 
@@ -238,7 +239,7 @@ async function handleAdminSucursal(event: HandlerEvent): Promise<HandlerResponse
         })
         if (error) throw error
         usuarioId = data.user.id
-        link = data.properties.action_link
+        link = validarRedirectInvitacion(data.properties.action_link)
         if (!link) throw new Error('Supabase no devolvió el link de invitación')
       } else {
         const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
@@ -250,6 +251,7 @@ async function handleAdminSucursal(event: HandlerEvent): Promise<HandlerResponse
         usuarioId = data.user.id
       }
     } catch (err) {
+      if (usuarioId) await eliminarAuthUser(event, supabaseUrl, serviceRoleKey, usuarioId)
       if (esEmailDuplicadoAuth(err)) {
         return json(409, { success: false, error: 'Ese email ya tiene una cuenta en Noven.' })
       }

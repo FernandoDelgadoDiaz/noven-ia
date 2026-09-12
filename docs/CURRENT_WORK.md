@@ -15,7 +15,7 @@ seguridad explotables. Cuando una comprobación requiera ese material, se
 registra el resultado mínimo y se enlaza el PR, CI o documento autorizado que
 contiene la evidencia.
 
-Fecha de corte: **2026-09-09**.
+Fecha de corte: **2026-09-12**.
 
 ## Lectura obligatoria antes de continuar
 
@@ -39,6 +39,32 @@ Fecha de corte: **2026-09-09**.
 | Interfaces y contratos | `ai/contracts.md` |
 
 ## Corte Git verificado
+
+### Hotfix activo · redirección de invitaciones
+
+- Base revisada: `origin/master` en `33a8c5e`, squash merge del PR #180.
+- Rama activa: `fix/invitaciones-redirect-produccion`.
+- Hallazgo reproducido desde una invitación real: el enlace de activación fue
+  emitido con destino `localhost`, por lo que no puede completarse desde el
+  dispositivo de la persona invitada. No se registra el token ni el enlace.
+- Alcance: fijar el destino público de activación en las tres rutas de
+  invitaciones, rechazar antes de entregar cualquier link que Supabase devuelva
+  con otro destino y limpiar la cuenta Auth parcial en ese fallo.
+- Implementación local: las altas jerárquicas, locales y la regeneración usan
+  un único destino canónico. El servidor valida el `redirect_to` contenido en
+  cada link generado; ante desvío no lo devuelve y compensa la cuenta Auth.
+- Configuración externa pendiente de comprobar en Supabase Auth: `Site URL` y
+  la lista exacta de redirecciones deben admitir el sitio público y
+  `/activar`. Este ajuste de control no requiere ni autoriza SQL productivo.
+- Pruebas locales: contrato específico verde; suite completa 119/119; build y
+  `git diff --check` verdes; lint sin errores y con el warning preexistente de
+  `ScannerModal.tsx:143`.
+- La invitación afectada debe regenerarse después de desplegar el hotfix; el
+  enlace anterior no debe reutilizarse.
+- El bloque 3B queda pausado y conservado en
+  `feat/rag-centralizado-jornada-zonal`; no se mezcla con este arreglo.
+
+### Corte anterior · bloque 3A
 
 - Base revisada: `origin/master` en `f0fd20f`, squash merge del PR #179.
 - CI final del PR #179: run `34343884360`, completo en verde.
@@ -278,13 +304,11 @@ Rama activa, bloque 3:
 
 ## Próximo paso ejecutable
 
-1. Revisar el PR #180 y obtener autorización explícita antes de mergear su base
-   3A. No aplicar SQL en producción como parte de ese merge.
-2. Después del merge, crear una rama nueva para el bloque 3B: configuración de
-   ventana por zona, asignación de jornada, visibilidad en tiempo real dentro de
-   08:00–12:00 para `Santa Cruz Sur`, espera hasta las 08:00 para cargas previas,
-   diferimiento desde el corte y exportación Excel por sucursal o total de zona.
-3. Recién después de 3B avanzar al bloque 4 de confirmación o rechazo en góndola.
+1. Validar y publicar el hotfix de redirección; confirmar su CI y desplegarlo.
+2. Regenerar la invitación afectada y comprobar que el enlace termina en
+   `https://noven-ia.netlify.app/activar`, nunca en localhost.
+3. Retomar `feat/rag-centralizado-jornada-zonal` para el bloque 3B.
+4. Recién después de 3B avanzar al bloque 4 de confirmación o rechazo en góndola.
 
 ## Protocolo de relevo
 
