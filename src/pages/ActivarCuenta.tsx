@@ -29,7 +29,10 @@ export default function ActivarCuenta() {
     setGuardando(true)
 
     const { error: passwordError } = await supabase.auth.updateUser({ password })
-    if (passwordError) {
+    // La activación tiene dos pasos. Si el primero ya guardó la contraseña pero
+    // el RPC falló, el reintento debe retomar el segundo paso en vez de quedar
+    // bloqueado por la protección de Supabase contra reutilizar la misma clave.
+    if (passwordError && passwordError.code !== 'same_password') {
       setError(passwordError.message)
       setGuardando(false)
       return
