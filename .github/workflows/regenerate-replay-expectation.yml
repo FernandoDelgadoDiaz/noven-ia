@@ -18,6 +18,12 @@
 name: Regenerar expectativa del replay
 
 on:
+  # Disparador transitorio del hotfix: permite regenerar sobre la rama exacta
+  # cuando workflow_dispatch se lanzó accidentalmente desde master. Se elimina
+  # en el mismo commit que incorpora la expectativa revisada.
+  push:
+    branches:
+      - fix/incidente-activacion-segura
   workflow_dispatch:
     inputs:
       motivo:

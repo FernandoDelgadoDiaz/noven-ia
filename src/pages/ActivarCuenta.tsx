@@ -28,12 +28,37 @@ export default function ActivarCuenta() {
 
     setGuardando(true)
 
-    const { error: passwordError } = await supabase.auth.updateUser({ password })
+    // La sesión persistida del navegador puede pertenecer a otra persona. No
+    // tocamos Auth hasta comprobar en servidor que la identidad actual es la
+    // destinataria de una invitación pendiente y vigente.
+    const { data: identidad, error: identidadError } = await supabase.auth.getUser()
+    const usuarioValidado = identidad.user
+    if (identidadError || !usuarioValidado || usuarioValidado.id !== session?.user.id) {
+      setError('La invitación no coincide con la cuenta abierta en este navegador. Abrila en una ventana privada.')
+      setGuardando(false)
+      return
+    }
+
+    const { data: invitacionesValidas, error: validacionError } = await supabase
+      .rpc('validar_invitacion_pendiente_v1')
+    if (validacionError || typeof invitacionesValidas !== 'number' || invitacionesValidas < 1) {
+      setError('La invitación no coincide con la cuenta abierta en este navegador. Abrila en una ventana privada.')
+      setGuardando(false)
+      return
+    }
+
+    const { data: passwordData, error: passwordError } = await supabase.auth.updateUser({ password })
     // La activación tiene dos pasos. Si el primero ya guardó la contraseña pero
     // el RPC falló, el reintento debe retomar el segundo paso en vez de quedar
     // bloqueado por la protección de Supabase contra reutilizar la misma clave.
     if (passwordError && passwordError.code !== 'same_password') {
       setError(passwordError.message)
+      setGuardando(false)
+      return
+    }
+
+    if (passwordData.user && passwordData.user.id !== usuarioValidado.id) {
+      setError('La sesión cambió durante la activación. Cerrá esta ventana y pedí un enlace nuevo.')
       setGuardando(false)
       return
     }
