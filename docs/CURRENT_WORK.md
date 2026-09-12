@@ -119,6 +119,14 @@ Fecha de corte: **2026-09-12**.
   completos en verde, fusionar y desplegar sólo con autorización explícita;
   después regenerar el enlace del alta zonal pendiente y activarlo en una sesión
   aislada.
+- Publicación: PR #192 abierto en borrador desde
+  `fix/incidente-activacion-segura`, commit remoto `86fe865`.
+- Primer CI del PR: run `34719724101`. Secret scanning y preparación quedaron
+  verdes; el paso de tests se detuvo únicamente en el contrato de expectativa
+  móvil porque la migración nueva todavía no integra el artefacto regenerado.
+  Lint, build, replay vivo, aislamiento, cuota, exposición y Playwright quedaron
+  omitidos por ese corte temprano y deberán ejecutarse completos después de la
+  regeneración.
 
 ### Hotfix desplegado · reintento de activación con contraseña ya guardada
 
