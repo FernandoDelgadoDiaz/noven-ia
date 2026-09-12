@@ -15,7 +15,7 @@ seguridad explotables. Cuando una comprobación requiera ese material, se
 registra el resultado mínimo y se enlaza el PR, CI o documento autorizado que
 contiene la evidencia.
 
-Fecha de corte: **2026-09-11**.
+Fecha de corte: **2026-09-12**.
 
 ## Lectura obligatoria antes de continuar
 
@@ -593,19 +593,17 @@ arreglo de texto sin urgencia, pero es real.
 
 ## Próximo paso ejecutable
 
-1. Abrir el PR de `feat/informar-rag-constatacion` y obtener CI verde, incluido
-   el replay con su expectativa móvil regenerada.
-2. Con autorización explícita: mergear, aplicar la migración a producción y
-   registrar el timestamp productivo en `history-manifest.json`, como en C1, C2A
-   y los cuatro bloques del circuito.
-3. Después de aplicar, informar cuántos de los vencimientos hoy sin RAG pueden
-   recibir uno informado y cuántos quedan afuera por otra razón. Cerrar el hueco
-   parcialmente también es un resultado, pero hay que decirlo como tal.
-4. Construir la detección de migraciones mergeadas sin aplicar, según la
-   propuesta registrada en `docs/PRE_PRODUCTION_HARDENING_PLAN.md`.
-5. Recién después, el bloque 4 del circuito: confirmación o rechazo en góndola.
-6. Abrir el PR de la rama ya publicada `docs/degradacion-silenciosa-d8`, que
-   quedó sin PR.
+**No hay ninguno pendiente.** El trabajo de esta sesión está cerrado y nada
+quedó a medias.
+
+Lo que sigue anotado en `docs/PRE_PRODUCTION_HARDENING_PLAN.md` está ahí a
+propósito y **no es un pendiente en curso**: son ítems que se retoman cuando
+haya una razón —una segunda cadena, perecederos reales, el bloque 4 del
+circuito—, no por orden de lista. Ninguno bloquea la operación de hoy.
+
+Quien retome: arrancar por el objetivo que traiga, no por un relevamiento
+abierto del estado. El relevamiento siempre encuentra algo, y siempre parece que
+vale la pena.
 
 ## Protocolo de relevo
 
@@ -942,6 +940,20 @@ arreglo de texto sin urgencia, pero es real.
 - Mitigación temporal por el calendario, no por diseño: seis de los siete cruzan
   a `radar` entre el 2026-09-12 y el 2026-09-16, y el séptimo el 2026-10-05.
 
+### 2026-09-11 · Claude Code · política de vencimientos, cierre del análisis
+
+- Se cerró el análisis de umbrales **sin ejecutarlo**. Nada de eso rompe hoy: la
+  operación viva está toda en masivos y no hay ningún vencimiento activo en
+  perecederos. Los tres hallazgos quedaron registrados con evidencia en
+  `docs/PRE_PRODUCTION_HARDENING_PLAN.md` para retomarse cuando importen —una
+  segunda cadena o perecederos reales—, no antes.
+- Única escritura productiva: `NO COMESTIBLES` (060) y `TEXTIL` (070) pasaron a
+  `dias_donacion = NULL`, como ya se había hecho con `ELECTRO` e `INSUMOS`. Los
+  cuatro sectores fuera de alcance quedan uniformes; cero familias afectadas.
+- No se crearon `VERDULERIA`, `PASTAS` ni `CARNICERIA`: `sectores.codigo` refleja
+  la taxonomía del origen y no se inventa un código que la cadena no dio.
+- Sin cambios de esquema, sin tocar el cálculo de nivel, sin tocar los seis
+  lugares donde viven los umbrales. El comportamiento actual queda como estaba.
 ### 2026-09-11 · Claude Code · nomenclatura del sistema de origen
 
 - El nombre de la cadena y el de sus reportes salieron del texto de usuario:
@@ -975,3 +987,23 @@ arreglo de texto sin urgencia, pero es real.
   preexistente de `ScannerModal.tsx:143`). Playwright local: 21 de 22, con el
   único rojo en `catalog-role-boundary:49`, que **falla igual con el árbol
   limpio** y pasa en CI.
+
+### 2026-09-12 · Estado final de la sesión
+
+Lo que quedó en producción y verificado:
+
+- **`informar_rag` viva.** El primer RAG de un vencimiento se puede constatar.
+  Los nueve vencimientos que estaban sin camino pueden recibirlo: verificado
+  contra la base, evaluando el guard real como cada usuario de la sucursal.
+- **El circuito RAG centralizado, sus cuatro bloques aplicados**, con el
+  timestamp productivo de cada uno registrado en el ledger y declarado en su
+  contrato.
+- **La regla de la frontera** —constatar un hecho y autorizar un cambio son
+  permisos distintos— nombrada en `ai/rules.md`, con contrato y mutantes en las
+  dos direcciones.
+- **El nombre del sistema de la cadena fuera del texto de usuario**, con un
+  contrato que cubre también los recorridos E2E.
+- **Sectores fuera de alcance uniformes:** `NO COMESTIBLES` y `TEXTIL` pasaron a
+  `dias_donacion = NULL`, como ya estaban `ELECTRO` e `INSUMOS`.
+
+Sin ramas ni PRs abiertos. Sin migraciones mergeadas y sin aplicar.
