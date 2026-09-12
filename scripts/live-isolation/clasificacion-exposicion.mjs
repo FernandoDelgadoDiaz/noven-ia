@@ -86,8 +86,52 @@ function fallar(mensajes) {
  * permisiva, un grant de más— sin levantar Postgres. Un verificador que sólo se
  * ejerce contra la base real se prueba únicamente cuando ya es tarde.
  */
-export function verificar({ tablas, grants, politicas, vistas = [], excluidas = new Set() }) {
+/**
+ * Toda función que use una política RLS tiene que ser ejecutable por
+ * `authenticated`.
+ *
+ * POR QUÉ ES UNA COMPROBACIÓN APARTE Y NO UN DETALLE. Una política RLS se
+ * evalúa CON LOS PRIVILEGIOS DE QUIEN CONSULTA. No hay ningún SECURITY DEFINER
+ * prestando los suyos, como sí ocurre cuando la función se llama desde un
+ * `_impl`. Sin EXECUTE, la política no puede correr y la tabla entera queda
+ * inaccesible con `permission denied for function ...`.
+ *
+ * El caso que lo motivó: `20260909020007` creó
+ * `noven_private.puede_ver_solicitud_cambio_rag`, escribió el REVOKE a
+ * `authenticated` y nunca el GRANT. Cuatro bloques del circuito se aplicaron
+ * encima y el defecto apareció recién cuando la operación abrió la tarjeta.
+ *
+ * El gate vivo no lo vio porque siembra con `service_role` y ejercita el
+ * circuito por las RPC, que son DEFINER: ahí el grant faltante es invisible.
+ * El único camino que lo toca es el que toma el browser —leer la vista
+ * directamente— y ése no estaba cubierto. Esta comprobación no reproduce ese
+ * camino: verifica la condición que lo rompe, que alcanza y no depende de que
+ * haya datos sembrados.
+ */
+export function funcionesDePoliticaSinExecute(politicas, ejecutables) {
   const errores = []
+  const concedida = new Map(ejecutables.map((f) => [f.funcion, f.authenticated]))
+
+  for (const politica of politicas) {
+    const expresion = `${politica.usando} ${politica.chequeo}`
+    for (const [funcion, puede] of concedida) {
+      // El nombre calificado seguido de paréntesis: evita que `puede_ver_x`
+      // matchee dentro de `puede_ver_x_y`.
+      if (!expresion.includes(`${funcion}(`)) continue
+      if (puede) continue
+      errores.push(
+        `La política "${politica.politica}" sobre "${politica.tabla}" usa\n`
+        + `      ${funcion}(), que authenticated NO puede ejecutar.\n`
+        + `      Una política se evalúa con los privilegios de quien consulta: sin EXECUTE la\n`
+        + `      política no corre y la tabla queda inaccesible. Falta el GRANT.`,
+      )
+    }
+  }
+  return [...new Set(errores)]
+}
+
+export function verificar({ tablas, grants, politicas, vistas = [], excluidas = new Set(), ejecutables = [] }) {
+  const errores = funcionesDePoliticaSinExecute(politicas, ejecutables)
   const nombres = tablas.map((t) => t.tabla)
 
   // --- Toda tabla tiene clase, y toda clase tiene tabla --------------------
@@ -304,7 +348,19 @@ function main() {
       ORDER BY c.relname
     ) t;`)
 
-  const errores = verificar({ tablas, grants, politicas, vistas, excluidas: exclusionesDeLaBaseline() })
+  const ejecutables = consultar(db, `
+    SELECT coalesce(json_agg(row_to_json(t)), '[]'::json) FROM (
+      SELECT n.nspname || '.' || p.proname AS funcion,
+             bool_or(has_function_privilege('authenticated', p.oid, 'EXECUTE')) AS authenticated
+      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname IN ('public', 'noven_private')
+      GROUP BY 1
+    ) t;`)
+
+  const errores = verificar({
+    tablas, grants, politicas, vistas, ejecutables,
+    excluidas: exclusionesDeLaBaseline(),
+  })
   const nombres = tablas.map((t) => t.tabla)
 
   if (errores.length) {
@@ -324,6 +380,7 @@ function main() {
   console.log(`✓ ${vistas.length} vistas clasificadas, todas con security_invoker=true`)
   console.log('✓ anon sin grants; grants de authenticated exactos por clase')
   console.log('✓ toda política de authenticated acota por tenant o por auth.uid()')
+  console.log('✓ toda función usada por una política es ejecutable por authenticated')
 }
 
 // Sólo corre como CLI: el contrato importa `verificar` para probarla con

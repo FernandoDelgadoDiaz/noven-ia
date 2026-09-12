@@ -13,7 +13,9 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { exclusionesDeLaBaseline, verificar } from '../live-isolation/clasificacion-exposicion.mjs'
+import {
+  exclusionesDeLaBaseline, funcionesDePoliticaSinExecute, verificar,
+} from '../live-isolation/clasificacion-exposicion.mjs'
 import {
   ACOTAMIENTOS, CLASES, CLASES_VISTA,
   CLASIFICACION, CLASIFICACION_VISTAS, VISTAS_EXIGEN_SECURITY_INVOKER,
@@ -269,3 +271,59 @@ assert.match(fuente, /NOVEN_EPHEMERAL_REPLAY/,
 
 console.log(`✓ ${Object.keys(CLASIFICACION).length} tablas y ${Object.keys(CLASIFICACION_VISTAS).length} vistas clasificadas`)
 console.log(`✓ El verificador detecta las ${REGRESIONES.length} formas de exposición indebida, incluida USING(true)`)
+
+// --- Una función de política que authenticated no puede ejecutar ------------
+//
+// El caso real: `20260909020007` revocó `puede_ver_solicitud_cambio_rag` a
+// `authenticated` y no escribió el GRANT. Una política RLS se evalúa con los
+// privilegios de quien consulta, así que la tabla entera quedó inaccesible con
+// `permission denied for function ...`. Cuatro bloques se aplicaron encima sin
+// que nada lo viera: el gate vivo siembra con service_role y ejercita las RPC,
+// que son DEFINER, donde el grant faltante es invisible.
+
+const politicaDelCaso = [{
+  tabla: 'solicitudes_cambio_rag',
+  politica: 'solicitudes_cambio_rag_select_scope',
+  usando: 'noven_private.puede_ver_solicitud_cambio_rag(organizacion_id, zona_id, sucursal_id, producto_id)',
+  chequeo: '',
+}]
+
+assert.equal(
+  funcionesDePoliticaSinExecute(politicaDelCaso, [
+    { funcion: 'noven_private.puede_ver_solicitud_cambio_rag', authenticated: false },
+  ]).length,
+  1,
+  'una función de política sin EXECUTE para authenticated tiene que detectarse',
+)
+
+assert.deepEqual(
+  funcionesDePoliticaSinExecute(politicaDelCaso, [
+    { funcion: 'noven_private.puede_ver_solicitud_cambio_rag', authenticated: true },
+  ]),
+  [],
+  'con el GRANT puesto no puede quedar error',
+)
+
+// El prefijo no alcanza: `puede_ver_x` no debe matchear dentro de
+// `puede_ver_x_ampliado`. Sin el paréntesis, un nombre que es prefijo de otro
+// haría fallar la política equivocada y mandaría a otorgar un grant que no va.
+assert.deepEqual(
+  funcionesDePoliticaSinExecute(
+    [{ tabla: 't', politica: 'p', usando: 'noven_private.puede_ver_x_ampliado(a)', chequeo: '' }],
+    [{ funcion: 'noven_private.puede_ver_x', authenticated: false }],
+  ),
+  [],
+  'el nombre tiene que matchear con paréntesis, no por prefijo',
+)
+
+// También mira `WITH CHECK`, no sólo `USING`.
+assert.equal(
+  funcionesDePoliticaSinExecute(
+    [{ tabla: 't', politica: 'p', usando: '', chequeo: 'noven_private.guard(a)' }],
+    [{ funcion: 'noven_private.guard', authenticated: false }],
+  ).length,
+  1,
+  'la expresión de WITH CHECK cuenta igual que la de USING',
+)
+
+console.log('✓ el verificador detecta funciones de política sin EXECUTE para authenticated')
