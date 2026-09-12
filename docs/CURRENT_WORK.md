@@ -40,17 +40,17 @@ Fecha de corte: **2026-09-12**.
 
 ## Corte Git verificado
 
-### Hotfix activo · redirección de invitaciones
+### Hotfix desplegado · redirección de invitaciones
 
 - Base revisada: `origin/master` en `248d1e8`, cierre documental del PR #186.
-- Rama activa: `fix/invitaciones-redirect-produccion`.
+- PR #187 fusionado por squash en `master` como `e8abbc5`.
 - Hallazgo reproducido desde una invitación real: el enlace de activación fue
   emitido con destino `localhost`, por lo que no puede completarse desde el
   dispositivo de la persona invitada. No se registra el token ni el enlace.
 - Alcance: fijar el destino público de activación en las tres rutas de
   invitaciones, rechazar antes de entregar cualquier link que Supabase devuelva
   con otro destino y limpiar la cuenta Auth parcial en ese fallo.
-- Implementación local: las altas jerárquicas, locales y la regeneración usan
+- Implementación desplegada: las altas jerárquicas, locales y la regeneración usan
   un único destino canónico. El servidor valida el `redirect_to` contenido en
   cada link generado; ante desvío no lo devuelve y compensa la cuenta Auth.
 - Configuración externa pendiente de comprobar en Supabase Auth: `Site URL` y
@@ -59,19 +59,18 @@ Fecha de corte: **2026-09-12**.
 - Pruebas locales sobre `248d1e8`: contrato específico verde; suite completa
   123/123, build y `git diff --check` verdes; lint sin errores y con el warning preexistente de
   `ScannerModal.tsx:143`.
-- Publicación: PR #187 abierto y fusionable contra la base actual. El CI
-  `34701787940` terminó completo en verde: replay, aislamiento vivo, cuota,
-  exposición y Playwright incluidos.
-- El checkpoint documental posterior repitió todos los gates en verde en el CI
-  `34702034908`; el único pendiente técnico es la autorización de merge.
+- Publicación: el PR #187 quedó fusionado después de que el CI final
+  `34702287538` terminara completo en verde. Netlify publicó el commit exacto
+  `e8abbc5` en producción como deploy `6aa57050636e2c000863bbab`, estado `ready`.
+- Los CI anteriores `34701787940` y `34702034908` también terminaron completos
+  en verde: replay, aislamiento vivo, cuota, exposición y Playwright incluidos.
 - La invitación afectada debe regenerarse después de desplegar el hotfix; el
   enlace anterior no debe reutilizarse.
 - Mientras se preparaba el arreglo se detectó que `master` había avanzado desde
   `33a8c5e`; el hotfix se reconcilió con la base actual en vez de forzar el PR
   obsoleto. El bloque 3B, la constatación inicial y sus cierres documentales ya
   están incorporados en `master` y no se reabren ni se sobrescriben.
-- El conector disponible no enumera runs disparados por push a `master`; la
-  validación local y el CI de esta rama siguen siendo obligatorios.
+- No hubo SQL ni cambios de configuración externa durante el merge y despliegue.
 
 Siempre volver a consultar el remoto: estos SHA son evidencia del corte, no una
 base permanente.
@@ -599,11 +598,10 @@ arreglo de texto sin urgencia, pero es real.
 
 ## Próximo paso ejecutable
 
-1. Obtener autorización explícita para mergear y desplegar el PR #187.
-2. Comprobar/corregir en Supabase Auth el `Site URL` y la redirección pública.
-3. Regenerar la invitación afectada y comprobar que el enlace termina en
+1. Comprobar/corregir en Supabase Auth el `Site URL` y la redirección pública.
+2. Regenerar la invitación afectada y comprobar que el enlace termina en
    `https://noven-ia.netlify.app/activar`, nunca en localhost.
-4. Cerrar el hotfix y volver al objetivo que traiga la operación; no reabrir 3B,
+3. Cerrar el hotfix y volver al objetivo que traiga la operación; no reabrir 3B,
    que ya está fusionado y aplicado.
 
 ## Protocolo de relevo
