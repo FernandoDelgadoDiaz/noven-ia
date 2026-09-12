@@ -40,21 +40,26 @@ Fecha de corte: **2026-09-12**.
 
 ## Corte Git verificado
 
-### Hotfix activo · reintento de activación con contraseña ya guardada
+### Hotfix desplegado · reintento de activación con contraseña ya guardada
 
-- Base revisada: `origin/master` en `5c95fa4`, cierre documental del PR #189.
-- Rama activa: `fix/activar-invitacion-password-guardada`.
+- PR #190 fusionado por squash en `master` como `ee3904a`.
 - Evidencia operativa: la invitación regenerada llegó a `/activar`; el primer
   intento guardó la contraseña pero no habilitó el acceso. Al repetir, Supabase
   respondió `same_password` antes de que la UI pudiera reintentar la aceptación.
 - Consulta productiva de sólo lectura: la invitación está pendiente y vigente;
   identidad Auth, email, organización, zona y rol coinciden; el usuario y el
   acceso zonal existen inactivos. No se modificaron datos.
-- Corrección local: sólo `same_password` permite continuar al RPC de aceptación;
+- Corrección desplegada: sólo `same_password` permite continuar al RPC de aceptación;
   cualquier otro error de contraseña sigue deteniendo el flujo. El RPC conserva
   todas sus validaciones de identidad, vencimiento y alcance.
-- Pendiente: validar suite, publicar PR, esperar CI verde y obtener autorización
-  explícita antes de fusionar y desplegar.
+- Validación: contrato específico y suite 124/124 verdes; build y diff-check
+  verdes; lint sin errores y con el warning preexistente de ScannerModal. El CI
+  `34707821376` terminó completo en verde, incluidos replay, aislamiento vivo,
+  cuota, exposición y Playwright.
+- Netlify publicó el commit exacto `ee3904a` como deploy
+  `6aa5b0f5bd2306000804c8d1`, estado `ready`.
+- Pendiente operativo: reabrir el mismo enlace, repetir la contraseña ya guardada
+  y comprobar que la aceptación activa el acceso zonal.
 
 ### Hotfix desplegado · redirección de invitaciones
 
@@ -69,9 +74,9 @@ Fecha de corte: **2026-09-12**.
 - Implementación desplegada: las altas jerárquicas, locales y la regeneración usan
   un único destino canónico. El servidor valida el `redirect_to` contenido en
   cada link generado; ante desvío no lo devuelve y compensa la cuenta Auth.
-- Configuración externa pendiente de comprobar en Supabase Auth: `Site URL` y
-  la lista exacta de redirecciones deben admitir el sitio público y
-  `/activar`. Este ajuste de control no requiere ni autoriza SQL productivo.
+- Configuración externa corregida manualmente en Supabase Auth: `Site URL`
+  público y redirección exacta `/activar`. La invitación regenerada llegó a la
+  pantalla pública correcta; no se aplicó SQL.
 - Pruebas locales sobre `248d1e8`: contrato específico verde; suite completa
   123/123, build y `git diff --check` verdes; lint sin errores y con el warning preexistente de
   `ScannerModal.tsx:143`.
@@ -614,11 +619,10 @@ arreglo de texto sin urgencia, pero es real.
 
 ## Próximo paso ejecutable
 
-1. Validar y publicar el hotfix de reintento de activación.
-2. Con CI verde y autorización explícita, fusionarlo y desplegarlo.
-3. Reabrir el mismo enlace, repetir la contraseña ya guardada y comprobar que
+1. Reabrir el mismo enlace, repetir la contraseña ya guardada y comprobar que
    el acceso de Administración zonal de precios queda activo.
-4. Cerrar el hotfix y volver al objetivo que traiga la operación; no reabrir 3B,
+2. Con esa prueba operativa, cerrar el hotfix y volver al objetivo que traiga la
+   operación; no reabrir 3B,
    que ya está fusionado y aplicado.
 
 ## Protocolo de relevo
