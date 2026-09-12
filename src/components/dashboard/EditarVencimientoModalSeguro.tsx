@@ -633,7 +633,7 @@ export default function EditarVencimientoModalSeguro({
             </div>
             <ProductIdentity producto={vencimiento.productos} showImage={false} label="Control del producto" compact>
               <p className="text-[11px] text-muted-foreground mt-1.5">
-                <span className="font-semibold text-foreground/70">VMD Glaciar:</span>{' '}
+                <span className="font-semibold text-foreground/70">Venta media del sistema:</span>{' '}
                 <span className="font-semibold text-foreground/80">{vencimiento.productos.venta_media_diaria} un/día</span>
               </p>
             </ProductIdentity>
@@ -653,7 +653,7 @@ export default function EditarVencimientoModalSeguro({
         </div>
 
         <div className="px-5 py-4 space-y-3">
-          <Campo label="Stock total Glaciar" htmlFor="ev-stock"><input id="ev-stock" type="number" min={0} value={stockActual} onChange={(e) => setStockActual(Number(e.target.value))} className={inputCls} /></Campo>
+          <Campo label="Stock total del sistema" htmlFor="ev-stock"><input id="ev-stock" type="number" min={0} value={stockActual} onChange={(e) => setStockActual(Number(e.target.value))} className={inputCls} /></Campo>
           <Campo label="Fecha de vencimiento" htmlFor="ev-fecha"><input id="ev-fecha" type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} className={inputCls} /></Campo>
           <Campo label="Cantidad comprometida observada hoy" htmlFor="ev-cantidad">
             <input id="ev-cantidad" type="number" min={0} value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} className={inputCls} />

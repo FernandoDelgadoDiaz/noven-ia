@@ -15,7 +15,7 @@ seguridad explotables. Cuando una comprobación requiera ese material, se
 registra el resultado mínimo y se enlaza el PR, CI o documento autorizado que
 contiene la evidencia.
 
-Fecha de corte: **2026-09-11**.
+Fecha de corte: **2026-09-12**.
 
 ## Lectura obligatoria antes de continuar
 
@@ -593,19 +593,17 @@ arreglo de texto sin urgencia, pero es real.
 
 ## Próximo paso ejecutable
 
-1. Abrir el PR de `feat/informar-rag-constatacion` y obtener CI verde, incluido
-   el replay con su expectativa móvil regenerada.
-2. Con autorización explícita: mergear, aplicar la migración a producción y
-   registrar el timestamp productivo en `history-manifest.json`, como en C1, C2A
-   y los cuatro bloques del circuito.
-3. Después de aplicar, informar cuántos de los vencimientos hoy sin RAG pueden
-   recibir uno informado y cuántos quedan afuera por otra razón. Cerrar el hueco
-   parcialmente también es un resultado, pero hay que decirlo como tal.
-4. Construir la detección de migraciones mergeadas sin aplicar, según la
-   propuesta registrada en `docs/PRE_PRODUCTION_HARDENING_PLAN.md`.
-5. Recién después, el bloque 4 del circuito: confirmación o rechazo en góndola.
-6. Abrir el PR de la rama ya publicada `docs/degradacion-silenciosa-d8`, que
-   quedó sin PR.
+**No hay ninguno pendiente.** El trabajo de esta sesión está cerrado y nada
+quedó a medias.
+
+Lo que sigue anotado en `docs/PRE_PRODUCTION_HARDENING_PLAN.md` está ahí a
+propósito y **no es un pendiente en curso**: son ítems que se retoman cuando
+haya una razón —una segunda cadena, perecederos reales, el bloque 4 del
+circuito—, no por orden de lista. Ninguno bloquea la operación de hoy.
+
+Quien retome: arrancar por el objetivo que traiga, no por un relevamiento
+abierto del estado. El relevamiento siempre encuentra algo, y siempre parece que
+vale la pena.
 
 ## Protocolo de relevo
 
@@ -956,3 +954,56 @@ arreglo de texto sin urgencia, pero es real.
   la taxonomía del origen y no se inventa un código que la cadena no dio.
 - Sin cambios de esquema, sin tocar el cálculo de nivel, sin tocar los seis
   lugares donde viven los umbrales. El comportamiento actual queda como estaba.
+### 2026-09-11 · Claude Code · nomenclatura del sistema de origen
+
+- El nombre de la cadena y el de sus reportes salieron del texto de usuario:
+  diecinueve cadenas en once archivos. Quedan en comentarios, identificadores y
+  nombres de archivo, que es donde describen el formato real que se parsea.
+- **El relevamiento inicial estaba incompleto y lo detectó el contrato.** Miró
+  sólo `pages` y `components`, y se le escaparon tres mensajes de error que viven
+  en `src/lib/importar-glaciar.ts` y llegan al usuario vía `throw new Error` desde
+  las dos pantallas de importación, más un encabezado en mayúsculas del reporte
+  exportable. El contrato los encontró antes que la revisión a ojo.
+- El contrato también protege la mitad inversa: los nombres de columna se
+  conservan. Sin esa aserción, la regla empujaría a vaciar los mensajes de error.
+- Un mutante cazó un defecto del propio contrato: el filtro de identificadores
+  borraba también la palabra suelta, así que daba verde sin verificar nada.
+  Corregido exigiendo un carácter pegado.
+- Dos contratos existentes anclaban en el texto viejo y se actualizaron: las
+  acciones sugeridas de `riesgo-politicas` y el mensaje de carga masiva de
+  `importar-0258`. Lo que verifican no cambió; cambió la redacción.
+- `LARGO_COD_ART = 7` no se tocó: es un supuesto de formato, no de nomenclatura,
+  y la desambiguación contra EAN depende de él. Queda en el plan.
+- **El CI encontró lo que la validación local no miró.** Se validó con la suite
+  de contratos y el build, y no con Playwright —siendo que todo el cambio era
+  texto de pantalla, que es justo lo que Playwright verifica—. Tres recorridos
+  rompieron en CI sobre los textos renombrados: dos `getByLabel('Stock total
+  Glaciar')` y un encabezado «Importar desde Glaciar». Corregidos.
+- Por eso el contrato ahora **también recorre `e2e/`**: un recorrido que busca el
+  nombre de la cadena sólo pasa si la pantalla lo tiene, así que encontrarlo ahí
+  significa o que la UI lo conserva o que el recorrido quedó viejo. Las dos son
+  defectos, y el contrato los ve sin depender de acordarse de correr Playwright.
+- Suite completa en verde, build limpio, lint sin errores (con el warning
+  preexistente de `ScannerModal.tsx:143`). Playwright local: 21 de 22, con el
+  único rojo en `catalog-role-boundary:49`, que **falla igual con el árbol
+  limpio** y pasa en CI.
+
+### 2026-09-12 · Estado final de la sesión
+
+Lo que quedó en producción y verificado:
+
+- **`informar_rag` viva.** El primer RAG de un vencimiento se puede constatar.
+  Los nueve vencimientos que estaban sin camino pueden recibirlo: verificado
+  contra la base, evaluando el guard real como cada usuario de la sucursal.
+- **El circuito RAG centralizado, sus cuatro bloques aplicados**, con el
+  timestamp productivo de cada uno registrado en el ledger y declarado en su
+  contrato.
+- **La regla de la frontera** —constatar un hecho y autorizar un cambio son
+  permisos distintos— nombrada en `ai/rules.md`, con contrato y mutantes en las
+  dos direcciones.
+- **El nombre del sistema de la cadena fuera del texto de usuario**, con un
+  contrato que cubre también los recorridos E2E.
+- **Sectores fuera de alcance uniformes:** `NO COMESTIBLES` y `TEXTIL` pasaron a
+  `dias_donacion = NULL`, como ya estaban `ELECTRO` e `INSUMOS`.
+
+Sin ramas ni PRs abiertos. Sin migraciones mergeadas y sin aplicar.

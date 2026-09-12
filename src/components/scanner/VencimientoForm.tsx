@@ -180,7 +180,7 @@ export default function VencimientoForm({ producto, sucursalId, onSuccess, venci
 
       <div className="bg-white rounded-card shadow-card p-4 flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="vf-stock" className="text-xs font-semibold text-foreground uppercase tracking-wide">Stock total Glaciar</label>
+          <label htmlFor="vf-stock" className="text-xs font-semibold text-foreground uppercase tracking-wide">Stock total del sistema</label>
           <input id="vf-stock" type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={form.stockActual} onChange={(e) => handleChange('stockActual', e.target.value)} placeholder="Ej: 48" className={inputCls} />
         </div>
         <div className="flex flex-col gap-1.5">
