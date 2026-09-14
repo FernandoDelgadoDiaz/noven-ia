@@ -166,9 +166,29 @@ Fecha de corte: **2026-09-14**.
   scanning, 124/124 contratos, lint, build, replay vivo con cero diferencias,
   aislamiento Gates 1–5, cuota, exposición y los flujos críticos de Playwright,
   incluidos los dos casos de activación.
-- Pendiente de autorización: dejar el PR #192 listo para revisión y fusionar
-  sólo con autorización explícita; el despliegue requiere además aplicar la
-  migración Supabase y verificar producción antes de reintentar el alta zonal.
+- Autorización productiva recibida y ejecutada el 2026-09-14: la migración
+  `validar_invitacion_antes_password_v1` quedó aplicada en Supabase con versión
+  productiva `20260914215002`. La verificación de catálogo confirmó
+  `SECURITY DEFINER`, `search_path` vacío, retorno entero, `anon` sin
+  `EXECUTE` y permisos sólo para `authenticated` y `service_role`; sin identidad
+  de usuario devuelve `0`.
+- Asesores ejecutados después del DDL. La advertencia sobre ejecución
+  autenticada de la RPC nueva es intencional: el cuerpo no acepta una identidad
+  del cliente y limita la consulta a `auth.uid()`. Los demás hallazgos son deuda
+  preexistente y no se modificaron dentro de este hotfix.
+- PR #192 listo y fusionado en `master` como
+  `1b650ff1a13bb6c075fb2be19f9aa5c6f5f94953` después de confirmar que la rama
+  seguía en `62f1ef778860fc107bdf11cd23ec97cadf05ce81`.
+- Verificación posterior cerrada: CI de `master` run `34901046964` completo en
+  verde, incluidos replay, aislamiento, cuota, exposición y Playwright.
+  Netlify publicó el commit exacto `1b650ff1a13bb6c075fb2be19f9aa5c6f5f94953`
+  como deploy productivo `6aa86c440674720007131d17`, estado `ready`; la URL
+  productiva responde y redirige correctamente a `/login`.
+- Hotfix productivo cerrado. Próximo paso operativo: generar desde cero una
+  invitación para Administración Zonal de Precios y abrirla en una ventana
+  privada sin ninguna otra sesión de NoVen; verificar que la identidad invitada
+  sea la que queda autenticada antes de confirmar el alta. No reutilizar enlaces
+  ni datos parciales de los intentos anteriores.
 
 ### Hotfix desplegado · reintento de activación con contraseña ya guardada
 
