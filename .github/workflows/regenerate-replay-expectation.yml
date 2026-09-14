@@ -18,9 +18,6 @@
 name: Regenerar expectativa del replay
 
 on:
-  push:
-    branches:
-      - fix/rag-primer-evento-timestamp
   workflow_dispatch:
     inputs:
       motivo:
