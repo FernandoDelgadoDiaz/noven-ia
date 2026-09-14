@@ -15,7 +15,7 @@ seguridad explotables. Cuando una comprobación requiera ese material, se
 registra el resultado mínimo y se enlaza el PR, CI o documento autorizado que
 contiene la evidencia.
 
-Fecha de corte: **2026-09-12**.
+Fecha de corte: **2026-09-14**.
 
 ## Lectura obligatoria antes de continuar
 
@@ -130,9 +130,20 @@ Fecha de corte: **2026-09-12**.
 - Regeneración manual recibida: run `34720381663`, verde, pero ejecutada sobre
   `master` (`3076aaf`) en lugar de la rama del PR. Su artefacto no contiene la
   migración del hotfix y por lo tanto no se incorpora. Se habilitó de forma
-  transitoria un disparador `push` limitado a
-  `fix/incidente-activacion-segura`; debe retirarse al incorporar y revisar el
-  artefacto correcto.
+  transitoria un disparador `push` limitado a la rama del hotfix.
+- Regeneración válida: run `34720665143` sobre `61a2d1a`. El replay descartable
+  aplicó la migración nueva, mantuvo intacta el ancla y produjo los dos únicos
+  archivos permitidos. El artefacto ZIP coincidió con el digest publicado por
+  GitHub (`6d3a799d…`); ambos JSON son válidos y sus SHA-256 locales coinciden
+  con los archivos descargados.
+- Revisión estructural del fingerprint: agrega exactamente la función
+  `validar_invitacion_pendiente_v1` y sus dos permisos `EXECUTE` para
+  `authenticated` y `service_role`; no quita ni modifica ningún objeto. La
+  expectativa incorpora sólo la migración `20260912211542` y mueve sus hashes.
+- La suite interna del workflow falló únicamente porque el contrato prohíbe de
+  forma intencional disparadores `push`; fue el mecanismo transitorio usado
+  para corregir la rama. El disparador ya se retiró y el artefacto revisado se
+  incorporó. Pendiente: ejecutar la CI completa sobre este estado final.
 
 ### Hotfix desplegado · reintento de activación con contraseña ya guardada
 
