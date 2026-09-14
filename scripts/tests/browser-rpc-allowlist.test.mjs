@@ -11,6 +11,9 @@ const SRC = path.join(ROOT, 'src')
 // Cualquier incorporación aquí requiere revisión de alcance/RLS/RPC.
 const ALLOWED_BROWSER_RPCS = new Set([
   'aceptar_invitacion_acceso_v1',
+  // Precondición de seguridad: la contraseña sólo se toca si la identidad
+  // actual tiene una invitación pendiente y vigente con el mismo email.
+  'validar_invitacion_pendiente_v1',
   'actualizar_imagen_producto_operador_v2',
   'anular_vencimiento_carga_incorrecta',
   'buscar_conflicto_codigos_scanner',
@@ -91,7 +94,7 @@ assert.deepEqual(
   `RPC aprobadas pero sin caller browser: ${aprobadasSinCaller.join(', ')}. Revisar si corresponde revocar EXECUTE.`,
 )
 
-assert.equal(usados.size, 24, 'La superficie browser esperada debe permanecer en 24 RPC explícitas')
+assert.equal(usados.size, 25, 'La superficie browser esperada debe permanecer en 25 RPC explícitas')
 assert.equal(usados.has('listar_resumen_radar_zonal_v1'), false, 'El resumen Radar huérfano no debe volver al navegador')
 
 console.log(`✓ Allowlist browser RPC: ${usados.size} entradas explícitas y sin superficie huérfana`)

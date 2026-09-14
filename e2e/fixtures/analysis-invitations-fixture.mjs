@@ -141,7 +141,8 @@ export async function installInvitationFixture(page) {
   return { adminSucursalCalls, invitationCalls, currentInvitations: () => invitations }
 }
 
-export async function installActivationFixture(page) {
+export async function installActivationFixture(page, options = {}) {
+  const { validInvitations = 1 } = options
   const pendingAccess = {
     id: INVITATION_IDS.access,
     usuario_id: IDS.user,
@@ -182,6 +183,11 @@ export async function installActivationFixture(page) {
           updated_at: '2026-08-28T18:00:01-03:00',
         }),
       })
+    }
+
+    if (path.includes('/rest/v1/rpc/validar_invitacion_pendiente_v1')) {
+      events.push({ type: 'validate' })
+      return route.fulfill({ status: 200, headers: jsonHeaders(), body: String(validInvitations) })
     }
 
     if (path.includes('/rest/v1/rpc/aceptar_invitacion_acceso_v1')) {

@@ -589,10 +589,29 @@ test.describe('Noven · invitaciones seguras', () => {
 
     await expect(page.getByText('Cuenta activada', { exact: true })).toBeVisible()
     await expect.poll(() => fixture.isAccepted()).toBeTruthy()
-    expect(fixture.events.map((event) => event.type)).toEqual(['password', 'accept'])
-    expect(fixture.events[0]?.body?.password).toBe('NuevaClaveE2E!')
+    expect(fixture.events.map((event) => event.type)).toEqual(['validate', 'password', 'accept'])
+    expect(fixture.events[1]?.body?.password).toBe('NuevaClaveE2E!')
 
     await page.waitForURL('**/dashboard')
     await expect(page.getByRole('heading', { name: 'Sin acceso activo' })).toHaveCount(0)
+  })
+
+  test('/activar no cambia la contraseña de una sesión sin invitación pendiente', async ({ page }) => {
+    const fixture = await installActivationFixture(page, { validInvitations: 0 })
+
+    await page.goto('/login')
+    await page.getByLabel('Email').fill('admin@noven.test')
+    await page.getByLabel('Contraseña').fill('e2e-password')
+    await page.getByRole('button', { name: 'Ingresar' }).click()
+    await page.waitForURL('**/dashboard')
+    await page.goto('/activar')
+
+    await page.getByLabel('Nueva contraseña').fill('NoDebeGuardarseE2E!')
+    await page.getByLabel('Repetir contraseña').fill('NoDebeGuardarseE2E!')
+    await page.getByRole('button', { name: 'Crear contraseña y entrar' }).click()
+
+    await expect(page.getByText('La invitación no coincide con la cuenta abierta en este navegador. Abrila en una ventana privada.')).toBeVisible()
+    expect(fixture.events.map((event) => event.type)).toEqual(['validate'])
+    expect(fixture.isAccepted()).toBeFalsy()
   })
 })

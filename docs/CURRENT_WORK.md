@@ -15,7 +15,7 @@ seguridad explotables. Cuando una comprobación requiera ese material, se
 registra el resultado mínimo y se enlaza el PR, CI o documento autorizado que
 contiene la evidencia.
 
-Fecha de corte: **2026-09-12**.
+Fecha de corte: **2026-09-14**.
 
 ## Lectura obligatoria antes de continuar
 
@@ -40,6 +40,136 @@ Fecha de corte: **2026-09-12**.
 
 ## Corte Git verificado
 
+### Incidente en remediación · activación con sesión cruzada
+
+- Hallazgo operativo: se abrió `/activar` sin el enlace firmado de invitación
+  mientras existía una sesión autenticada. La pantalla aceptó esa sesión como
+  suficiente y ejecutó el cambio de contraseña sobre el usuario autenticado,
+  aunque no tenía una invitación pendiente asociada.
+- Impacto comprobado: la cuenta administrativa afectada conserva su perfil
+  activo y sus accesos; el incidente se limitó a la contraseña. Se inició el
+  flujo seguro de recuperación para el correo exacto de esa cuenta, pero luego
+  se confirmó que la dirección registrada es de fantasía y no tiene un buzón
+  accesible. El token emitido no puede recuperarse en texto desde Auth porque se
+  conserva cifrado, al igual que la contraseña anterior, de la que sólo se
+  conserva su hash.
+- Remediación operativa completada: las identidades parciales, perfiles,
+  invitaciones y accesos inactivos creados durante los intentos fallidos fueron
+  eliminados bajo guardas de identidad, estado pendiente y ausencia de accesos
+  activos. La verificación posterior confirmó que no quedaron registros del
+  alta fallida y que la cuenta administrativa permaneció activa e intacta salvo
+  por la contraseña ya reportada.
+- Riesgo vigente: no compartir ni abrir la URL base `/activar`. Hasta desplegar
+  la corrección, sólo puede utilizarse un enlace firmado recién emitido y en una
+  sesión de navegador separada.
+- Hotfix implementado en `fix/incidente-activacion-segura`: `/activar` verifica
+  contra Auth la identidad actual y exige mediante una nueva RPC que esa misma
+  identidad tenga una invitación pendiente, vigente y con el mismo correo antes
+  de modificar la contraseña. Una discrepancia detiene el flujo e indica abrir
+  el enlace en una ventana privada.
+- La RPC nueva resuelve exclusivamente `auth.uid()`, no recibe identidad desde
+  el cliente, revoca los privilegios implícitos y sólo permite ejecución a
+  `authenticated` y `service_role`.
+- Remediación de identidad completada: el correo de fantasía fue reemplazado de
+  forma controlada por la dirección real confirmada por el responsable. Se
+  sincronizaron usuario e identidad Auth, se invalidaron el token anterior y
+  las sesiones existentes, y se verificó que el perfil permanece activo con su
+  mismo conjunto de accesos.
+- Recuperación emitida: Supabase aceptó el envío al nuevo correo y generó un
+  token de recuperación. No se publicaron contraseñas temporales ni enlaces
+  Auth en documentación o canales compartidos.
+- Prueba operativa de recuperación completada: el enlace fue consumido, Auth
+  guardó la nueva contraseña y creó una sesión válida. La pantalla mostró luego
+  un error porque intentó ejecutar también la aceptación de una invitación que
+  no existe para esa cuenta; esa segunda operación fallida no revirtió la
+  recuperación. El perfil y el conjunto de accesos continuaron activos.
+- Segunda reproducción operativa, interpretación corregida: se creó una nueva
+  invitación zonal válida y se abrió su enlace desde un canal de mensajería. La
+  identidad invitada, correo, alcance y rol coincidían; una simulación
+  transaccional con rollback confirmó que el RPC la acepta cuando se ejecuta
+  como esa identidad. Sin embargo, al enviar el formulario el cliente utilizó
+  la sesión administrativa persistida, cambió la contraseña de esa cuenta y el
+  RPC devolvió cero porque esa identidad no tenía la invitación zonal.
+- El alta zonal nueva permanece pendiente e inactiva. El perfil y los accesos de
+  la cuenta administrativa permanecen activos, pero su contraseña vigente es
+  la última ingresada durante el intento zonal; no se registra ni se solicita
+  su valor.
+- Recuperación posterior: se invalidaron las sesiones para contener la sesión
+  cruzada. El nuevo envío de recuperación fue rechazado temporalmente por el
+  límite de correo de Auth (`429`), por lo que no debe repetirse hasta que se
+  libere la ventana. La cuenta puede ingresar con el correo real y la última
+  contraseña ingresada.
+- Contención operativa: no abrir invitaciones ni `/activar` hasta desplegar el
+  hotfix; el problema está en la vinculación de la sesión del cliente, no en los
+  datos ni en el RPC de la invitación.
+- Estado de la cuenta administrativa: el responsable confirmó que puede
+  ingresar con la contraseña provisional resultante del último intento. Queda
+  pendiente reemplazarla por la contraseña personal elegida cuando Auth vuelva
+  a permitir el correo de recuperación.
+- Validación del hotfix: contratos específicos verdes y mutación comprobada; al
+  debilitar temporalmente la guarda, el contrato falló por la causa esperada y
+  luego se restauró. Una ejecución transaccional descartable contra producción
+  devolvió `0` para la sesión administrativa sin invitación y `1` para la
+  identidad zonal invitada; todo se revirtió con rollback.
+- `npm run build` verde. `npm run lint` sin errores y con el warning preexistente
+  de `ScannerModal.tsx:143`. La suite ejecutó 123/124 contratos verdes; el único
+  fallo es el gate deliberado de expectativa móvil, que detectó la migración
+  nueva y exige regenerar el replay descartable antes del cierre.
+- Pendiente: regenerar la expectativa de replay en CI, obtener suite y gates
+  completos en verde, fusionar y desplegar sólo con autorización explícita;
+  después regenerar el enlace del alta zonal pendiente y activarlo en una sesión
+  aislada.
+- Publicación: PR #192 abierto en borrador desde
+  `fix/incidente-activacion-segura`, commit remoto `86fe865`.
+- Primer CI del PR: run `34719724101`. Secret scanning y preparación quedaron
+  verdes; el paso de tests se detuvo únicamente en el contrato de expectativa
+  móvil porque la migración nueva todavía no integra el artefacto regenerado.
+  Lint, build, replay vivo, aislamiento, cuota, exposición y Playwright quedaron
+  omitidos por ese corte temprano y deberán ejecutarse completos después de la
+  regeneración.
+- Regeneración manual recibida: run `34720381663`, verde, pero ejecutada sobre
+  `master` (`3076aaf`) en lugar de la rama del PR. Su artefacto no contiene la
+  migración del hotfix y por lo tanto no se incorpora. Se habilitó de forma
+  transitoria un disparador `push` limitado a la rama del hotfix.
+- Regeneración válida: run `34720665143` sobre `61a2d1a`. El replay descartable
+  aplicó la migración nueva, mantuvo intacta el ancla y produjo los dos únicos
+  archivos permitidos. El artefacto ZIP coincidió con el digest publicado por
+  GitHub (`6d3a799d…`); ambos JSON son válidos y sus SHA-256 locales coinciden
+  con los archivos descargados.
+- Revisión estructural del fingerprint: agrega exactamente la función
+  `validar_invitacion_pendiente_v1` y sus dos permisos `EXECUTE` para
+  `authenticated` y `service_role`; no quita ni modifica ningún objeto. La
+  expectativa incorpora sólo la migración `20260912211542` y mueve sus hashes.
+- La suite interna del workflow falló únicamente porque el contrato prohíbe de
+  forma intencional disparadores `push`; fue el mecanismo transitorio usado
+  para corregir la rama. El disparador ya se retiró y el artefacto revisado se
+  incorporó. Pendiente: ejecutar la CI completa sobre este estado final.
+- CI final inicial sobre `173bbb8a`: run `34899015481`. Tests, lint, build,
+  replay vivo, aislamiento, cuota y exposición quedaron verdes. Playwright
+  falló sólo en el fixture de activación: el mock anterior devolvía `[]` para
+  la nueva RPC de prevalidación y todavía esperaba el orden viejo
+  `password → accept`, por lo que la UI cerró correctamente antes de cambiar la
+  contraseña.
+- Corrección de prueba en curso: el fixture devuelve un conteo numérico para
+  `validar_invitacion_pendiente_v1`, exige el orden
+  `validate → password → accept` y agrega el caso negativo que comprueba que
+  una sesión sin invitación recibe el rechazo y no emite ningún cambio de
+  contraseña ni aceptación. Pendiente: validar y republicar la CI completa.
+- Corrección de prueba completada en `fbcece5`: el recorrido positivo exige
+  `validate → password → accept` y el nuevo recorrido negativo reproduce una
+  sesión autenticada sin invitación pendiente, confirma el mensaje de rechazo
+  y demuestra que no se emitió ningún `PUT` de contraseña ni aceptación.
+- Validación local posterior: 124/124 archivos de contrato verdes, build verde,
+  sintaxis E2E y `git diff --check` verdes; lint sin errores y con el warning
+  preexistente de `ScannerModal.tsx:143`.
+- CI completa del estado funcional: run `34899625388`, verde. Pasaron secret
+  scanning, 124/124 contratos, lint, build, replay vivo con cero diferencias,
+  aislamiento Gates 1–5, cuota, exposición y los flujos críticos de Playwright,
+  incluidos los dos casos de activación.
+- Pendiente de autorización: dejar el PR #192 listo para revisión y fusionar
+  sólo con autorización explícita; el despliegue requiere además aplicar la
+  migración Supabase y verificar producción antes de reintentar el alta zonal.
+
 ### Hotfix desplegado · reintento de activación con contraseña ya guardada
 
 - PR #190 fusionado por squash en `master` como `ee3904a`.
@@ -58,8 +188,8 @@ Fecha de corte: **2026-09-12**.
   cuota, exposición y Playwright.
 - Netlify publicó el commit exacto `ee3904a` como deploy
   `6aa5b0f5bd2306000804c8d1`, estado `ready`.
-- Pendiente operativo: reabrir el mismo enlace, repetir la contraseña ya guardada
-  y comprobar que la aceptación activa el acceso zonal.
+- Pendiente operativo anterior cerrado por descarte: ese enlace y los datos
+  parciales fueron eliminados después del incidente; no deben reutilizarse.
 
 ### Hotfix desplegado · redirección de invitaciones
 
