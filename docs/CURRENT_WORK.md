@@ -155,6 +155,20 @@ Fecha de corte: **2026-09-14**.
   `validate → password → accept` y agrega el caso negativo que comprueba que
   una sesión sin invitación recibe el rechazo y no emite ningún cambio de
   contraseña ni aceptación. Pendiente: validar y republicar la CI completa.
+- Corrección de prueba completada en `fbcece5`: el recorrido positivo exige
+  `validate → password → accept` y el nuevo recorrido negativo reproduce una
+  sesión autenticada sin invitación pendiente, confirma el mensaje de rechazo
+  y demuestra que no se emitió ningún `PUT` de contraseña ni aceptación.
+- Validación local posterior: 124/124 archivos de contrato verdes, build verde,
+  sintaxis E2E y `git diff --check` verdes; lint sin errores y con el warning
+  preexistente de `ScannerModal.tsx:143`.
+- CI completa del estado funcional: run `34899625388`, verde. Pasaron secret
+  scanning, 124/124 contratos, lint, build, replay vivo con cero diferencias,
+  aislamiento Gates 1–5, cuota, exposición y los flujos críticos de Playwright,
+  incluidos los dos casos de activación.
+- Pendiente de autorización: dejar el PR #192 listo para revisión y fusionar
+  sólo con autorización explícita; el despliegue requiere además aplicar la
+  migración Supabase y verificar producción antes de reintentar el alta zonal.
 
 ### Hotfix desplegado · reintento de activación con contraseña ya guardada
 
