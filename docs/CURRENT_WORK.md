@@ -1206,8 +1206,20 @@ Sin ramas ni PRs abiertos. Sin migraciones mergeadas y sin aplicar.
   desactualizada al agregar una migración y debe regenerarse en el workflow
   aislado. Docker no está disponible en este entorno, por lo que el replay SQL
   queda a cargo del CI efímero.
-- **Pendiente:** abrir el PR, ejecutar el replay efímero, incorporar la
-  expectativa móvil regenerada y obtener CI verde. Después requiere
-  autorización explícita para fusionar y aplicar la migración en Supabase. Sólo
-  entonces corresponde que sucursal 091 vuelva a pulsar `Informar 30%` y
-  verificar la fila real en la bandeja zonal.
+- **Publicación:** PR draft #194 abierto contra `master`. El primer CI quedó
+  condicionado por la expectativa móvil, como estaba previsto.
+- **Replay efímero ejecutado:** run `34909463003` sobre el commit del hotfix.
+  La migración se aplicó completa; el ancla quedó intacta y el guard confirmó
+  que sólo cambiaron los dos archivos móviles. El ZIP descargado coincidió con
+  el SHA-256 publicado por GitHub
+  (`4a40a564562edb2559fb0ead12da3ad1ddf13ed1e2bcf662b39d50de37069ea0`).
+- **Revisión estructural:** agrega 0 objetos, elimina 0 y cambia exactamente la
+  definición de `noven_private.solicitar_cambio_rag_impl(uuid)`. El workflow
+  terminó rojo únicamente porque su disparador transitorio, ya retirado, viola
+  deliberadamente el contrato que exige `workflow_dispatch`; el replay y la
+  generación del artefacto habían terminado verdes antes de ese control.
+- **Pendiente:** publicar la expectativa revisada y este checkpoint, obtener CI
+  completo verde y sacar el PR de borrador. Después requiere autorización
+  explícita para fusionar y aplicar la migración en Supabase. Sólo entonces
+  corresponde que sucursal 091 vuelva a pulsar `Informar 30%` y verificar la
+  fila real en la bandeja zonal.
