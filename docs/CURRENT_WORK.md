@@ -1177,3 +1177,37 @@ Lo que quedó en producción y verificado:
   `dias_donacion = NULL`, como ya estaban `ELECTRO` e `INSUMOS`.
 
 Sin ramas ni PRs abiertos. Sin migraciones mergeadas y sin aplicar.
+
+### 2026-09-14 · Codex · incidente al informar cambio RAG 20% → 30%
+
+- **Evidencia operativa.** Desde la sucursal 091 se intentó informar el escalón
+  sugerido 30% sobre un vencimiento que tenía RAG 20%. La pantalla respondió:
+  `Los eventos RAG centralizados deben conservar orden temporal`.
+- **Impacto comprobado en producción, sólo con lecturas:** la transacción se
+  revirtió completa. No quedó solicitud ni evento parcial y la bandeja zonal no
+  recibió el intento. El RAG vigente tampoco fue modificado.
+- **Causa raíz:** `solicitar_cambio_rag_impl` guardaba la solicitud con
+  `clock_timestamp()`, pero el primer evento omitía `ocurrida_at` y heredaba
+  `DEFAULT now()`. En PostgreSQL, `now()` representa el inicio de la transacción
+  y podía quedar antes que el instante posterior de la solicitud; el trigger de
+  orden temporal rechazaba correctamente esa secuencia imposible.
+- **Hotfix en la rama `fix/rag-primer-evento-timestamp`:** migración
+  `20260914232526_fijar_timestamp_primer_evento_rag.sql`. La solicitud y su
+  primer evento `solicitada` usan ahora el mismo `v_creada_at` capturado por el
+  servidor. No se aflojó el trigger, no se cambió la escala y no se fabricó una
+  solicitud para reemplazar la operación fallida.
+- **Contrato agregado:** `rag-primer-evento-timestamp-contract.test.mjs`
+  comprueba el timestamp compartido y contiene un mutante que vuelve a usar
+  `now()` para demostrar que el contrato detecta la regresión.
+- **Validación local:** contrato específico verde; lint sin errores y con el
+  warning preexistente de `ScannerModal.tsx:143`; build de producción verde;
+  `git diff --check` verde. La suite ejecutó 124 de 125 contratos en verde: el
+  único rojo es la expectativa móvil del replay, que por diseño queda
+  desactualizada al agregar una migración y debe regenerarse en el workflow
+  aislado. Docker no está disponible en este entorno, por lo que el replay SQL
+  queda a cargo del CI efímero.
+- **Pendiente:** abrir el PR, ejecutar el replay efímero, incorporar la
+  expectativa móvil regenerada y obtener CI verde. Después requiere
+  autorización explícita para fusionar y aplicar la migración en Supabase. Sólo
+  entonces corresponde que sucursal 091 vuelva a pulsar `Informar 30%` y
+  verificar la fila real en la bandeja zonal.
