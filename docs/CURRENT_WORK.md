@@ -144,6 +144,17 @@ Fecha de corte: **2026-09-14**.
   forma intencional disparadores `push`; fue el mecanismo transitorio usado
   para corregir la rama. El disparador ya se retiró y el artefacto revisado se
   incorporó. Pendiente: ejecutar la CI completa sobre este estado final.
+- CI final inicial sobre `173bbb8a`: run `34899015481`. Tests, lint, build,
+  replay vivo, aislamiento, cuota y exposición quedaron verdes. Playwright
+  falló sólo en el fixture de activación: el mock anterior devolvía `[]` para
+  la nueva RPC de prevalidación y todavía esperaba el orden viejo
+  `password → accept`, por lo que la UI cerró correctamente antes de cambiar la
+  contraseña.
+- Corrección de prueba en curso: el fixture devuelve un conteo numérico para
+  `validar_invitacion_pendiente_v1`, exige el orden
+  `validate → password → accept` y agrega el caso negativo que comprueba que
+  una sesión sin invitación recibe el rechazo y no emite ningún cambio de
+  contraseña ni aceptación. Pendiente: validar y republicar la CI completa.
 
 ### Hotfix desplegado · reintento de activación con contraseña ya guardada
 
