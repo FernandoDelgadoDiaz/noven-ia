@@ -1223,8 +1223,10 @@ Sin ramas ni PRs abiertos. Sin migraciones mergeadas y sin aplicar.
   copia local completa seguía dando 125/125; el hotfix y el replay no eran la
   causa. El archivo se republicó por fragmentos y GitHub confirmó el blob
   completo `55f91187b44fff617bf66ba929e6111e5ecf75f1`, idéntico al local.
-- **Pendiente:** obtener CI completo verde y sacar el PR de borrador. Después
-  requiere autorización
-  explícita para fusionar y aplicar la migración en Supabase. Sólo entonces
-  corresponde que sucursal 091 vuelva a pulsar `Informar 30%` y verificar la
-  fila real en la bandeja zonal.
+- **CI funcional completo:** run `34954204513` verde sobre `1a36a7ae`. Pasaron
+  secret scanning, 125/125 contratos, lint, build, replay vivo sin diferencias,
+  aislamiento, cuota, clasificación de exposición y Playwright.
+- **Estado del PR:** #194 listo para revisión. El único pendiente es la
+  autorización explícita para fusionar y aplicar la migración en Supabase. Sólo
+  después de verificar ese DDL en producción corresponde que sucursal 091
+  vuelva a pulsar `Informar 30%` y confirmar la fila real en la bandeja zonal.
