@@ -1218,8 +1218,13 @@ Sin ramas ni PRs abiertos. Sin migraciones mergeadas y sin aplicar.
   terminó rojo únicamente porque su disparador transitorio, ya retirado, viola
   deliberadamente el contrato que exige `workflow_dispatch`; el replay y la
   generación del artefacto habían terminado verdes antes de ese control.
-- **Pendiente:** publicar la expectativa revisada y este checkpoint, obtener CI
-  completo verde y sacar el PR de borrador. Después requiere autorización
+- **Hallazgo de publicación:** el CI `34909781987` falló en dos contratos porque
+  la primera transferencia del fingerprint grande a GitHub quedó truncada. La
+  copia local completa seguía dando 125/125; el hotfix y el replay no eran la
+  causa. El archivo se republicó por fragmentos y GitHub confirmó el blob
+  completo `55f91187b44fff617bf66ba929e6111e5ecf75f1`, idéntico al local.
+- **Pendiente:** obtener CI completo verde y sacar el PR de borrador. Después
+  requiere autorización
   explícita para fusionar y aplicar la migración en Supabase. Sólo entonces
   corresponde que sucursal 091 vuelva a pulsar `Informar 30%` y verificar la
   fila real en la bandeja zonal.
