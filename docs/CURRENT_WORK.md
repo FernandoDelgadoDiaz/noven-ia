@@ -1226,7 +1226,24 @@ Sin ramas ni PRs abiertos. Sin migraciones mergeadas y sin aplicar.
 - **CI funcional completo:** run `34954204513` verde sobre `1a36a7ae`. Pasaron
   secret scanning, 125/125 contratos, lint, build, replay vivo sin diferencias,
   aislamiento, cuota, clasificación de exposición y Playwright.
-- **Estado del PR:** #194 listo para revisión. El único pendiente es la
-  autorización explícita para fusionar y aplicar la migración en Supabase. Sólo
-  después de verificar ese DDL en producción corresponde que sucursal 091
-  vuelva a pulsar `Informar 30%` y confirmar la fila real en la bandeja zonal.
+- **Autorización y control previo (2026-09-15):** el usuario autorizó aplicar la
+  migración Supabase, fusionar y desplegar el PR #194. Antes de escribir se
+  reconfirmó el head `78d7d44662bd5c3407eb5647e7ddf22bf23e359c`, PR abierto y
+  fusionable, y CI `34954640756` verde (125/125 contratos, lint, build, replay,
+  límites de acceso y Playwright).
+- **Migración productiva aplicada:** Supabase registró
+  `20260915095903_fijar_timestamp_primer_evento_rag` en el proyecto productivo
+  saludable `meqvjabgyrgwkxpclqxp`.
+- **Verificación posterior del catálogo:**
+  `noven_private.solicitar_cambio_rag_impl(uuid)` conserva `SECURITY DEFINER`,
+  volatilidad `VOLATILE` y `search_path` vacío. La definición productiva incluye
+  `ocurrida_at` y asigna `v_creada_at` al primer evento `solicitada`. `PUBLIC` y
+  `anon` no tienen `EXECUTE`; `authenticated` y `service_role` sí.
+- **Asesores Supabase ejecutados:** no apareció un hallazgo nuevo atribuible a
+  este reemplazo de función. Persisten avisos informativos preexistentes de RLS,
+  índices y configuración general, fuera del alcance de este hotfix; no se
+  alteraron durante el incidente.
+- **Estado:** falta que este registro vuelva a pasar CI y luego fusionar #194 y
+  comprobar que Netlify desplegó el commit exacto. Sólo después corresponde que
+  sucursal 091 vuelva a pulsar `Informar 30%` y que Mariela confirme la fila
+  real en su bandeja zonal.
