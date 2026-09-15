@@ -1177,3 +1177,73 @@ Lo que quedó en producción y verificado:
   `dias_donacion = NULL`, como ya estaban `ELECTRO` e `INSUMOS`.
 
 Sin ramas ni PRs abiertos. Sin migraciones mergeadas y sin aplicar.
+
+### 2026-09-14 · Codex · incidente al informar cambio RAG 20% → 30%
+
+- **Evidencia operativa.** Desde la sucursal 091 se intentó informar el escalón
+  sugerido 30% sobre un vencimiento que tenía RAG 20%. La pantalla respondió:
+  `Los eventos RAG centralizados deben conservar orden temporal`.
+- **Impacto comprobado en producción, sólo con lecturas:** la transacción se
+  revirtió completa. No quedó solicitud ni evento parcial y la bandeja zonal no
+  recibió el intento. El RAG vigente tampoco fue modificado.
+- **Causa raíz:** `solicitar_cambio_rag_impl` guardaba la solicitud con
+  `clock_timestamp()`, pero el primer evento omitía `ocurrida_at` y heredaba
+  `DEFAULT now()`. En PostgreSQL, `now()` representa el inicio de la transacción
+  y podía quedar antes que el instante posterior de la solicitud; el trigger de
+  orden temporal rechazaba correctamente esa secuencia imposible.
+- **Hotfix en la rama `fix/rag-primer-evento-timestamp`:** migración
+  `20260914232526_fijar_timestamp_primer_evento_rag.sql`. La solicitud y su
+  primer evento `solicitada` usan ahora el mismo `v_creada_at` capturado por el
+  servidor. No se aflojó el trigger, no se cambió la escala y no se fabricó una
+  solicitud para reemplazar la operación fallida.
+- **Contrato agregado:** `rag-primer-evento-timestamp-contract.test.mjs`
+  comprueba el timestamp compartido y contiene un mutante que vuelve a usar
+  `now()` para demostrar que el contrato detecta la regresión.
+- **Validación local:** contrato específico verde; lint sin errores y con el
+  warning preexistente de `ScannerModal.tsx:143`; build de producción verde;
+  `git diff --check` verde. La suite ejecutó 124 de 125 contratos en verde: el
+  único rojo es la expectativa móvil del replay, que por diseño queda
+  desactualizada al agregar una migración y debe regenerarse en el workflow
+  aislado. Docker no está disponible en este entorno, por lo que el replay SQL
+  queda a cargo del CI efímero.
+- **Publicación:** PR draft #194 abierto contra `master`. El primer CI quedó
+  condicionado por la expectativa móvil, como estaba previsto.
+- **Replay efímero ejecutado:** run `34909463003` sobre el commit del hotfix.
+  La migración se aplicó completa; el ancla quedó intacta y el guard confirmó
+  que sólo cambiaron los dos archivos móviles. El ZIP descargado coincidió con
+  el SHA-256 publicado por GitHub
+  (`4a40a564562edb2559fb0ead12da3ad1ddf13ed1e2bcf662b39d50de37069ea0`).
+- **Revisión estructural:** agrega 0 objetos, elimina 0 y cambia exactamente la
+  definición de `noven_private.solicitar_cambio_rag_impl(uuid)`. El workflow
+  terminó rojo únicamente porque su disparador transitorio, ya retirado, viola
+  deliberadamente el contrato que exige `workflow_dispatch`; el replay y la
+  generación del artefacto habían terminado verdes antes de ese control.
+- **Hallazgo de publicación:** el CI `34909781987` falló en dos contratos porque
+  la primera transferencia del fingerprint grande a GitHub quedó truncada. La
+  copia local completa seguía dando 125/125; el hotfix y el replay no eran la
+  causa. El archivo se republicó por fragmentos y GitHub confirmó el blob
+  completo `55f91187b44fff617bf66ba929e6111e5ecf75f1`, idéntico al local.
+- **CI funcional completo:** run `34954204513` verde sobre `1a36a7ae`. Pasaron
+  secret scanning, 125/125 contratos, lint, build, replay vivo sin diferencias,
+  aislamiento, cuota, clasificación de exposición y Playwright.
+- **Autorización y control previo (2026-09-15):** el usuario autorizó aplicar la
+  migración Supabase, fusionar y desplegar el PR #194. Antes de escribir se
+  reconfirmó el head `78d7d44662bd5c3407eb5647e7ddf22bf23e359c`, PR abierto y
+  fusionable, y CI `34954640756` verde (125/125 contratos, lint, build, replay,
+  límites de acceso y Playwright).
+- **Migración productiva aplicada:** Supabase registró
+  `20260915095903_fijar_timestamp_primer_evento_rag` en el proyecto productivo
+  saludable `meqvjabgyrgwkxpclqxp`.
+- **Verificación posterior del catálogo:**
+  `noven_private.solicitar_cambio_rag_impl(uuid)` conserva `SECURITY DEFINER`,
+  volatilidad `VOLATILE` y `search_path` vacío. La definición productiva incluye
+  `ocurrida_at` y asigna `v_creada_at` al primer evento `solicitada`. `PUBLIC` y
+  `anon` no tienen `EXECUTE`; `authenticated` y `service_role` sí.
+- **Asesores Supabase ejecutados:** no apareció un hallazgo nuevo atribuible a
+  este reemplazo de función. Persisten avisos informativos preexistentes de RLS,
+  índices y configuración general, fuera del alcance de este hotfix; no se
+  alteraron durante el incidente.
+- **Estado:** falta que este registro vuelva a pasar CI y luego fusionar #194 y
+  comprobar que Netlify desplegó el commit exacto. Sólo después corresponde que
+  sucursal 091 vuelva a pulsar `Informar 30%` y que Mariela confirme la fila
+  real en su bandeja zonal.
