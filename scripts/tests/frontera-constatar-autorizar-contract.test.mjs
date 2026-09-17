@@ -20,8 +20,9 @@
 //                producto no es tenerla.
 //
 // El registro es la parte que hay que mantener: toda RPC nueva de las familias
-// informar / finalizar / solicitar / ejecutar tiene que declararse de un lado o
-// del otro, y el contrato falla mientras no lo esté. Esa falla es el punto.
+// informar / finalizar / solicitar / ejecutar / verificar tiene que declararse
+// de un lado o del otro, y el contrato falla mientras no lo esté. Esa falla es
+// el punto.
 //
 // Al final del archivo, mutantes en las dos direcciones: un constatador con
 // lista de roles y un autorizador que se conforma con el alcance tienen que
@@ -38,7 +39,7 @@ const RAIZ = path.resolve(AQUI, '../..')
 const MIGRACIONES = path.join(RAIZ, 'supabase/migrations')
 
 /** Familias de RPC que cruzan la frontera y por lo tanto deben clasificarse. */
-const FAMILIAS = /^(?:informar|finalizar|solicitar|ejecutar)_[a-z0-9_]*_impl$/
+const FAMILIAS = /^(?:informar|finalizar|solicitar|ejecutar|verificar)_[a-z0-9_]*_impl$/
 
 const FRONTERA = new Map([
   // Constatar: declarar un hecho que ya ocurrió en la góndola.
@@ -46,6 +47,13 @@ const FRONTERA = new Map([
   ['informar_oferta_central_impl', 'constatacion'],
   // Cerrar una intervención también es constatar: el precio dejó de estar.
   ['finalizar_intervencion_por_tipo_impl', 'constatacion'],
+  // Verificar en góndola es el caso más claro de los tres: la persona está
+  // parada frente al producto y dice si el precio está o no está. Quién puede
+  // hacerlo lo decide el trigger del historial; lo que la RPC autoriza es el
+  // ALCANCE, y el conjunto que habilita `puede_ver_producto_sucursal` —gerente,
+  // supervisor, operador con la familia— es exactamente el que el trigger
+  // enumera para esta transición.
+  ['verificar_cambio_rag_impl', 'constatacion'],
   // Autorizar: pedir el cambio de precio, y ejecutarlo en la cadena.
   ['solicitar_cambio_rag_impl', 'autorizacion'],
   ['ejecutar_solicitud_cambio_rag_impl', 'autorizacion'],

@@ -59,6 +59,12 @@ export interface SolicitudBandeja {
   estado_actual: EstadoSolicitudRag
   validada_por_nombre: string
   requiere_ejecucion: boolean
+  /**
+   * Veces que la sucursal verificó en góndola y el precio no estaba. Distingue
+   * una solicitud que ya volvió de una nueva: después de re-ejecutarla vuelve a
+   * `lista_confirmacion`, con el mismo estado y el mismo aspecto.
+   */
+  reintentos_no_aplicada: number
 }
 
 export interface BandejaZonal {

@@ -53,6 +53,12 @@ const ALLOWED_BROWSER_RPCS = new Set([
   // La administrativa identifica una solicitud; actor, zona, estado y fecha de
   // habilitación se resuelven en servidor y el doble click es idempotente.
   'ejecutar_solicitud_cambio_rag',
+  // Paso 5 del circuito: constatar si el precio está o no está en la góndola.
+  // Son dos RPC y no una con un parámetro para que el resultado no viaje como
+  // texto desde el navegador. La que confirma abre el tramo del nuevo
+  // porcentaje; la otra no toca ninguna intervención.
+  'confirmar_cambio_rag_en_gondola',
+  'registrar_cambio_rag_no_aplicado',
   'vincular_ean_producto_scanner',
 ])
 
@@ -94,7 +100,7 @@ assert.deepEqual(
   `RPC aprobadas pero sin caller browser: ${aprobadasSinCaller.join(', ')}. Revisar si corresponde revocar EXECUTE.`,
 )
 
-assert.equal(usados.size, 25, 'La superficie browser esperada debe permanecer en 25 RPC explícitas')
+assert.equal(usados.size, 27, 'La superficie browser esperada debe permanecer en 27 RPC explícitas')
 assert.equal(usados.has('listar_resumen_radar_zonal_v1'), false, 'El resumen Radar huérfano no debe volver al navegador')
 
 console.log(`✓ Allowlist browser RPC: ${usados.size} entradas explícitas y sin superficie huérfana`)

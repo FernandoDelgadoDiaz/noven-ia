@@ -31,7 +31,7 @@ export function useSolicitudCambioRag(vencimientoId: string): UseSolicitudCambio
     setEstado((prev) => ({ ...prev, loading: true, error: null }))
     const { data, error } = await supabase
       .from('v_solicitudes_cambio_rag_actual')
-      .select('id, organizacion_id, zona_id, sucursal_id, producto_id, vencimiento_id, solicitada_por, porcentaje_rag_vigente, porcentaje_solicitado, creada_at, ultimo_evento, ultimo_actor_id, ultimo_evento_at, habilitada_desde, estado_actual')
+      .select('id, organizacion_id, zona_id, sucursal_id, producto_id, vencimiento_id, solicitada_por, porcentaje_rag_vigente, porcentaje_solicitado, creada_at, ultimo_evento, ultimo_actor_id, ultimo_evento_at, habilitada_desde, estado_actual, reintentos_no_aplicada')
       .eq('vencimiento_id', vencimientoId)
       .order('creada_at', { ascending: false })
       .limit(1)

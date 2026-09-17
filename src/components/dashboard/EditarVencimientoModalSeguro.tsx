@@ -5,6 +5,7 @@ import {
   ArrowRightLeft,
   CheckCircle,
   CircleOff,
+  ClipboardCheck,
   Clock3,
   Percent,
   Save,
@@ -159,6 +160,10 @@ export default function EditarVencimientoModalSeguro({
   const [seleccionRagInformado, setSeleccionRagInformado] = useState('')
   const [porcentajeRagFueraEscala, setPorcentajeRagFueraEscala] = useState('')
   const [informandoRag, setInformandoRag] = useState(false)
+  // Verificación en góndola: `null` mientras no hay llamada en curso, y el
+  // resultado que se está enviando mientras la hay. Un solo estado para los dos
+  // botones evita que se pueda disparar el otro mientras uno viaja.
+  const [verificandoGondola, setVerificandoGondola] = useState<'confirmada' | 'no_aplicada' | null>(null)
   const [notaOfertaCentral, setNotaOfertaCentral] = useState('')
   const [gestionandoOfertaCentral, setGestionandoOfertaCentral] = useState(false)
   const [confirmarFinalizarOferta, setConfirmarFinalizarOferta] = useState(false)
@@ -465,6 +470,47 @@ export default function EditarVencimientoModalSeguro({
   }
 
   /**
+   * Paso 5 del circuito: decir si el precio está o no está en la góndola.
+   *
+   * Son dos RPC distintas y no una con un parámetro, a propósito: el browser
+   * elige el BOTÓN, no el valor. Confirmar abre el tramo del nuevo porcentaje
+   * —el tramo arranca acá, no en la ejecución zonal—; «no aplicada» no toca
+   * ninguna intervención y devuelve la solicitud a la bandeja zonal.
+   *
+   * No se pide control guardado como en informar/solicitar: constatar que un
+   * precio está en góndola no depende del stock, y bloquearlo por eso sería
+   * negarse a registrar un hecho por una razón que no tiene que ver con él.
+   */
+  async function handleVerificarGondola(
+    resultado: 'confirmada' | 'no_aplicada',
+  ): Promise<void> {
+    if (!solicitudCambioRag) return
+    setError(null)
+    setVerificandoGondola(resultado)
+    // Las dos llamadas se escriben enteras, con el nombre literal. Armarlo con
+    // un ternario deja la RPC invisible para `browser-rpc-allowlist`, que es el
+    // contrato que audita qué puede invocar el navegador: una superficie que el
+    // gate no puede leer es una superficie sin revisar.
+    const { error: rpcError } = resultado === 'confirmada'
+      ? await supabase.rpc('confirmar_cambio_rag_en_gondola', {
+        p_solicitud_id: solicitudCambioRag.id,
+        p_nota: null,
+      })
+      : await supabase.rpc('registrar_cambio_rag_no_aplicado', {
+        p_solicitud_id: solicitudCambioRag.id,
+        p_nota: null,
+      })
+    setVerificandoGondola(null)
+    if (rpcError) {
+      setError(`No se pudo registrar la verificación en góndola: ${rpcError.message}`)
+      return
+    }
+
+    await recargarSolicitudRag()
+    onGuardado()
+  }
+
+  /**
    * Porcentaje elegido para informar, o null si todavía no hay uno válido.
    *
    * La escala gobierna lo que se SUGIERE, no lo que se puede declarar: si la
@@ -602,6 +648,7 @@ export default function EditarVencimientoModalSeguro({
   const riskViz = RISK_VISUAL[nivelCalculado]
   const ocupado = guardando || cerrandoVendido || anulando || subiendoFoto || informandoRag
     || finalizandoRag || gestionandoOfertaCentral || declarandoSalida || solicitandoRag
+    || verificandoGondola !== null
   const puedeEditarFoto = modoFoto === 'agregar' || modoFoto === 'reemplazar'
   const inputCls = 'w-full h-11 px-3 bg-surface-base border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-all duration-150'
 
@@ -811,6 +858,64 @@ export default function EditarVencimientoModalSeguro({
                     <Percent className="h-3.5 w-3.5" />
                     {informandoRag ? 'Informando…' : 'Informar RAG'}
                   </button>
+                </div>
+              )}
+              {/*
+                * PASO 5 DEL CIRCUITO, a nivel de la tarjeta y no dentro del
+                * bloque de sugerencia. Ahí adentro sólo se ve mientras siga
+                * habiendo una sugerencia vigente, y para cuando el cambio está
+                * ejecutado y esperando verificación puede no haberla: el
+                * circuito se probó en producción y se cortó exactamente acá,
+                * sin forma de decir que el precio ya estaba en góndola.
+                */}
+              {!cargandoSolicitudRag && solicitudCambioRag
+                && solicitudCambioRag.estado_actual === 'lista_confirmacion' && (
+                <div className="rounded-lg border border-sky-300 bg-sky-50 p-3 space-y-2.5">
+                  <div className="flex items-start gap-2 text-sky-900">
+                    <ClipboardCheck className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[11px] font-bold">Verificá el precio en góndola</p>
+                      <p className="text-[10px] text-sky-900/80">
+                        El cambio {solicitudCambioRag.porcentaje_rag_vigente ?? 0}% → {solicitudCambioRag.porcentaje_solicitado}% ya se cargó en el sistema.
+                        El seguimiento del nuevo porcentaje empieza cuando confirmás que está puesto.
+                      </p>
+                      {solicitudCambioRag.reintentos_no_aplicada > 0 && (
+                        <p className="text-[10px] font-semibold text-amber-800 mt-1">
+                          Ya verificaste este cambio {solicitudCambioRag.reintentos_no_aplicada === 1 ? 'una vez' : `${solicitudCambioRag.reintentos_no_aplicada} veces`} y el precio no estaba. Se volvió a cargar.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleVerificarGondola('confirmada')}
+                      disabled={ocupado}
+                      className="flex-1 h-9 flex items-center justify-center gap-2 rounded-lg bg-sky-700 text-white font-semibold text-[11px] disabled:opacity-50"
+                    >
+                      <CheckCircle className="h-3.5 w-3.5" />
+                      {verificandoGondola === 'confirmada' ? 'Confirmando…' : 'Confirmo el precio en góndola'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleVerificarGondola('no_aplicada')}
+                      disabled={ocupado}
+                      className="flex-1 h-9 flex items-center justify-center gap-2 rounded-lg border border-sky-300 bg-white text-sky-900 font-semibold text-[11px] disabled:opacity-50"
+                    >
+                      <CircleOff className="h-3.5 w-3.5" />
+                      {verificandoGondola === 'no_aplicada' ? 'Registrando…' : 'El precio no está aplicado'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {!cargandoSolicitudRag && solicitudCambioRag
+                && solicitudCambioRag.estado_actual === 'no_aplicada' && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-amber-900">
+                  <Clock3 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <p className="text-[11px]">
+                    <span className="font-semibold">{SOLICITUD_RAG_LABEL.no_aplicada}.</span>{' '}
+                    Volvió a la bandeja zonal para cargarse de nuevo; vas a poder verificarla otra vez cuando esté.
+                  </p>
                 </div>
               )}
               {!cargandoSolicitudRag && solicitudCambioRag && solicitudCambioRag.estado_actual === 'confirmada' && (
