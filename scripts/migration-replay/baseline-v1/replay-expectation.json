@@ -21,10 +21,11 @@
     "20260911151500_informar_rag_constatacion_v1.sql",
     "20260912013000_reparar_grant_puede_ver_solicitud_cambio_rag_v1.sql",
     "20260912211542_validar_invitacion_antes_password_v1.sql",
-    "20260914232526_fijar_timestamp_primer_evento_rag.sql"
+    "20260914232526_fijar_timestamp_primer_evento_rag.sql",
+    "20260917143000_confirmacion_gondola_rag_v1.sql"
   ],
-  "forward_migrations_sha256": "bdb03fd5c65d5679708774b5dac750e9f985f2e52389ed50f5c4b36839284ca5",
-  "replay_fingerprint_sha256": "8b3d79576613f777776f30da93a3302284af0b93799cc4e01fe91344f5ef9ce7",
+  "forward_migrations_sha256": "5ab587a7053a5382c8b4da973b8837a6aa8f2cfb3ee8b8142337805c6e7b5664",
+  "replay_fingerprint_sha256": "8d810d009c8d4fe0a9efc0cc829c1567ea22bd21a03859b01f2021d81c3c843a",
   "anchor_fingerprint_sha256": "837771691ffc6e2276c66a26f9ae010c872f12ea33b118406d48b2ad6fca38af",
   "anchor_materialized_at": "2026-09-01",
   "anchor_materialized_from": "catalogo productivo meqvjabgyrgwkxpclqxp (PR #129)",
