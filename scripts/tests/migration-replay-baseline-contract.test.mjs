@@ -85,6 +85,7 @@ assert.deepEqual([...ledgerDivergences.keys()], [
   'rag_centralizado_bandeja_zonal_timestamp',
   'rag_centralizado_jornada_zonal_timestamp',
   'informar_rag_constatacion_timestamp',
+  'reparar_grant_puede_ver_solicitud_cambio_rag_timestamp',
 ])
 const cuotaCacheTimestamp = ledgerDivergences.get('cuota_y_cache_timestamp')
 assert.equal(cuotaCacheTimestamp.kind, 'repository_production_version_mismatch')
@@ -220,6 +221,8 @@ for (const [id, versionRepo, versionProd, nombreProd] of [
    'rag_centralizado_jornada_zonal_v1'],
   ['informar_rag_constatacion_timestamp', '20260911151500', '20260911181056',
    'informar_rag_constatacion_v1'],
+  ['reparar_grant_puede_ver_solicitud_cambio_rag_timestamp', '20260912013000', '20260912134150',
+   'reparar_grant_puede_ver_solicitud_cambio_rag_v1'],
 ]) {
   const entrada = ledgerDivergences.get(id)
   assert.ok(entrada, `falta la divergencia ${id}`)
