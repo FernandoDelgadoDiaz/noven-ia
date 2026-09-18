@@ -113,10 +113,12 @@ assert.match(bandejaLib, /timeZone: 'America\/Argentina\/Buenos_Aires'/)
 assert.match(page, /fechaHoraArgentina/)
 assert.match(page, /Marcar Activo/,
   'el contrato nombra la acción como la ve la administrativa, no como la persiste el evento')
-// La exportación entró con el bloque 3B; impresión, lote y confirmación en
-// góndola siguen fuera de la bandeja.
-assert.doesNotMatch(page, /Imprimir|Ejecutar seleccionadas|confirmar_solicitud_cambio_rag/,
-  'lote, impresión y confirmación en góndola pertenecen a bloques posteriores')
+// La exportación entró con el bloque 3B; impresión y lote siguen fuera de la
+// bandeja. La confirmación en góndola ya existe, pero es de la SUCURSAL —vive
+// en la tarjeta del vencimiento— y no de esta pantalla: la administrativa carga
+// el cambio en la cadena, no dice si el precio está puesto.
+assert.doesNotMatch(page, /Imprimir|Ejecutar seleccionadas|confirmar_cambio_rag_en_gondola/,
+  'lote, impresión y la verificación en góndola no pertenecen a la bandeja zonal')
 
 assert.match(ragRoute, /rol === 'administrativa_precios_zonal'[\s\S]*?Boolean\(acceso\.zona_id\)[\s\S]*?acceso\.sucursal_id === null/)
 assert.match(router, /element: <RagZonalRoute \/>[\s\S]*?path: 'rag\/zona'/)

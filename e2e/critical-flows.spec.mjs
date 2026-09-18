@@ -433,6 +433,15 @@ test.describe('Noven · bandeja RAG zonal', () => {
     await expect(page.getByText('Santa Cruz Sur', { exact: true })).toBeVisible()
     await expect(page.getByText('PRODUCTO RAG ZONAL E2E')).toBeVisible()
     await expect(page.getByText('20% → 30%')).toBeVisible()
+    // Una fila por solicitud, con su encabezado de columnas: la tarjeta es la
+    // regresión que este recorrido tiene que ver.
+    // `exact` en los tres: `getByRole` compara el nombre por SUBCADENA, así que
+    // 'Producto' matchea también 'Vto. producto' y el recorrido muere por
+    // modo estricto en vez de por lo que quiere comprobar.
+    await expect(page.getByRole('table').first()).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Producto', exact: true }).first()).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Stock compr.', exact: true }).first()).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Acción', exact: true }).first()).toBeVisible()
     await expect(page.locator('select[aria-label="Seleccionar sucursal de trabajo"]:visible')).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Scanner' })).toHaveCount(0)
@@ -463,12 +472,12 @@ test.describe('Noven · bandeja RAG zonal', () => {
       p_solicitud_id: RAG_ZONAL_IDS.request,
     })
     expect(fixture.directTableWrites).toEqual([])
-    // Exacto a propósito: la tarjeta muestra además el estado completo
-    // —«Ejecutada · disponible mañana»—, y una coincidencia por subcadena
-    // confundiría la pastilla breve con esa línea.
-    await expect(page.getByText('EJECUTADA', { exact: true })).toBeVisible()
+    // La fila muestra un solo texto de estado. Antes había además una pastilla
+    // breve que decía lo mismo con otras palabras, y ocupaba ancho en la
+    // columna más disputada de la tabla.
     await expect(page.getByText('Ejecutada · disponible mañana')).toBeVisible()
-    await expect(page.getByText(/La sucursal podrá verificarla en góndola desde 10\/09\/2026/)).toBeVisible()
+    // El párrafo de dos renglones se volvió un renglón en la misma celda.
+    await expect(page.getByText('Verifica desde 10/09/2026')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Marcar Activo' })).toHaveCount(0)
 
     await page.goto('/dashboard')
