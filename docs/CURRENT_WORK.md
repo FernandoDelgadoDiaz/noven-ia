@@ -268,6 +268,7 @@ base permanente.
 | Nomenclatura · el sistema de origen fuera del texto de usuario | PR #185 |
 | Grant del helper de RLS del circuito | PR #196 (ya aplicado en producción como `20260912134150`) |
 | **4 · confirmación o rechazo en góndola** | PR #197; registro productivo #198 |
+| Bandeja zonal · tabla en vez de tarjetas | PR #200; especificación en `docs/BANDEJA_RAG_ZONAL_TABLA_V1.md` |
 
 ### En ejecución
 
@@ -287,7 +288,9 @@ Orden acordado:
 4. confirmación o rechazo en góndola por gerente, supervisor u operador
    asignado a la familia, iniciando el tramo sólo al confirmar — **cerrado**,
    PR #197, aplicado como `20260918003315`;
-5. impresión y operación por lote — **único paso restante del circuito**.
+5. impresión y operación por lote — **único paso restante del circuito**, y
+   **no urgente**: con el volumen de solicitudes que hay hoy, ejecutar de a una
+   funciona. Se vuelve necesario cuando la zona entera genere volumen real.
 
 ### Decisión de evidencia · 2026-09-08
 
@@ -1373,3 +1376,67 @@ recorta.
 **Estado:** el paso 4 está en producción y sin ejercitar. Lo que falta es la
 prueba operativa, descrita en «Próximo paso ejecutable». Sin ramas abiertas.
 Sin migraciones mergeadas y sin aplicar.
+
+### 2026-09-18 · Claude Code · la bandeja zonal vuelve a ser una tabla
+
+**Origen: uso real.** La administrativa zonal, mirando la pantalla con datos
+reales, dijo que la tarjeta es demasiado grande. Con más de treinta solicitudes
+diarias de distintos locales obliga a scrollear para hacer un trabajo que es de
+lectura horizontal: **ella no analiza, transcribe.**
+
+**El mockup que definió esta pantalla era una tabla y vivía fuera de Git**, así
+que la implementación como tarjetas no contradecía nada escrito y nadie lo notó.
+`docs/BANDEJA_RAG_ZONAL_TABLA_V1.md` existe desde ahora para que la próxima vez
+sí lo contradiga, y `bandeja-zonal-tabla-contract.test.mjs` para que falle.
+
+**El hallazgo que ordenó el resto.** Al hacer el presupuesto de ancho apareció
+que con `max-w-6xl` la tabla no entraba **ni en pantalla ancha**: 1088px útiles
+contra 1376px de columnas. El scroll horizontal no habría sido el caso raro de
+la pantalla chica sino el normal. Por eso la bandeja usa `max-w-[1600px]` y no
+el ancho de lectura del resto: es una mesa de trabajo, no una página de lectura.
+
+**Qué pasa en pantalla angosta, decidido antes de escribir.** ≥1440px todo
+visible; entre 768 y 1440 la tabla scrollea dentro de su bloque con `Código` y
+`Producto` fijas a la izquierda —son las que identifican la fila— y `Acción`
+fija a la derecha; debajo de 768 se suelta el anclaje porque 330px de columnas
+fijas en un teléfono de 390px dejarían 60px de ventana. El encabezado de zona,
+la jornada, el título de sucursal y los botones de exportar quedan fuera del
+contenedor que scrollea.
+
+**Lo descartado, con su razón.** Ocultar columnas por umbral es lo más común y
+acá lo peor: si desaparece una columna no hay señal de que falta, la fila se
+copia incompleta y el error se descubre en el otro sistema. Un scroll se ve y se
+recupera; una columna ausente no. Y tarjeta en móvil con tabla en escritorio son
+dos renderizados de la misma pantalla, que es el mecanismo exacto que produjo
+este problema.
+
+**Dos divergencias deliberadas con la exportación**, escritas en
+`ENCABEZADOS_EXPORTACION` donde las va a leer quien compare: el archivo conserva
+`Sucursal` y separa `Sector` de `Familia`; la pantalla no hace ninguna de las
+dos. La segunda ya existía y no estaba pedida: se anotó igual, porque una
+explicada y otra no es peor que ninguna.
+
+**Una instrucción basada en un supuesto falso, corregida en vez de ejecutada.**
+El pedido incluía «mantené la selección múltiple con checkbox que ya existía».
+No existía, verificado en tres direcciones: ningún commit de la pantalla la tuvo
+(#180, #181, #197), no hay RPC de lote —`ejecutar_solicitud_cambio_rag` opera de
+a una— y `circuito-rag-centralizado-bandeja-zonal-contract` la prohíbe por
+escrito como perteneciente a un bloque posterior. Construirla no habría sido
+conservar algo sino abrir el paso 5 y levantar un contrato puesto a propósito.
+Quedó fuera de alcance por decisión del responsable del producto.
+
+**Playwright encontró un defecto propio antes de empujar**, que es el punto: el
+recorrido nuevo usaba `getByRole('columnheader', { name: 'Producto' })` y
+`getByRole` compara el nombre **por subcadena**, así que matcheaba también
+`'Vto. producto'` y moría por modo estricto. Es la misma trampa que el contrato
+viejo ya advertía para los textos de estado, en otro lugar. Corregido con
+`exact: true`.
+
+**Validación:** 127 contratos en verde, lint sin errores —queda el warning
+preexistente de `ScannerModal.tsx:143`—, build de producción, y **Playwright
+completo 23/23 corrido localmente antes de publicar**. Verificado además que la
+exportación sigue respetando filtros, orden y agrupación: pantalla y archivo
+comparten `ordenarSolicitudes` y `agruparPorSucursal`.
+
+**Estado:** PR #200 fusionado. Sin migraciones: el cambio es de presentación y
+no toca el servidor.
