@@ -15,7 +15,7 @@ seguridad explotables. Cuando una comprobación requiera ese material, se
 registra el resultado mínimo y se enlaza el PR, CI o documento autorizado que
 contiene la evidencia.
 
-Fecha de corte: **2026-09-14**.
+Fecha de corte: **2026-09-18**.
 
 ## Lectura obligatoria antes de continuar
 
@@ -263,13 +263,18 @@ base permanente.
 | RAG centralizado · modelo y permisos | PR #178 |
 | RAG centralizado · validación y seguimiento en sucursal | PR #179 |
 | RAG centralizado · 3A bandeja y ejecución zonal | PR #180 |
+| RAG centralizado · 3B jornada zonal, corte y exportación | PR #181; cierre productivo #182 |
+| `informar_rag` · constatar el primer RAG | PR #183; aplicación productiva #184 |
+| Nomenclatura · el sistema de origen fuera del texto de usuario | PR #185 |
+| Grant del helper de RLS del circuito | PR #196 (ya aplicado en producción como `20260912134150`) |
+| **4 · confirmación o rechazo en góndola** | PR #197; registro productivo #198 |
 
 ### En ejecución
 
-**Circuito de validación y ejecución centralizada de RAG.** A, B, C y los
-bloques 1, 2 y 3A ya están cerrados. En ejecución está el bloque 3B en
-`feat/rag-centralizado-jornada-zonal`; se considera cerrado sólo después del
-merge explícitamente autorizado.
+**Circuito de validación y ejecución centralizada de RAG.** Con el paso 4
+aplicado a producción el 2026-09-18, el circuito recorre entero: una sugerencia
+se valida en la sucursal, se ejecuta en la zona y se verifica en la góndola, y
+el tramo del nuevo porcentaje nace en esa verificación.
 
 Orden acordado:
 
@@ -278,10 +283,11 @@ Orden acordado:
 3. bandeja zonal:
    - **3A:** base y ejecución individual — cerrado;
    - **3B:** jornada configurable, corte de visibilidad y exportación Excel por
-     sucursal o por toda la zona — en ejecución;
+     sucursal o por toda la zona — cerrado;
 4. confirmación o rechazo en góndola por gerente, supervisor u operador
-   asignado a la familia, iniciando el tramo sólo al confirmar;
-5. impresión y operación por lote restante.
+   asignado a la familia, iniciando el tramo sólo al confirmar — **cerrado**,
+   PR #197, aplicado como `20260918003315`;
+5. impresión y operación por lote — **único paso restante del circuito**.
 
 ### Decisión de evidencia · 2026-09-08
 
@@ -323,9 +329,9 @@ Resumen reconciliado; el detalle y las condiciones de salida permanecen en
 
 ## Pruebas
 
-Última base validada, PR #177:
+Última base validada, `master` en `2df3e78`:
 
-- `npm test`: 115/115 archivos en verde.
+- `npm test`: 126/126 archivos en verde.
 - `npm run lint`: cero errores; permanece un warning preexistente en
   `ScannerModal.tsx:143`.
 - `npm run build`: verde.
@@ -769,11 +775,26 @@ arreglo de texto sin urgencia, pero es real.
 
 ## Próximo paso ejecutable
 
-1. Reabrir el mismo enlace, repetir la contraseña ya guardada y comprobar que
-   el acceso de Administración zonal de precios queda activo.
-2. Con esa prueba operativa, cerrar el hotfix y volver al objetivo que traiga la
-   operación; no reabrir 3B,
-   que ya está fusionado y aplicado.
+**Prueba operativa del paso 4, que todavía no ocurrió.** El código está en
+producción; falta ejercitarlo con la operación real. Hay dos solicitudes en
+`lista_confirmacion`, habilitadas desde el 2026-09-17, y dan la casualidad de
+ser las dos ramas de la idempotencia:
+
+1. **Alfajor tofi blanco (`7790040953703`, sucursal 091).** Tiene un RAG vivo
+   ya al 30% abierto a mano el 17/09, con `origen_sugerencia = 'manual'`. Al
+   confirmar, la RPC **no abre un tramo nuevo**: reatribuye esa intervención a
+   `sugerida_aceptada` con el snapshot de la solicitud y **no mueve
+   `aplicado_at`**. Es el caso que motivó que la confirmación fuera idempotente.
+2. **Producto `2657430`.** Tiene un RAG vivo al 20%. Al confirmar, ese tramo se
+   cierra con `reemplazado_por_circuito` y se abre el del 30% arrancando en ese
+   instante.
+
+Confirmando las dos queda ejercitado el circuito completo por los dos caminos.
+Falta también ejercitar `no_aplicada` al menos una vez, que es el único camino
+del paso 4 sin prueba operativa: la solicitud debe volver sola a la bandeja
+zonal y aparecer marcada como ya vuelta de góndola.
+
+No reabrir 3B ni el paso 4: están fusionados y aplicados.
 
 ## Protocolo de relevo
 
@@ -1247,3 +1268,108 @@ Sin ramas ni PRs abiertos. Sin migraciones mergeadas y sin aplicar.
   comprobar que Netlify desplegó el commit exacto. Sólo después corresponde que
   sucursal 091 vuelva a pulsar `Informar 30%` y que Mariela confirme la fila
   real en su bandeja zonal.
+
+### 2026-09-17/18 · Claude Code · paso 5 del circuito, la verificación en góndola
+
+**El diagnóstico fue más grande que el pedido.** El circuito se probó de punta a
+punta en producción sobre el alfajor tofi blanco de la 091 y se cortó en el
+último paso. No faltaba el botón: **faltaba el servidor.** Ninguna RPC del
+repositorio emitía `confirmada` ni `no_aplicada`. El modelo de eventos los
+admitía desde `20260909020007` —el CHECK de `tipo`, las transiciones del
+trigger, la compuerta de `habilitada_desde` y los tres roles habilitados están
+escritos ahí— pero nadie podía insertarlos. La máquina de estados existía sin su
+último paso.
+
+La consecuencia es mayor que el botón: el tramo del nuevo porcentaje nace en la
+confirmación, así que sin ella el motor de cobertura sigue midiendo contra el
+porcentaje viejo. La salida previsible de eso fue la que ocurrió: se abrió la
+intervención a mano para destrabarla y quedó con `origen_sugerencia = 'manual'`,
+como si nadie la hubiera sugerido, cuando venía de una sugerencia aceptada y
+ejecutada por el circuito. La instrumentación quedó midiendo lo contrario de lo
+que pasó.
+
+**Las cuatro decisiones que quedaron en el código** (PR #197, migración
+`20260917143000_confirmacion_gondola_rag_v1.sql`):
+
+- **La confirmación es idempotente, no excepcional.** Entre la ejecución zonal y
+  la verificación hay al menos un día operativo, y en esa ventana alguien puede
+  abrir el tramo a mano. Si ya hay un RAG vivo *en el porcentaje solicitado* no
+  se abre otro: se corrige su atribución, que es lo único que estaba mal. Si hay
+  uno con otro porcentaje, ése es el tramo que termina.
+- **`aplicado_at` no se retrotrae nunca**, ni al abrir el tramo nuevo ni al
+  corregir uno existente. Moverlo inventa o borra días de medición.
+- **El motivo de cierre es `reemplazado_por_circuito`.** El CHECK de
+  `20260829171500` no lo admitía y se extendió conservando los cuatro motivos
+  viejos; sacarlos no reescribiría la historia, la volvería inválida.
+  `reemplazado` sigue siendo el cierre manual: distinguirlos permite después
+  medir cuánto cierra el circuito y cuánto la mano. Los tramos ya cerrados
+  conservan su motivo.
+- **La RPC no vuelve a decidir permisos de transición.** Eso lo resuelve el
+  trigger del historial; repetirlo sería tener dos copias de la misma regla. Lo
+  que la RPC autoriza es el ALCANCE sobre el producto —verificar en góndola es
+  constatar un hecho— y el conjunto que habilita `puede_ver_producto_sucursal`
+  resultó ser exactamente el que el trigger enumera.
+
+**El aviso de `no_aplicada` no inventa un canal.** La solicitud reaparece sola
+en la bandeja zonal porque `requiere_ejecucion` ya incluye `no_aplicada`. Lo que
+faltaba era poder distinguirla de una nueva: una que vuelve y se re-ejecuta
+queda otra vez en `lista_confirmacion`, con el mismo estado y el mismo aspecto.
+La vista expone `reintentos_no_aplicada`, sacado del historial append-only y no
+de una columna que alguien tenga que mantener.
+
+**Contratos:** `confirmacion-gondola-rag-contract.test.mjs` con cinco mutantes,
+uno por propiedad. `verificar` se suma a las familias que
+`frontera-constatar-autorizar-contract` obliga a clasificar, y la regla en
+`ai/rules.md` se actualizó en consecuencia.
+
+**Hallazgo del propio gate.** `browser-rpc-allowlist` detectó que un nombre de
+RPC armado con un ternario es invisible para su escáner, así que esa superficie
+quedaba sin auditar. La corrección fue del lado del código —las dos llamadas se
+escriben enteras— y no del escáner.
+
+**Deriva cerrada: el grant nunca había llegado a PR.** La reparación
+`20260912013000_reparar_grant_puede_ver_solicitud_cambio_rag_v1.sql` estaba
+aplicada en producción desde el 12/09 y **no estaba en `master`**: la rama se
+había empujado sin abrir PR. Es la deriva inversa a la que se vigila
+habitualmente —la base adelantada al repositorio— y se cerró con el PR #196. El
+gate de clasificación de exposición ahora detecta funciones de política sin
+`EXECUTE`, que es el punto ciego que dejó pasar el defecto original.
+
+**Sobre la expectativa móvil del replay, que es donde estuvo el riesgo real.**
+Al mergear #196 primero, la expectativa regenerada para #197 quedó obsoleta y
+las dos versiones chocaron sobre los mismos archivos. Ninguna de las dos era
+correcta. Resolver ese conflicto a mano habría producido exactamente lo que el
+contrato advierte —«un archivo para poner CI en verde»— porque el resultado no
+vendría de ningún replay. Se descartó la expectativa y se regeneró desde cero
+con las dos migraciones en el mismo árbol (run `35287484201`), extraída del
+respaldo gzip+base64 del log y verificada por SHA-256. El ancla no se tocó.
+
+Ese mismo run vale como la verificación que el repositorio solo no puede dar:
+aplica todas las migraciones contra un Postgres real, así que la migración no
+sólo parsea —los cuerpos plpgsql no se analizan al crearse— sino que se ejecuta
+limpia. Su diff estructural es exactamente lo declarado: tres funciones nuevas,
+el CHECK, la vista conservando `security_invoker=true` y la bandeja zonal.
+
+**Aplicación productiva, autorizada por el usuario el 2026-09-18.** Supabase
+registró `20260918003315_confirmacion_gondola_rag_v1` en `meqvjabgyrgwkxpclqxp`.
+El desfasaje de timestamp es el mismo de siempre y quedó documentado en
+`history-manifest.json` y declarado en su contrato (PR #198). Se verificó que
+**el contenido no divergió, sólo el nombre**: el SQL del ledger es idéntico byte
+a byte al archivo de `master` salvo el salto de línea final, que el ledger
+recorta.
+
+**Verificado contra la base después de aplicar:**
+
+- el CHECK admite `reemplazado_por_circuito` y conserva los cuatro motivos
+  viejos;
+- la vista expone `reintentos_no_aplicada` y conserva `security_invoker=true`,
+  que no sobrevive a `CREATE OR REPLACE VIEW`;
+- las tres funciones tienen `EXECUTE` para `authenticated` y `anon` quedó
+  afuera; el `service_role` sobre los dos wrappers `public.*` es el default de
+  Supabase que el REVOKE deliberadamente no toca, igual que en toda la familia;
+- las dos solicitudes pendientes leen `lista_confirmacion` con
+  `reintentos_no_aplicada = 0`.
+
+**Estado:** el paso 4 está en producción y sin ejercitar. Lo que falta es la
+prueba operativa, descrita en «Próximo paso ejecutable». Sin ramas abiertas.
+Sin migraciones mergeadas y sin aplicar.
