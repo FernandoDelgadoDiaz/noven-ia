@@ -215,6 +215,20 @@ export default function BandejaRagZonal() {
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${solicitud.requiere_ejecucion ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
                           {solicitud.requiere_ejecucion ? 'PENDIENTE' : 'EJECUTADA'}
                         </span>
+                        {/*
+                          * Una solicitud que volvió de góndola y se re-ejecutó
+                          * queda otra vez en `lista_confirmacion`: sin esta
+                          * marca es idéntica a una que nunca falló, y la
+                          * administrativa no tiene forma de saber que ya cargó
+                          * ese cambio una vez.
+                          */}
+                        {solicitud.reintentos_no_aplicada > 0 && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                            {solicitud.reintentos_no_aplicada === 1
+                              ? 'YA VOLVIÓ DE GÓNDOLA'
+                              : `VOLVIÓ DE GÓNDOLA ${solicitud.reintentos_no_aplicada} VECES`}
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">{solicitud.sector_nombre} · {solicitud.familia_nombre}</p>
                       <p className="mt-2 text-sm font-semibold text-foreground">{solicitud.producto_descripcion}</p>

@@ -281,6 +281,12 @@ export interface SolicitudCambioRagActual {
   ultimo_evento_at: string
   habilitada_desde: string | null
   estado_actual: EstadoSolicitudCambioRag
+  /**
+   * Veces que la verificación en góndola dio «no aplicada». Una solicitud que
+   * volvió y se re-ejecutó está otra vez en `lista_confirmacion`: sin este
+   * contador es indistinguible de una que nunca falló.
+   */
+  reintentos_no_aplicada: number
 }
 
 export interface Vencimiento {
