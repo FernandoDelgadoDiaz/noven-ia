@@ -1243,7 +1243,16 @@ Sin ramas ni PRs abiertos. Sin migraciones mergeadas y sin aplicar.
   este reemplazo de función. Persisten avisos informativos preexistentes de RLS,
   índices y configuración general, fuera del alcance de este hotfix; no se
   alteraron durante el incidente.
-- **Estado:** falta que este registro vuelva a pasar CI y luego fusionar #194 y
-  comprobar que Netlify desplegó el commit exacto. Sólo después corresponde que
-  sucursal 091 vuelva a pulsar `Informar 30%` y que Mariela confirme la fila
-  real en su bandeja zonal.
+- **CI de cierre del PR:** run `34955560828` verde sobre
+  `d2c174f3403b2fa383abbf55333ed88fd05c3f8d`. Volvieron a pasar contratos,
+  lint, build, replay Supabase, aislamiento, cuota, exposición y Playwright.
+- **Fusión autorizada completada:** PR #194 fusionado por squash en `master`
+  como `15628b18e11a290626fd37d2682d7fb28365e11b`.
+- **Despliegue exacto comprobado:** Netlify publicó ese mismo commit en
+  producción con deploy `6aa9181354d1180008ea61c0`, estado `ready`, rama
+  `master`, contexto `production` y `published_at=2026-09-15T10:04:37.309Z`.
+  La URL productiva respondió HTTP 200 y abrió la pantalla de acceso.
+- **Pendiente operativo, no técnico:** sucursal 091 puede volver a pulsar
+  `Informar 30%`. Después corresponde confirmar que la solicitud real aparece
+  en la bandeja zonal de Mariela. No se generó una solicitud artificial durante
+  la verificación.
