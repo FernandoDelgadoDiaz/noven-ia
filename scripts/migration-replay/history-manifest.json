@@ -222,6 +222,23 @@
         "noven_private.puede_ver_solicitud_cambio_rag(uuid, uuid, uuid, uuid)"
       ],
       "resolution": "document_only_no_ledger_normalization"
+    },
+    {
+      "id": "confirmacion_gondola_rag_timestamp",
+      "kind": "repository_production_version_mismatch",
+      "repository_path": "supabase/migrations/20260917143000_confirmacion_gondola_rag_v1.sql",
+      "repository_version": "20260917143000",
+      "production_ledger_version": "20260918003315",
+      "production_ledger_name": "confirmacion_gondola_rag_v1",
+      "universal_replay": true,
+      "reason": "Al aplicar el archivo versionado mediante el mecanismo remoto de Supabase, el ledger registro el timestamp de ejecucion 20260918003315 en lugar del timestamp 20260917143000 del nombre en Git, conservando el mismo nombre y efecto estructural. El contenido del ledger es identico byte a byte al archivo del repositorio salvo el salto de linea final, que el ledger recorta.",
+      "evidence_markers": [
+        "CREATE OR REPLACE FUNCTION noven_private.verificar_cambio_rag_impl",
+        "CREATE OR REPLACE FUNCTION public.confirmar_cambio_rag_en_gondola",
+        "CREATE OR REPLACE FUNCTION public.registrar_cambio_rag_no_aplicado",
+        "reemplazado_por_circuito"
+      ],
+      "resolution": "document_only_no_ledger_normalization"
     }
   ],
   "known_clean_replay_exceptions": [

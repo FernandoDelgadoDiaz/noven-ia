@@ -86,6 +86,7 @@ assert.deepEqual([...ledgerDivergences.keys()], [
   'rag_centralizado_jornada_zonal_timestamp',
   'informar_rag_constatacion_timestamp',
   'reparar_grant_puede_ver_solicitud_cambio_rag_timestamp',
+  'confirmacion_gondola_rag_timestamp',
 ])
 const cuotaCacheTimestamp = ledgerDivergences.get('cuota_y_cache_timestamp')
 assert.equal(cuotaCacheTimestamp.kind, 'repository_production_version_mismatch')
