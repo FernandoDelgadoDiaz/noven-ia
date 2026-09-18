@@ -107,11 +107,31 @@ Estaba bien resuelto y no se toca:
 - la línea de jornada con el estado de la ventana;
 - los dos botones de exportar, por zona y por sucursal.
 
-## Fuera de alcance
+## Fuera de alcance · la ejecución en tanda
 
 La **selección múltiple y la ejecución en tanda** pertenecen al paso 5 del
 circuito —impresión y operación por lote—, que sigue abierto. La fila está
 preparada para recibir una casilla como primera columna fija sin rehacer el
-anclaje, pero hoy no la tiene: `ejecutar_solicitud_cambio_rag` opera de a una, y
-una tanda necesita decidir antes qué se muestra cuando falla la séptima de
-treinta.
+anclaje, pero hoy no la tiene.
+
+**No es urgente.** Con el volumen de solicitudes que hay hoy, de a una funciona.
+Se vuelve necesario cuando la zona entera empiece a generar volumen real.
+
+**La pregunta central, para cuando se plantee: si falla la séptima de treinta,
+qué ve la administrativa.** `ejecutar_solicitud_cambio_rag` opera de a una, así
+que hay dos formas de armar la tanda y no son equivalentes:
+
+- **Treinta transacciones con reporte por fila.** Las veintinueve que
+  corresponden quedan cargadas; la que falló se marca y se reintenta.
+- **Una RPC de lote transaccional.** Si una falla se revierten las
+  veintinueve que sí correspondían.
+
+La intuición del responsable del producto es que lo transaccional es peor acá,
+por esa reversión. Queda escrito como intuición y no como decisión: se decide
+con el dato —qué falla realmente en producción y con qué frecuencia—, no con la
+intuición.
+
+Nota de diseño que este documento ya aporta al planteo: **si la tanda reporta
+por fila, la tabla es el lugar natural del reporte** —una columna de resultado,
+o el estado de la propia fila cambiando—, y eso no obliga a inventar una
+pantalla de resumen.
