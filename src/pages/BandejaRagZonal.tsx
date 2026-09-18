@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Clock, Download, Loader2, RefreshCw, Tags } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { AlertTriangle, CheckCircle2, Clock, Download, Loader2, RefreshCw } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
   agruparPorSucursal,
@@ -109,7 +109,7 @@ export default function BandejaRagZonal() {
   return (
     <div className="min-h-screen bg-surface-base">
       <header className="sticky top-0 z-10 bg-white border-b border-border/40 px-4 md:px-8 py-4 md:py-5">
-        <div className="max-w-6xl mx-auto flex items-start justify-between gap-4">
+        <div className="max-w-[1600px] mx-auto flex items-start justify-between gap-4">
           <div>
             <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">Bandeja zonal RAG</h1>
             <p className="text-sm text-muted-foreground mt-1">Cambios validados que deben cargarse en el sistema de precios.</p>
@@ -120,7 +120,7 @@ export default function BandejaRagZonal() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 md:px-8 py-5 md:py-6 pb-28 space-y-4">
+      <main className="max-w-[1600px] mx-auto px-4 md:px-8 py-5 md:py-6 pb-28 space-y-4">
         {data.zonas.length > 1 && (
           <div className="bg-white rounded-card shadow-card p-4">
             <label className="text-xs font-bold uppercase tracking-wide text-foreground" htmlFor="zona-bandeja">Zona asignada</label>
@@ -192,74 +192,115 @@ export default function BandejaRagZonal() {
           </div>
         ) : (
           grupos.map((grupo) => (
-            <section key={grupo.sucursal_id} className="space-y-3" aria-label={`Sucursal ${grupo.sucursal_codigo}`}>
+            <section key={grupo.sucursal_id} className="space-y-2" aria-label={`Sucursal ${grupo.sucursal_codigo}`}>
+              {/*
+                * El encabezado del grupo, el título y los botones viven FUERA
+                * del contenedor que scrollea: con la tabla corrida hacia la
+                * derecha, perder de vista de qué sucursal es el bloque sería
+                * peor que no agrupar.
+                */}
               <div className="flex items-center justify-between gap-3 pt-2">
                 <h2 className="text-sm font-bold text-foreground">
                   Sucursal {grupo.sucursal_codigo} · {grupo.sucursal_nombre}
                   <span className="ml-2 text-xs font-semibold text-muted-foreground">{grupo.solicitudes.length}</span>
                 </h2>
-                <button type="button" onClick={() => exportar(grupo)} className="h-9 px-3 rounded-xl border border-border bg-white text-xs font-semibold flex items-center gap-2">
+                <button type="button" onClick={() => exportar(grupo)} className="h-9 px-3 rounded-xl border border-border bg-white text-xs font-semibold flex items-center gap-2 shrink-0">
                   <Download className="h-3.5 w-3.5" />Exportar sucursal
                 </button>
               </div>
 
-              {grupo.solicitudes.map((solicitud) => (
-                <article key={solicitud.id} className="bg-white rounded-card shadow-card p-4 md:p-5">
-                  <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-brand-light flex items-center justify-center shrink-0">
-                      <Tags className="h-5 w-5 text-brand" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-bold text-foreground">Sucursal {solicitud.sucursal_codigo}</p>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${solicitud.requiere_ejecucion ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                          {solicitud.requiere_ejecucion ? 'PENDIENTE' : 'EJECUTADA'}
-                        </span>
-                        {/*
-                          * Una solicitud que volvió de góndola y se re-ejecutó
-                          * queda otra vez en `lista_confirmacion`: sin esta
-                          * marca es idéntica a una que nunca falló, y la
-                          * administrativa no tiene forma de saber que ya cargó
-                          * ese cambio una vez.
-                          */}
-                        {solicitud.reintentos_no_aplicada > 0 && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-                            {solicitud.reintentos_no_aplicada === 1
-                              ? 'YA VOLVIÓ DE GÓNDOLA'
-                              : `VOLVIÓ DE GÓNDOLA ${solicitud.reintentos_no_aplicada} VECES`}
+              {/*
+                * El scroll horizontal vive acá y no en la página. Debajo de
+                * ~1400px la tabla se corre; `Código` y `Producto` quedan fijas
+                * porque son las que identifican la fila —si se van, cada celda
+                * restante queda sin dueño— y `Acción` queda fija a la derecha
+                * porque el botón que resuelve la fila no puede salir de vista.
+                *
+                * En teléfono se suelta el anclaje: `Código` + `Producto` son
+                * ~330px y en 390px dejarían 60px de ventana para scrollear.
+                */}
+              <div className="bg-white rounded-card shadow-card overflow-x-auto">
+                <table className="w-full min-w-[1376px] border-collapse text-xs">
+                  <caption className="sr-only">
+                    Solicitudes de cambio RAG de la sucursal {grupo.sucursal_codigo}, {grupo.sucursal_nombre}
+                  </caption>
+                  <thead>
+                    <tr className="bg-surface-base border-b border-border text-left text-muted-foreground">
+                      <Th className="md:sticky md:left-0 bg-surface-base z-20 w-[150px]">Sector / familia</Th>
+                      <Th className="md:sticky md:left-[150px] bg-surface-base z-20 w-[110px]">Código</Th>
+                      <Th className="md:sticky md:left-[260px] bg-surface-base z-20 min-w-[220px] shadow-[1px_0_0_0_hsl(var(--border))]">Producto</Th>
+                      <Th className="w-[90px]">Cambio RAG</Th>
+                      <Th className="w-[88px]">Vto. producto</Th>
+                      <Th className="w-[88px]">Fin de acción</Th>
+                      <Th className="w-[80px] text-right">Stock compr.</Th>
+                      <Th className="w-[130px]">Validado por</Th>
+                      <Th className="w-[120px]">Fecha de validación</Th>
+                      <Th className="w-[170px]">Estado</Th>
+                      <Th className="md:sticky md:right-0 bg-surface-base z-20 w-[130px] shadow-[-1px_0_0_0_hsl(var(--border))]">Acción</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {grupo.solicitudes.map((solicitud) => (
+                      <tr key={solicitud.id} className="border-b border-border/60 last:border-0 hover:bg-surface-base/60">
+                        <Td className="md:sticky md:left-0 bg-white z-10 text-muted-foreground">
+                          {solicitud.sector_nombre}
+                          <span className="block">{solicitud.familia_nombre}</span>
+                        </Td>
+                        <Td className="md:sticky md:left-[150px] bg-white z-10 tabular-nums">{solicitud.producto_codigo}</Td>
+                        <Td className="md:sticky md:left-[260px] bg-white z-10 font-semibold text-foreground shadow-[1px_0_0_0_hsl(var(--border))]">
+                          {solicitud.producto_descripcion}
+                        </Td>
+                        <Td className="font-semibold text-foreground whitespace-nowrap">
+                          {porcentaje(solicitud.porcentaje_rag_vigente)} → {porcentaje(solicitud.porcentaje_solicitado)}
+                        </Td>
+                        <Td className="tabular-nums whitespace-nowrap">{fechaCorta(solicitud.fecha_vencimiento) || '—'}</Td>
+                        <Td className="tabular-nums whitespace-nowrap">{fechaCorta(solicitud.fin_accion) || '—'}</Td>
+                        <Td className="tabular-nums text-right">{Number(solicitud.cantidad_comprometida).toLocaleString('es-AR')}</Td>
+                        <Td>{solicitud.validada_por_nombre}</Td>
+                        <Td className="tabular-nums whitespace-nowrap">{fechaHoraArgentina(solicitud.creada_at) || 'Sin dato'}</Td>
+                        <Td>
+                          <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${solicitud.requiere_ejecucion ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                            {etiquetaEstado(solicitud.estado_actual)}
                           </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">{solicitud.sector_nombre} · {solicitud.familia_nombre}</p>
-                      <p className="mt-2 text-sm font-semibold text-foreground">{solicitud.producto_descripcion}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Código {solicitud.producto_codigo}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                    <Dato label="Cambio RAG" value={`${porcentaje(solicitud.porcentaje_rag_vigente)} → ${porcentaje(solicitud.porcentaje_solicitado)}`} />
-                    <Dato label="Vto. producto" value={fechaCorta(solicitud.fecha_vencimiento) || '—'} />
-                    <Dato label="Fin de acción" value={fechaCorta(solicitud.fin_accion) || '—'} />
-                    <Dato label="Stock comprometido" value={Number(solicitud.cantidad_comprometida).toLocaleString('es-AR')} />
-                    <Dato label="Validado por" value={solicitud.validada_por_nombre} />
-                    <Dato label="Fecha de validación" value={fechaHoraArgentina(solicitud.creada_at) || 'Sin dato'} />
-                    <Dato label="Jornada zonal" value={fechaCorta(solicitud.jornada_zonal) || '—'} />
-                    <Dato label="Estado" value={etiquetaEstado(solicitud.estado_actual)} />
-                    {!solicitud.requiere_ejecucion && <Dato label="Habilita verificación" value={fechaCorta(solicitud.habilitada_desde) || '—'} />}
-                  </div>
-
-                  {solicitud.requiere_ejecucion ? (
-                    <button type="button" onClick={() => void ejecutar(solicitud)} disabled={ejecutando === solicitud.id} className="mt-4 w-full md:w-auto h-11 px-5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
-                      {ejecutando === solicitud.id && <Loader2 className="h-4 w-4 animate-spin" />}
-                      Marcar Activo
-                    </button>
-                  ) : (
-                    <p className="mt-4 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
-                      Carga informada. La sucursal podrá verificarla en góndola desde {fechaCorta(solicitud.habilitada_desde) || 'el día siguiente'}.
-                    </p>
-                  )}
-                </article>
-              ))}
+                          {/*
+                            * Lo que antes era un párrafo por fila —«Carga
+                            * informada. La sucursal podrá verificarla en
+                            * góndola desde…»— cabe acá en un renglón. El hecho
+                            * se conserva; la prosa no merecía una fila entera.
+                            */}
+                          {!solicitud.requiere_ejecucion && solicitud.habilitada_desde && (
+                            <span className="block mt-0.5 text-[10px] text-muted-foreground tabular-nums">
+                              Verifica desde {fechaCorta(solicitud.habilitada_desde)}
+                            </span>
+                          )}
+                          {/*
+                            * Una solicitud que volvió de góndola y se
+                            * re-ejecutó queda otra vez en `lista_confirmacion`:
+                            * sin esta marca es idéntica a una que nunca falló.
+                            */}
+                          {solicitud.reintentos_no_aplicada > 0 && (
+                            <span className="block mt-0.5 text-[10px] font-bold text-amber-800">
+                              {solicitud.reintentos_no_aplicada === 1
+                                ? 'Ya volvió de góndola'
+                                : `Volvió de góndola ${solicitud.reintentos_no_aplicada} veces`}
+                            </span>
+                          )}
+                        </Td>
+                        <Td className="md:sticky md:right-0 bg-white z-10 shadow-[-1px_0_0_0_hsl(var(--border))]">
+                          {solicitud.requiere_ejecucion ? (
+                            <button type="button" onClick={() => void ejecutar(solicitud)} disabled={ejecutando === solicitud.id} className="w-full h-9 px-3 rounded-lg bg-brand hover:bg-brand-hover text-white text-xs font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50">
+                              {ejecutando === solicitud.id && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                              Marcar Activo
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">Carga informada</span>
+                          )}
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </section>
           ))
         )}
@@ -268,11 +309,10 @@ export default function BandejaRagZonal() {
   )
 }
 
-function Dato({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-muted-foreground">{label}</p>
-      <p className="font-semibold text-foreground mt-0.5">{value}</p>
-    </div>
-  )
+function Th({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return <th scope="col" className={`px-3 py-2 font-semibold whitespace-nowrap ${className}`}>{children}</th>
+}
+
+function Td({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return <td className={`px-3 py-2 align-top text-muted-foreground ${className}`}>{children}</td>
 }

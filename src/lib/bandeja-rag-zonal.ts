@@ -154,6 +154,23 @@ export function agruparPorSucursal(solicitudes: SolicitudBandeja[]): GrupoSucurs
  * Las dos fechas van separadas y con nombres distintos a propósito: «Vto
  * producto» es el vencimiento real y «Fin acción» el límite de la ventana
  * comercial. Confundirlas es el error que la columna existe para evitar.
+ *
+ * DIVERGENCIA DELIBERADA CON LA PANTALLA, y la razón por la que está escrita
+ * acá: el archivo tiene columna «Sucursal» y la tabla de la bandeja NO.
+ *
+ * En la pantalla, las filas van agrupadas bajo un encabezado que ya dice de qué
+ * sucursal son, así que la columna repetiría el mismo valor en todas las filas
+ * del bloque y gastaría ancho —que es justo lo que escasea; el presupuesto está
+ * en `docs/BANDEJA_RAG_ZONAL_TABLA_V1.md`—. El archivo, en cambio, se va de esta
+ * pantalla y pierde ese contexto: sin la columna no se puede leer solo.
+ *
+ * Por la misma razón el archivo separa «Sector» y «Familia» en dos columnas y
+ * la pantalla las junta en una: en la planilla son dos criterios de filtrado y
+ * ordenamiento; en la tabla son una sola pista de ubicación y compartir celda
+ * les alcanza.
+ *
+ * Quien compare pantalla contra archivo va a ver las dos diferencias. Ninguna
+ * es un defecto: cada salida conserva lo que su lector necesita.
  */
 export const ENCABEZADOS_EXPORTACION = [
   'Sucursal',
