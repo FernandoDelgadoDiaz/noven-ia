@@ -211,9 +211,17 @@ export async function installScannerWriteFixture(page, options = {}) {
             dias_observados: ragSuggestion ? 1 : null,
             dias_desde_ultimo_rag: ragSuggestion ? 1 : null,
             dias_comerciales_restantes: ragSuggestion ? 2 : 0,
+            // La cobertura la calcula la vista, no el cliente: el fixture tiene
+            // que entregarla como la entrega el servidor.
+            cobertura: ragSuggestion ? 0.25 : null,
             estado_seguimiento_rag: ragSuggestion
               ? 'insuficiente'
-              : ragPorcentaje == null ? 'sin_rag' : 'pendiente_control_operador',
+              // Una oferta central abierta SÍ tiene tramo, así que nunca es
+              // `sin_rag`: ese estado significa «no hay tramo», y confundirlos
+              // es el error que este bloque corrige.
+              : ragPorcentaje == null && !ofertaCentralActiva
+                ? 'sin_rag'
+                : 'pendiente_control_operador',
             hay_oferta_central: ofertaCentralActiva,
             intervenciones_abiertas: Number(ragPorcentaje != null) + Number(ofertaCentralActiva),
             medicion_atribuible: !(ragPorcentaje != null && ofertaCentralActiva),
