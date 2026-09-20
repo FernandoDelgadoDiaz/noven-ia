@@ -60,16 +60,48 @@ assert.match(
 // --- 2. Las once columnas, y ninguna se oculta -------------------------------
 
 const COLUMNAS = [
-  'Sector / familia', 'Código', 'Producto', 'Cambio RAG', 'Vto. producto',
-  'Fin de acción', 'Stock compr.', 'Validado por', 'Fecha de validación',
-  'Estado', 'Acción',
+  'Sector / familia', 'Código', 'Producto', 'RAG actual', 'Nueva RAG',
+  'Vto. producto', 'Fin de acción', 'Stock compr.', 'Validado por',
+  'Fecha de validación', 'Estado', 'Acción',
 ]
 for (const columna of COLUMNAS) {
   assert.ok(
-    page.includes(`>${columna}<`),
+    page.includes(`titulo: '${columna}'`),
     `falta la columna «${columna}»: la administrativa transcribe la fila entera`,
   )
 }
+
+// --- 2b. El cambio de RAG va en DOS columnas, como en el archivo ------------
+//
+// Dos números con una flecha en el medio son más fáciles de copiar mal que uno
+// solo en su columna, y el trabajo es copiar.
+
+assert.doesNotMatch(
+  page,
+  /porcentaje\(solicitud\.porcentaje_rag_vigente\)\} → \{porcentaje/,
+  'el cambio de RAG no puede volver a compartir celda: `30% → 50%` es el formato que este cambio saca',
+)
+
+// `Nueva RAG` es el único dato que se copia al sistema de precios: va
+// destacado. `RAG actual` es contexto y va atenuado.
+assert.match(
+  page,
+  /columna="ragNueva"[^>]*font-bold text-brand/,
+  'Nueva RAG es EL dato de la pantalla y tiene que destacarse',
+)
+assert.match(
+  page,
+  /columna="ragActual"[^>]*className="[^"]*"/,
+  'RAG actual existe como columna propia',
+)
+// En una tabla operativa el rojo se lee como alerta. El dato principal no es
+// una alerta: es lo que hay que copiar bien.
+const celdaNueva = page.slice(page.indexOf('columna="ragNueva"'), page.indexOf('columna="ragNueva"') + 200)
+assert.doesNotMatch(
+  celdaNueva,
+  /text-red|bg-red/,
+  'Nueva RAG no puede ir en rojo: en esta pantalla el rojo se lee como error y es lo contrario',
+)
 
 /**
  * Una clase como `hidden lg:table-cell` es exactamente la regresión que este
@@ -87,11 +119,42 @@ export function revisarOcultamiento(fuente) {
 
 revisarOcultamiento(page)
 
+// --- 2c. La alineación se declara UNA vez y la leen encabezado y celda ------
+//
+// Si cada uno llevara su clase, derivarían: es lo que pasaba antes, con títulos
+// que no alineaban con su dato. El reparto sale del archivo exportado —el
+// escritor xlsx emite `t="n"` sólo para números finitos— y no de una
+// preferencia.
+
+assert.match(page, /const COLUMNAS = \[/, 'las columnas se declaran en un solo lugar')
+assert.match(
+  page,
+  /CLASE_COLUMNA\[columna\]/g,
+  'encabezado y celda toman la clase de la declaración',
+)
+for (const [clave, alineacion] of [
+  ['ragActual', 'text-right'], ['ragNueva', 'text-right'], ['stock', 'text-right'],
+  ['codigo', 'text-left'], ['vencimiento', 'text-left'], ['finAccion', 'text-left'],
+]) {
+  assert.match(
+    page,
+    new RegExp(`clave: '${clave}',[^}]*clase: '${alineacion}`),
+    `«${clave}» tiene que alinearse como en el archivo: ${alineacion}`,
+  )
+}
+
+// El encabezado necesita contraste propio: gris sobre gris no se lee.
+assert.match(
+  page,
+  /CLASE_ENCABEZADO = 'bg-slate-100 text-foreground'/,
+  'el encabezado se distingue del cuerpo',
+)
+
 // --- 3. Lo que identifica y lo que resuelve no se van de pantalla ------------
 
 assert.match(
   page,
-  /md:sticky md:left-0[\s\S]{0,400}?md:sticky md:left-\[150px\][\s\S]{0,400}?md:sticky md:left-\[260px\]/,
+  /sector: 'md:sticky md:left-0[\s\S]{0,200}?codigo: 'md:sticky md:left-\[150px\][\s\S]{0,200}?producto: 'md:sticky md:left-\[260px\]/,
   'las tres primeras columnas se anclan en cascada: sus offsets tienen que encadenarse con los anchos declarados',
 )
 assert.match(
@@ -129,6 +192,7 @@ assert.ok(
 // excepción.
 
 assert.doesNotMatch(page, /max-w-6xl/, 'esta pantalla no usa el ancho de lectura del resto')
+assert.match(page, /min-w-\[1456px\]/, 'el ancho mínimo de la tabla es la suma del presupuesto')
 assert.match(
   page,
   /max-w-\[1600px\] mx-auto px-4 md:px-8/,
@@ -138,7 +202,7 @@ assert.match(
 // --- 6. La divergencia con el archivo está escrita, no descubierta ----------
 
 assert.ok(
-  !page.includes('>Sucursal<'),
+  !page.includes("titulo: 'Sucursal'"),
   'dentro de un grupo la columna Sucursal repetiría el mismo valor en todas las filas',
 )
 assert.ok(
@@ -157,7 +221,7 @@ assert.ok(
   'el archivo mantiene sector y familia separadas',
 )
 assert.ok(
-  page.includes('>Sector / familia<'),
+  page.includes("titulo: 'Sector / familia'"),
   'la pantalla las junta: son una sola pista de ubicación',
 )
 assert.match(
@@ -182,7 +246,7 @@ for (const [fragmento, porque] of [
 
 // --- 8. La especificación existe y dice lo que el código hace ---------------
 
-for (const afirmacion of ['1376', 'max-w-[1600px]', 'no analiza', 'Fuera de alcance']) {
+for (const afirmacion of ['1456', 'max-w-[1600px]', 'no analiza', 'Fuera de alcance']) {
   assert.ok(
     spec.includes(afirmacion),
     `la especificación tiene que sostener «${afirmacion}»: se escribió para que la próxima vez exista`,
