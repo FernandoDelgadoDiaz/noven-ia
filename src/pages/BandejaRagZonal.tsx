@@ -16,6 +16,52 @@ import {
 
 const EMPTY_DATA: BandejaZonal = { ahora_argentina: '', zonas: [], solicitudes: [] }
 
+/**
+ * ALINEACIÓN Y ANCHO DE CADA COLUMNA, DECLARADOS UNA SOLA VEZ. Encabezado y
+ * celda leen de acá: si cada uno llevara su clase, derivarían —que es
+ * exactamente lo que pasaba antes de este cambio, con títulos que no alineaban
+ * con su dato.
+ *
+ * El criterio no es una preferencia: sale del archivo exportado, que quedó bien
+ * ordenado y sirve de especificación. El escritor xlsx emite `t="n"` sólo para
+ * números finitos, así que en el Excel se alinean a la derecha `RAG actual`,
+ * `Nueva RAG` y `Stock comprometido`, y todo lo demás —`Código` incluido, que
+ * viaja como texto— a la izquierda.
+ *
+ * El presupuesto de ancho está en `docs/BANDEJA_RAG_ZONAL_TABLA_V1.md`.
+ */
+const COLUMNAS = [
+  { clave: 'sector', titulo: 'Sector / familia', clase: 'text-left w-[150px]' },
+  { clave: 'codigo', titulo: 'Código', clase: 'text-left w-[110px]' },
+  { clave: 'producto', titulo: 'Producto', clase: 'text-left min-w-[220px]' },
+  { clave: 'ragActual', titulo: 'RAG actual', clase: 'text-right w-[85px]' },
+  { clave: 'ragNueva', titulo: 'Nueva RAG', clase: 'text-right w-[85px]' },
+  { clave: 'vencimiento', titulo: 'Vto. producto', clase: 'text-left w-[88px]' },
+  { clave: 'finAccion', titulo: 'Fin de acción', clase: 'text-left w-[88px]' },
+  { clave: 'stock', titulo: 'Stock compr.', clase: 'text-right w-[80px]' },
+  { clave: 'validadaPor', titulo: 'Validado por', clase: 'text-left w-[130px]' },
+  { clave: 'fechaValidacion', titulo: 'Fecha de validación', clase: 'text-left w-[120px]' },
+  { clave: 'estado', titulo: 'Estado', clase: 'text-left w-[170px]' },
+  { clave: 'accion', titulo: 'Acción', clase: 'text-left w-[130px]' },
+] as const
+
+type ClaveColumna = (typeof COLUMNAS)[number]['clave']
+
+const CLASE_COLUMNA = Object.fromEntries(
+  COLUMNAS.map((columna) => [columna.clave, columna.clase]),
+) as Record<ClaveColumna, string>
+
+/** El encabezado tiene contraste propio: gris sobre gris no se lee. */
+const CLASE_ENCABEZADO = 'bg-slate-100 text-foreground'
+
+/** Anclaje de las tres primeras columnas y de la acción. Ver el documento. */
+const ANCLAJE: Partial<Record<ClaveColumna, string>> = {
+  sector: 'md:sticky md:left-0 z-20',
+  codigo: 'md:sticky md:left-[150px] z-20',
+  producto: 'md:sticky md:left-[260px] z-20 shadow-[1px_0_0_0_hsl(var(--border))]',
+  accion: 'md:sticky md:right-0 z-20 shadow-[-1px_0_0_0_hsl(var(--border))]',
+}
+
 function porcentaje(value: number | null): string {
   return value == null ? 'Sin RAG' : `${Number(value).toLocaleString('es-AR')}%`
 }
@@ -220,53 +266,64 @@ export default function BandejaRagZonal() {
                 * ~330px y en 390px dejarían 60px de ventana para scrollear.
                 */}
               <div className="bg-white rounded-card shadow-card overflow-x-auto">
-                <table className="w-full min-w-[1376px] border-collapse text-xs">
+                <table className="w-full min-w-[1456px] border-collapse text-xs">
                   <caption className="sr-only">
                     Solicitudes de cambio RAG de la sucursal {grupo.sucursal_codigo}, {grupo.sucursal_nombre}
                   </caption>
                   <thead>
-                    <tr className="bg-surface-base border-b border-border text-left text-muted-foreground">
-                      <Th className="md:sticky md:left-0 bg-surface-base z-20 w-[150px]">Sector / familia</Th>
-                      <Th className="md:sticky md:left-[150px] bg-surface-base z-20 w-[110px]">Código</Th>
-                      <Th className="md:sticky md:left-[260px] bg-surface-base z-20 min-w-[220px] shadow-[1px_0_0_0_hsl(var(--border))]">Producto</Th>
-                      <Th className="w-[90px]">Cambio RAG</Th>
-                      <Th className="w-[88px]">Vto. producto</Th>
-                      <Th className="w-[88px]">Fin de acción</Th>
-                      <Th className="w-[80px] text-right">Stock compr.</Th>
-                      <Th className="w-[130px]">Validado por</Th>
-                      <Th className="w-[120px]">Fecha de validación</Th>
-                      <Th className="w-[170px]">Estado</Th>
-                      <Th className="md:sticky md:right-0 bg-surface-base z-20 w-[130px] shadow-[-1px_0_0_0_hsl(var(--border))]">Acción</Th>
+                    <tr className={`border-b-2 border-border ${CLASE_ENCABEZADO}`}>
+                      {COLUMNAS.map((columna) => (
+                        <Th key={columna.clave} columna={columna.clave} className={CLASE_ENCABEZADO}>
+                          {columna.titulo}
+                        </Th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {grupo.solicitudes.map((solicitud) => (
                       <tr key={solicitud.id} className="border-b border-border/60 last:border-0 hover:bg-surface-base/60">
-                        <Td className="md:sticky md:left-0 bg-white z-10 text-muted-foreground">
+                        <Td columna="sector" className="bg-white text-muted-foreground">
                           {solicitud.sector_nombre}
                           <span className="block">{solicitud.familia_nombre}</span>
                         </Td>
-                        <Td className="md:sticky md:left-[150px] bg-white z-10 tabular-nums">{solicitud.producto_codigo}</Td>
-                        <Td className="md:sticky md:left-[260px] bg-white z-10 font-semibold text-foreground shadow-[1px_0_0_0_hsl(var(--border))]">
+                        <Td columna="codigo" className="bg-white tabular-nums">{solicitud.producto_codigo}</Td>
+                        <Td columna="producto" className="bg-white font-semibold text-foreground">
                           {solicitud.producto_descripcion}
                         </Td>
-                        <Td className="font-semibold text-foreground whitespace-nowrap">
-                          {porcentaje(solicitud.porcentaje_rag_vigente)} → {porcentaje(solicitud.porcentaje_solicitado)}
+                        {/*
+                          * El RAG vigente es CONTEXTO, no lo que se transcribe:
+                          * va atenuado. Antes compartía celda con el nuevo
+                          * —`30% → 50%`— y dos números con una flecha en el
+                          * medio son más fáciles de copiar mal que uno solo en
+                          * su columna. El archivo ya los tenía separados.
+                          */}
+                        <Td columna="ragActual" className="bg-white tabular-nums">
+                          {porcentaje(solicitud.porcentaje_rag_vigente)}
                         </Td>
-                        <Td className="tabular-nums whitespace-nowrap">{fechaCorta(solicitud.fecha_vencimiento) || '—'}</Td>
-                        <Td className="tabular-nums whitespace-nowrap">{fechaCorta(solicitud.fin_accion) || '—'}</Td>
-                        <Td className="tabular-nums text-right">{Number(solicitud.cantidad_comprometida).toLocaleString('es-AR')}</Td>
-                        <Td>{solicitud.validada_por_nombre}</Td>
-                        <Td className="tabular-nums whitespace-nowrap">{fechaHoraArgentina(solicitud.creada_at) || 'Sin dato'}</Td>
-                        <Td>
+                        {/*
+                          * `Nueva RAG` es EL dato de esta pantalla: es el único
+                          * que se copia al sistema de precios, y un error acá
+                          * es un precio mal cargado en góndola. Destacado con
+                          * el color de marca y no con rojo, que en una tabla
+                          * operativa se lee como alerta —lo contrario de lo que
+                          * es—.
+                          */}
+                        <Td columna="ragNueva" className="bg-white tabular-nums font-bold text-brand text-sm">
+                          {porcentaje(solicitud.porcentaje_solicitado)}
+                        </Td>
+                        <Td columna="vencimiento" className="bg-white tabular-nums whitespace-nowrap">{fechaCorta(solicitud.fecha_vencimiento) || '—'}</Td>
+                        <Td columna="finAccion" className="bg-white tabular-nums whitespace-nowrap">{fechaCorta(solicitud.fin_accion) || '—'}</Td>
+                        <Td columna="stock" className="bg-white tabular-nums">{Number(solicitud.cantidad_comprometida).toLocaleString('es-AR')}</Td>
+                        <Td columna="validadaPor" className="bg-white">{solicitud.validada_por_nombre}</Td>
+                        <Td columna="fechaValidacion" className="bg-white tabular-nums whitespace-nowrap">{fechaHoraArgentina(solicitud.creada_at) || 'Sin dato'}</Td>
+                        <Td columna="estado" className="bg-white">
                           <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${solicitud.requiere_ejecucion ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'}`}>
                             {etiquetaEstado(solicitud.estado_actual)}
                           </span>
                           {/*
                             * Lo que antes era un párrafo por fila —«Carga
                             * informada. La sucursal podrá verificarla en
-                            * góndola desde…»— cabe acá en un renglón. El hecho
-                            * se conserva; la prosa no merecía una fila entera.
+                            * góndola desde…»— cabe acá en un renglón.
                             */}
                           {!solicitud.requiere_ejecucion && solicitud.habilitada_desde && (
                             <span className="block mt-0.5 text-[10px] text-muted-foreground tabular-nums">
@@ -286,7 +343,7 @@ export default function BandejaRagZonal() {
                             </span>
                           )}
                         </Td>
-                        <Td className="md:sticky md:right-0 bg-white z-10 shadow-[-1px_0_0_0_hsl(var(--border))]">
+                        <Td columna="accion" className="bg-white">
                           {solicitud.requiere_ejecucion ? (
                             <button type="button" onClick={() => void ejecutar(solicitud)} disabled={ejecutando === solicitud.id} className="w-full h-9 px-3 rounded-lg bg-brand hover:bg-brand-hover text-white text-xs font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50">
                               {ejecutando === solicitud.id && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
@@ -309,10 +366,32 @@ export default function BandejaRagZonal() {
   )
 }
 
-function Th({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <th scope="col" className={`px-3 py-2 font-semibold whitespace-nowrap ${className}`}>{children}</th>
+interface CeldaProps {
+  columna: ClaveColumna
+  children: ReactNode
+  className?: string
 }
 
-function Td({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <td className={`px-3 py-2 align-top text-muted-foreground ${className}`}>{children}</td>
+/**
+ * Encabezado y celda toman de `COLUMNAS` la MISMA clase de alineación y ancho.
+ * Es la única forma de que el título siga alineado con su dato cuando alguien
+ * cambie una de las dos cosas dentro de seis meses.
+ */
+function Th({ columna, children, className = '' }: CeldaProps) {
+  return (
+    <th
+      scope="col"
+      className={`px-3 py-2.5 font-semibold whitespace-nowrap ${CLASE_COLUMNA[columna]} ${ANCLAJE[columna] ?? ''} ${className}`}
+    >
+      {children}
+    </th>
+  )
+}
+
+function Td({ columna, children, className = '' }: CeldaProps) {
+  return (
+    <td className={`px-3 py-2 align-top text-muted-foreground ${CLASE_COLUMNA[columna]} ${ANCLAJE[columna] ?? ''} ${className}`}>
+      {children}
+    </td>
+  )
 }

@@ -21,20 +21,43 @@ Anchos mínimos legibles a `text-xs`, medidos sobre el contenido real del
 circuito —código de artículo de 13 dígitos, descripciones de producto de la
 cadena, nombres de usuario completos—:
 
-| # | Columna | Mínimo | Nota |
-|---|---|---:|---|
-| 1 | Sector / familia | 150 | admite dos renglones |
-| 2 | Código | 110 | 13 dígitos, tabular |
-| 3 | Producto | 220 | **absorbe el ancho sobrante** |
-| 4 | Cambio RAG | 90 | `20% → 30%` |
-| 5 | Vto. producto | 88 | |
-| 6 | Fin de acción | 88 | |
-| 7 | Stock comprometido | 80 | alineada a la derecha |
-| 8 | Validado por | 130 | |
-| 9 | Fecha de validación | 120 | con hora |
-| 10 | Estado | 170 | etiqueta + fecha de habilitación |
-| 11 | Acción | 130 | fija a la derecha |
-| | **Total** | **1376** | |
+| # | Columna | Mínimo | Alineación | Nota |
+|---|---|---:|---|---|
+| 1 | Sector / familia | 150 | izq. | admite dos renglones |
+| 2 | Código | 110 | izq. | 13 dígitos; es un identificador, no una cantidad |
+| 3 | Producto | 220 | izq. | **absorbe el ancho sobrante** |
+| 4 | RAG actual | 85 | **der.** | atenuada: es contexto |
+| 5 | Nueva RAG | 85 | **der.** | **destacada: es el dato que se transcribe** |
+| 6 | Vto. producto | 88 | izq. | |
+| 7 | Fin de acción | 88 | izq. | |
+| 8 | Stock comprometido | 80 | **der.** | |
+| 9 | Validado por | 130 | izq. | |
+| 10 | Fecha de validación | 120 | izq. | con hora |
+| 11 | Estado | 170 | izq. | etiqueta + fecha de habilitación |
+| 12 | Acción | 130 | izq. | fija a la derecha |
+| | **Total** | **1456** | | |
+
+### La alineación sale del archivo, no de una preferencia
+
+El escritor `xlsx` emite `t="n"` **sólo para números finitos**. En
+`filaExportacion` eso son exactamente tres celdas —`RAG actual`, `Nueva RAG` y
+`Stock comprometido`—, así que Excel las alinea a la derecha y todo lo demás a
+la izquierda. `Código` viaja como texto y queda a la izquierda: es un
+identificador, no una cantidad.
+
+La pantalla usa ese mismo reparto, y **lo declara una sola vez**: `COLUMNAS`
+lleva el título, el ancho y la alineación, y encabezado y celda leen de ahí. Si
+cada uno llevara su clase, derivarían — que es lo que pasaba antes, con títulos
+que no alineaban con su dato.
+
+### `Nueva RAG` destacada, y por qué no en rojo
+
+Es el único dato que se copia al sistema de precios: un error ahí es un precio
+mal cargado en góndola. Va en negrita y con el color de marca, con `RAG actual`
+atenuado al lado porque sirve de contexto y no es lo que se transcribe.
+
+**No en rojo.** En una tabla operativa el rojo se lee como alerta o error, y
+acá es exactamente lo contrario: es el dato principal.
 
 **El hallazgo que ordena todo lo demás:** con el contenedor anterior
 —`max-w-6xl`, 1152px, menos `px-8` = 1088px útiles— la tabla no entra **ni en
@@ -42,7 +65,7 @@ pantalla ancha**. El scroll horizontal no sería el caso raro de la pantalla
 chica: sería el caso normal.
 
 Por eso esta pantalla usa `max-w-[1600px]` y no el `max-w-6xl` del resto. **No
-es una página de lectura, es una mesa de trabajo.** Con 1536px útiles las once
+es una página de lectura, es una mesa de trabajo.** Con 1536px útiles las doce
 columnas entran completas en cualquier monitor de escritorio y «Producto»
 respira.
 
@@ -96,6 +119,12 @@ necesita la columna para poder leerse solo.
 
 Queda anotada en `ENCABEZADOS_EXPORTACION` y verificada por el contrato, para
 que quien compare pantalla contra archivo no la lea como un defecto.
+
+**Una divergencia menos.** La pantalla mostraba el cambio de RAG como
+`30% → 50%` en una sola celda mientras el archivo ya lo tenía en dos columnas.
+Separarlo alineó las dos salidas y, sobre todo, quitó el riesgo real: dos
+números con una flecha en el medio son más fáciles de copiar mal que uno solo
+en su columna.
 
 ## Lo que la tabla conserva del diseño anterior
 

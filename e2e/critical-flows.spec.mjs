@@ -432,16 +432,24 @@ test.describe('Noven · bandeja RAG zonal', () => {
     await expect(page.getByRole('heading', { name: 'Bandeja zonal RAG' })).toBeVisible()
     await expect(page.getByText('Santa Cruz Sur', { exact: true })).toBeVisible()
     await expect(page.getByText('PRODUCTO RAG ZONAL E2E')).toBeVisible()
-    await expect(page.getByText('20% → 30%')).toBeVisible()
     // Una fila por solicitud, con su encabezado de columnas: la tarjeta es la
     // regresión que este recorrido tiene que ver.
-    // `exact` en los tres: `getByRole` compara el nombre por SUBCADENA, así que
+    // `exact` en todos: `getByRole` compara el nombre por SUBCADENA, así que
     // 'Producto' matchea también 'Vto. producto' y el recorrido muere por
     // modo estricto en vez de por lo que quiere comprobar.
     await expect(page.getByRole('table').first()).toBeVisible()
     await expect(page.getByRole('columnheader', { name: 'Producto', exact: true }).first()).toBeVisible()
     await expect(page.getByRole('columnheader', { name: 'Stock compr.', exact: true }).first()).toBeVisible()
     await expect(page.getByRole('columnheader', { name: 'Acción', exact: true }).first()).toBeVisible()
+
+    // El cambio de RAG va en DOS columnas, como en el archivo exportado: un
+    // número solo en su columna es más difícil de copiar mal que `20% → 30%`
+    // en una sola celda, y el trabajo de esta pantalla es copiar.
+    await expect(page.getByRole('columnheader', { name: 'RAG actual', exact: true }).first()).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'Nueva RAG', exact: true }).first()).toBeVisible()
+    await expect(page.getByText('20% → 30%')).toHaveCount(0)
+    await expect(page.getByRole('cell', { name: '20%', exact: true }).first()).toBeVisible()
+    await expect(page.getByRole('cell', { name: '30%', exact: true }).first()).toBeVisible()
     await expect(page.locator('select[aria-label="Seleccionar sucursal de trabajo"]:visible')).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Dashboard' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Scanner' })).toHaveCount(0)
