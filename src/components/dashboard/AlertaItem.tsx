@@ -4,6 +4,7 @@ import { RISK_VISUAL } from '@/lib/risk-config'
 import { calcularDiasStock } from '@/lib/riesgo'
 import { ProductIdentityMeta } from '@/components/product/ProductIdentity'
 import RagSeguimientoBadge from '@/components/dashboard/RagSeguimientoBadge'
+import { hayTramoAbierto } from '@/lib/intervencion-medible'
 import type { VencimientoConRiesgo } from '@/types/index'
 
 type AlertaVencimiento = VencimientoConRiesgo & {
@@ -227,7 +228,18 @@ export default function AlertaItem({ vencimiento, familiaNombre, onClick, onRegi
         </div>
       )}
 
-      <RagSeguimientoBadge vencimientoId={vencimiento.id} activo={tieneRagActivo} />
+      {/*
+        * La medición se muestra por TRAMO ABIERTO y no por «tiene RAG»: una
+        * oferta central es una intervención igual de medible, y hasta este
+        * cambio se registraba sin evaluarse. Ver `src/lib/intervencion-medible.ts`.
+        */}
+      <RagSeguimientoBadge
+        vencimientoId={vencimiento.id}
+        hayIntervencion={hayTramoAbierto({
+          ragPorcentaje: vencimiento.rag_porcentaje ?? null,
+          hayOfertaCentral: tieneOfertaCentralizada,
+        })}
+      />
 
       {showAccionBtn && (
         <div className="px-3.5 md:px-4 pb-3 pt-0">

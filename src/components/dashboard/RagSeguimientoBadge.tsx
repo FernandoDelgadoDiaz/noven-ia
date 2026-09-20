@@ -7,6 +7,12 @@ import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
 import { useSucursalActual } from '@/hooks/useSucursalActual'
 import { useUsuarioRol } from '@/hooks/useUsuarioRol'
 import { coberturaComoPorcentaje, evaluarSugerencia } from '@/lib/ragCobertura'
+import {
+  nombreTramo,
+  salidaOfertaCentral,
+  tipoTramo,
+  type TipoTramo,
+} from '@/lib/intervencion-medible'
 import type { EstadoSolicitudCambioRag } from '@/types/index'
 
 interface SeguimientoRagRow {
@@ -21,11 +27,17 @@ interface SeguimientoRagRow {
   dias_comerciales_restantes: number | null
   dias_desde_ultimo_rag: number | null
   estado_seguimiento_rag: string | null
+  hay_oferta_central: boolean | null
 }
 
 interface RagSeguimientoBadgeProps {
   vencimientoId: string
-  activo: boolean
+  /**
+   * Hay un tramo abierto, DE CUALQUIER TIPO. Antes este prop significaba «tiene
+   * RAG», y por eso una oferta central no se medía: el componente ni siquiera
+   * consultaba. Ver `src/lib/intervencion-medible.ts`.
+   */
+  hayIntervencion: boolean
 }
 
 interface Presentacion {
@@ -40,7 +52,8 @@ function numero(value: number | null, decimals = 1): string {
   return value.toLocaleString('es-AR', { maximumFractionDigits: decimals })
 }
 
-function presentacion(row: SeguimientoRagRow): Presentacion {
+function presentacion(row: SeguimientoRagRow, tipo: TipoTramo | null): Presentacion {
+  const nombre = tipo ? nombreTramo(tipo) : 'Intervención'
   const recuperadas = numero(row.unidades_vendidas_observadas)
   const velocidad = numero(row.velocidad_observada)
   const necesaria = numero(row.velocidad_necesaria)
@@ -83,7 +96,7 @@ function presentacion(row: SeguimientoRagRow): Presentacion {
     case 'dato_a_revisar':
       return {
         titulo: 'Dato a revisar',
-        detalle: 'La cantidad observada aumentó respecto del inicio del RAG. Verificar el lote antes de decidir.',
+        detalle: `La cantidad observada aumentó respecto del inicio. Verificar el lote antes de decidir.`,
         className: 'bg-rose-50 text-rose-800 border-rose-200',
         Icono: AlertTriangle,
       }
@@ -91,13 +104,13 @@ function presentacion(row: SeguimientoRagRow): Presentacion {
     case 'decomiso':
       return {
         titulo: 'Ventana comercial cerrada',
-        detalle: 'El RAG ya no debe evaluarse como intervención comercial. Resolver el estado operativo correspondiente.',
+        detalle: `${nombre} ya no debe evaluarse como intervención comercial. Resolver el estado operativo correspondiente.`,
         className: 'bg-rose-50 text-rose-800 border-rose-200',
         Icono: AlertTriangle,
       }
     default:
       return {
-        titulo: 'Seguimiento RAG',
+        titulo: `Seguimiento · ${nombre}`,
         detalle: 'Noven todavía no tiene evidencia suficiente para evaluar esta intervención.',
         className: 'bg-slate-50 text-slate-700 border-slate-200',
         Icono: Activity,
@@ -133,7 +146,7 @@ const SOLICITUD_PRESENTACION: Record<EstadoSolicitudCambioRag, Omit<Presentacion
   },
 }
 
-export default function RagSeguimientoBadge({ vencimientoId, activo }: RagSeguimientoBadgeProps) {
+export default function RagSeguimientoBadge({ vencimientoId, hayIntervencion }: RagSeguimientoBadgeProps) {
   const [row, setRow] = useState<SeguimientoRagRow | null>(null)
   const { escala } = useEscalaRag()
   const { solicitud } = useSolicitudCambioRag(vencimientoId)
@@ -152,14 +165,14 @@ export default function RagSeguimientoBadge({ vencimientoId, activo }: RagSeguim
   useEffect(() => {
     let cancelado = false
 
-    if (!activo) {
+    if (!hayIntervencion) {
       setRow(null)
       return () => { cancelado = true }
     }
 
     void supabase
       .from('v_seguimiento_rag_actual')
-      .select('vencimiento_id, rag_porcentaje, cantidad_base_rag, cantidad_observada, unidades_vendidas_observadas, dias_observados, velocidad_observada, velocidad_necesaria, dias_comerciales_restantes, dias_desde_ultimo_rag, estado_seguimiento_rag')
+      .select('vencimiento_id, rag_porcentaje, cantidad_base_rag, cantidad_observada, unidades_vendidas_observadas, dias_observados, velocidad_observada, velocidad_necesaria, dias_comerciales_restantes, dias_desde_ultimo_rag, estado_seguimiento_rag, hay_oferta_central')
       .eq('vencimiento_id', vencimientoId)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -168,14 +181,33 @@ export default function RagSeguimientoBadge({ vencimientoId, activo }: RagSeguim
       })
 
     return () => { cancelado = true }
-  }, [activo, vencimientoId])
+  }, [hayIntervencion, vencimientoId])
+
+  // El tipo sale de la fila y no del prop: el prop dice que HAY algo abierto,
+  // la fila dice QUÉ, y de eso depende cómo se nombra en pantalla.
+  const tipo = useMemo(
+    () => (row ? tipoTramo({ ragPorcentaje: row.rag_porcentaje, hayOfertaCentral: row.hay_oferta_central === true }) : null),
+    [row],
+  )
 
   const info = useMemo(() => {
     if (solicitudAbierta) {
       return { ...SOLICITUD_PRESENTACION[solicitudAbierta.estado_actual], Icono: Clock3 }
     }
-    return row ? presentacion(row) : null
-  }, [row, solicitudAbierta])
+    return row ? presentacion(row, tipo) : null
+  }, [row, solicitudAbierta, tipo])
+
+  /**
+   * Con oferta central y sin RAG no hay escalones que sugerir —el porcentaje no
+   * lo maneja la sucursal—, así que la salida es binaria: funciona, o no
+   * funciona y corresponde evaluar un RAG encima.
+   */
+  const salida = useMemo(
+    () => (tipo === 'oferta_central' && row?.estado_seguimiento_rag
+      ? salidaOfertaCentral(row.estado_seguimiento_rag as never)
+      : null),
+    [tipo, row],
+  )
 
   // La sugerencia se calcula con el mismo motor determinístico que usa la
   // pantalla de Control: una sola fuente para el número que ve el operador.
@@ -192,7 +224,7 @@ export default function RagSeguimientoBadge({ vencimientoId, activo }: RagSeguim
     }, escala)
   }, [row, escala])
 
-  if (!activo || !info) return null
+  if (!hayIntervencion || !info) return null
 
   const { Icono } = info
   const muestraCobertura = sugerencia?.cobertura != null
@@ -207,6 +239,14 @@ export default function RagSeguimientoBadge({ vencimientoId, activo }: RagSeguim
             {info.detalle}
             {muestraCobertura && ` · cobertura ${coberturaComoPorcentaje(sugerencia.cobertura)}`}
           </p>
+          {/*
+            * La salida de la oferta central es binaria y va donde iría la
+            * sugerencia: funciona, o corresponde evaluar un RAG encima. Sin
+            * escalones, porque el porcentaje no lo maneja la sucursal.
+            */}
+          {salida && !solicitudAbierta && (
+            <p className="text-[10px] leading-snug mt-1 font-semibold">{salida}</p>
+          )}
           {sugerencia?.hay && !solicitudAbierta && (
             <p className="text-[10px] leading-snug mt-1 font-semibold">
               Sugerencia por urgencia: {sugerencia.desde}% → {sugerencia.hasta}%

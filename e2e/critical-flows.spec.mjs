@@ -367,6 +367,31 @@ test.describe('Noven · escrituras críticas Scanner', () => {
     expect(fixture.directTableWrites).toEqual([])
   })
 
+  test('una oferta central activa se mide y dice qué hacer, sin decir RAG', async ({ page }) => {
+    // El hueco que este recorrido cubre: la oferta central se registraba y no se
+    // evaluaba. El cálculo estaba —el motor mide el tramo abierto sin importar
+    // el tipo— y tres lugares de la interfaz lo tapaban con `rag_porcentaje`.
+    await installScannerWriteFixture(page, {
+      hasActiveControl: true,
+      ofertaCentralActiva: true,
+      ragSuggestion: true,
+    })
+    await login(page)
+    await buscarProductoScanner(page)
+
+    const dialog = page.getByRole('dialog', { name: 'Control de vencimiento' })
+
+    // La medición vive en la tarjeta de la oferta central, no en la del RAG.
+    await expect(dialog.getByText('Oferta central insuficiente')).toBeVisible()
+    await expect(dialog.getByText('No está alcanzando: evaluá agregar RAG encima.')).toBeVisible()
+
+    // Y la mitad que faltaría sin esto: la etiqueta NO puede decir «RAG» sobre
+    // un producto sin RAG. Sin esta afirmación, volver al mapa viejo de
+    // etiquetas dejaría el recorrido verde.
+    await expect(dialog.getByText('RAG insuficiente')).toHaveCount(0)
+    await expect(dialog.getByText('RAG efectivo')).toHaveCount(0)
+  })
+
   test('una oferta central empieza sólo cuando el operador la informa', async ({ page }) => {
     const fixture = await installScannerWriteFixture(page, { hasActiveControl: true })
     await login(page)

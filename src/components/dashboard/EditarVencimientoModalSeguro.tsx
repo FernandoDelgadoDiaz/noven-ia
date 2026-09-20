@@ -32,6 +32,11 @@ import ProductIdentity from '@/components/product/ProductIdentity'
 import type { EstadoSeguimientoRag, EstadoSolicitudCambioRag } from '@/types/index'
 import { useEscalaRag } from '@/hooks/useEscalaRag'
 import { useSolicitudCambioRag } from '@/hooks/useSolicitudCambioRag'
+import {
+  etiquetaEstadoTramo,
+  salidaOfertaCentral,
+  tipoTramo,
+} from '@/lib/intervencion-medible'
 import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
 import { useUsuarioRol } from '@/hooks/useUsuarioRol'
 import { coberturaComoPorcentaje, evaluarSugerencia } from '@/lib/ragCobertura'
@@ -76,6 +81,7 @@ interface SeguimientoRagRow {
   dias_desde_ultimo_rag: number | null
   dias_comerciales_restantes: number
   estado_seguimiento_rag: EstadoSeguimientoRag
+  cobertura: number | null
   hay_oferta_central: boolean
   intervenciones_abiertas: number
   medicion_atribuible: boolean
@@ -94,18 +100,6 @@ interface Props {
 }
 
 type MotivoFinalizacionRag = 'decision_comercial' | 'otro'
-
-const RAG_ESTADO_LABEL: Record<EstadoSeguimientoRag, string> = {
-  decomiso: 'Producto vencido',
-  donacion: 'En ventana de donación',
-  sin_rag: 'Sin RAG registrado',
-  pendiente_control_operador: 'Pendiente de nuevo control',
-  ventana_insuficiente: 'Ventana todavía corta para medir',
-  dato_a_revisar: 'Cantidad a revisar',
-  sin_movimiento: 'Sin movimiento',
-  efectivo: 'RAG efectivo',
-  insuficiente: 'RAG insuficiente',
-}
 
 function fmtVelocidad(valor: number | null): string {
   if (valor === null || !Number.isFinite(valor)) return '—'
@@ -193,7 +187,7 @@ export default function EditarVencimientoModalSeguro({
       setCargandoRag(true)
       const { data, error: ragError } = await supabase
         .from('v_seguimiento_rag_actual')
-        .select('dias_donacion, rag_porcentaje, rag_aplicado_at, cantidad_base_rag, cantidad_observada, unidades_vendidas_observadas, velocidad_observada, velocidad_necesaria, dias_observados, dias_desde_ultimo_rag, dias_comerciales_restantes, estado_seguimiento_rag, hay_oferta_central, intervenciones_abiertas, medicion_atribuible')
+        .select('dias_donacion, rag_porcentaje, rag_aplicado_at, cantidad_base_rag, cantidad_observada, unidades_vendidas_observadas, velocidad_observada, velocidad_necesaria, dias_observados, dias_desde_ultimo_rag, dias_comerciales_restantes, estado_seguimiento_rag, cobertura, hay_oferta_central, intervenciones_abiertas, medicion_atribuible')
         .eq('vencimiento_id', vencimiento.id)
         .maybeSingle()
 
@@ -721,7 +715,7 @@ export default function EditarVencimientoModalSeguro({
               <div className="flex items-center gap-2"><Percent className="h-4 w-4 text-amber-700" /><div><p className="text-xs font-bold">RAG · Retiro Anticipado de Góndola</p><p className="text-[11px] text-muted-foreground">El porcentaje se define por escala y se ejecuta de forma centralizada.</p></div></div>
               {cargandoRag ? <p className="text-[11px] text-muted-foreground">Cargando seguimiento…</p> : seguimientoRag?.rag_porcentaje != null ? (
                 <div className="rounded-lg bg-white/80 border border-amber-100 p-3 text-[11px]">
-                  <div className="flex items-center gap-1.5 font-semibold"><Activity className="h-3.5 w-3.5 text-amber-700" />{RAG_ESTADO_LABEL[seguimientoRag.estado_seguimiento_rag]}</div>
+                  <div className="flex items-center gap-1.5 font-semibold"><Activity className="h-3.5 w-3.5 text-amber-700" />{etiquetaEstadoTramo(seguimientoRag.estado_seguimiento_rag, tipoTramo({ ragPorcentaje: seguimientoRag.rag_porcentaje, hayOfertaCentral: seguimientoRag.hay_oferta_central }))}</div>
                   <div className="grid grid-cols-2 gap-1 mt-2 text-muted-foreground"><span>RAG vigente</span><span className="text-right font-medium text-foreground">{seguimientoRag.rag_porcentaje}%</span><span>Vel. observada</span><span className="text-right font-medium text-foreground">{fmtVelocidad(seguimientoRag.velocidad_observada)}</span>
                     {muestraDetalleCobertura && (<>
                       <span>Vel. necesaria</span><span className="text-right font-medium text-foreground">{fmtVelocidad(seguimientoRag.velocidad_necesaria)}</span>
@@ -945,6 +939,57 @@ export default function EditarVencimientoModalSeguro({
                   <span className="text-[10px] font-semibold rounded-full border border-sky-200 bg-white px-2 py-0.5 text-sky-700">Activa</span>
                 )}
               </div>
+              {/*
+                * LA MEDICIÓN VA ACÁ, no destapando la tarjeta del RAG. El motor
+                * mide el tramo abierto sin importar el tipo —decisión del
+                * bloque B— y hasta este cambio el número existía y no se
+                * mostraba: la tarjeta decía «Informada como activa» y nada más.
+                *
+                * Poner esto en la tarjeta del RAG habría hecho que dijera «RAG
+                * efectivo» sobre un producto sin RAG, que es peor que el hueco.
+                */}
+              {seguimientoRag?.hay_oferta_central && (
+                <div className="rounded-lg bg-white/80 border border-sky-100 p-3 text-[11px]">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <Activity className="h-3.5 w-3.5 text-sky-700" />
+                    {etiquetaEstadoTramo(
+                      seguimientoRag.estado_seguimiento_rag,
+                      tipoTramo({
+                        ragPorcentaje: seguimientoRag.rag_porcentaje,
+                        hayOfertaCentral: true,
+                      }),
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 mt-2 text-muted-foreground">
+                    <span>Vel. observada</span>
+                    <span className="text-right font-medium text-foreground">{fmtVelocidad(seguimientoRag.velocidad_observada)}</span>
+                    <span>Vel. necesaria</span>
+                    <span className="text-right font-medium text-foreground">{fmtVelocidad(seguimientoRag.velocidad_necesaria)}</span>
+                    {/*
+                      * La cobertura sale de la vista y no del motor de
+                      * sugerencia: `evaluarSugerencia` corta a propósito sin
+                      * porcentaje de RAG, así que pedirle este número sería
+                      * preguntarle a la pieza equivocada.
+                      */}
+                    <span>Cobertura</span>
+                    <span className="text-right font-medium text-foreground">{coberturaComoPorcentaje(seguimientoRag.cobertura)}</span>
+                    <span>Días comerciales</span>
+                    <span className="text-right font-medium text-foreground">{seguimientoRag.dias_comerciales_restantes}</span>
+                  </div>
+                  {/*
+                    * Salida binaria: con oferta central no hay escalones que
+                    * sugerir porque el porcentaje no lo maneja la sucursal.
+                    * Cuando no hay nada medido todavía, lo dice — «todavía no
+                    * hay evidencia» y «no hay intervención» no pueden verse
+                    * igual.
+                    */}
+                  {salidaOfertaCentral(seguimientoRag.estado_seguimiento_rag) && (
+                    <p className="mt-2 font-semibold text-sky-900">
+                      {salidaOfertaCentral(seguimientoRag.estado_seguimiento_rag)}
+                    </p>
+                  )}
+                </div>
+              )}
               <input
                 type="text"
                 value={notaOfertaCentral}
