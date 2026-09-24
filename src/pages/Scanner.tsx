@@ -23,7 +23,7 @@ import {
   esEanValido,
 } from '@/lib/codigos'
 
-type Paso = 'inicio' | 'confirmando' | 'capturar_ean' | 'completar_cod_art' | 'vencimiento_existente' | 'formulario' | 'exito' | 'nuevo_producto' | 'familia_bloqueada'
+type Paso = 'inicio' | 'confirmando' | 'capturar_ean' | 'completar_cod_art' | 'asociar_ean' | 'vencimiento_existente' | 'formulario' | 'exito' | 'nuevo_producto' | 'familia_bloqueada'
 type CategoriaProducto = 'CHOCOLATES' | 'CARAMELOS' | 'SNACKS' | 'CHICLES' | 'CEREALES' | 'OTRO'
 type ProductoConPoliticaScanner = Producto & { dias_donacion?: number | null }
 const CATEGORIAS: CategoriaProducto[] = ['CHOCOLATES', 'CARAMELOS', 'SNACKS', 'CHICLES', 'CEREALES', 'OTRO']
@@ -37,6 +37,7 @@ function identidadProductoTexto(producto: Producto): string {
 export default function Scanner() {
   const { scanBarcode, scanning, error: scanError, reset } = useScanner()
   const {
+    searchByBarcode,
     buscarConflictoCodigos,
     vincularEanScanner,
     completarCodArtScanner,
@@ -77,6 +78,15 @@ export default function Scanner() {
   const [codArtCompletando, setCodArtCompletando] = useState('')
   const [guardandoCodArt, setGuardandoCodArt] = useState(false)
   const [errorCodArtCompletando, setErrorCodArtCompletando] = useState<string | null>(null)
+
+  // Asociar un EAN desconocido a un producto que ya existe por su código
+  // interno. Es el camino diario: el 88% del catálogo entró por el 0258 con
+  // código interno y sin EAN.
+  const [codArtAsociar, setCodArtAsociar] = useState('')
+  const [productoAsociar, setProductoAsociar] = useState<Producto | null>(null)
+  const [buscandoAsociar, setBuscandoAsociar] = useState(false)
+  const [vinculandoAsociar, setVinculandoAsociar] = useState(false)
+  const [errorAsociar, setErrorAsociar] = useState<string | null>(null)
 
   const [familiasUsuario, setFamiliasUsuario] = useState<Familia[]>([])
 
@@ -125,28 +135,28 @@ export default function Scanner() {
       const fueBarcode = esBarcode || resultado.codigo_barras === codigo.trim()
       setEncontradoPorCodArt(!fueBarcode)
 
-      const { data: vencData, error: vencError } = await supabase
-        .from('v_vencimientos_operativos')
-        .select('id, cantidad, fecha_vencimiento, lote')
-        .eq('producto_id', resultado.id)
-        .eq('sucursal_id', sucursalId)
-        .eq('activo', true)
-        .order('fecha_carga', { ascending: false })
-        .limit(1)
-
-      if (vencError && vencError.code !== 'PGRST205' && vencError.code !== '42P01') {
-        setErrorBusqueda(`No se pudo verificar el vencimiento activo: ${vencError.message}`)
+      const venc = await cargarVencimientoExistente(resultado.id)
+      if (!venc.ok) {
+        setErrorBusqueda(venc.error)
         return
       }
-      setVencimientoExistente((vencData?.[0] as VencimientoExistente | undefined) ?? null)
 
       setPaso('confirmando')
     } else if (!scanError) {
       const codigoTrim = codigo.trim()
       const clase = clasificarCodigoEscaneado(codigoTrim)
       if (clase === 'ean') {
+        // Un EAN que no está en la base casi nunca es un producto nuevo: es
+        // uno que entró por el 0258 con código interno y sin EAN. Por eso se
+        // pide PRIMERO y SOLO el código interno. Si el formulario de alta
+        // mostrara todos los campos juntos, el operador los llenaría de
+        // arriba hacia abajo y la búsqueda llegaría con la descripción ya
+        // escrita: el mismo trabajo tirado de antes, sólo que un poco antes.
         setNuevoProductoEan(codigoTrim)
         setNuevoProductoCodArt('')
+        resetAsociar()
+        setPaso('asociar_ean')
+        return
       } else if (clase === 'cod_art') {
         setNuevoProductoCodArt(codigoTrim)
         setNuevoProductoEan('')
@@ -169,11 +179,107 @@ export default function Scanner() {
     void buscarProducto(codigo, false)
   }
 
-  function continuarDesdeProducto(p: Producto): void {
+  /**
+   * `venc` se puede pasar explícito porque un `setState` no está disponible en
+   * el mismo tick: el camino de asociar carga el vencimiento y decide en la
+   * misma función, y leer el estado ahí decidiría con el valor anterior.
+   */
+  function continuarDesdeProducto(
+    p: Producto,
+    venc: VencimientoExistente | null = vencimientoExistente,
+  ): void {
     if (!p.codigo_barras) { setPaso('capturar_ean'); return }
     if (!p.cod_art || p.cod_art.trim() === '') { setPaso('completar_cod_art'); return }
-    if (vencimientoExistente) { setPaso('vencimiento_existente'); return }
+    if (venc) { setPaso('vencimiento_existente'); return }
     setPaso('formulario')
+  }
+
+  async function cargarVencimientoExistente(
+    productoId: string,
+  ): Promise<{ ok: true; venc: VencimientoExistente | null } | { ok: false; error: string }> {
+    const { data: vencData, error: vencError } = await supabase
+      .from('v_vencimientos_operativos')
+      .select('id, cantidad, fecha_vencimiento, lote')
+      .eq('producto_id', productoId)
+      .eq('sucursal_id', sucursalId)
+      .eq('activo', true)
+      .order('fecha_carga', { ascending: false })
+      .limit(1)
+
+    if (vencError && vencError.code !== 'PGRST205' && vencError.code !== '42P01') {
+      return { ok: false, error: `No se pudo verificar el vencimiento activo: ${vencError.message}` }
+    }
+    const venc = (vencData?.[0] as VencimientoExistente | undefined) ?? null
+    setVencimientoExistente(venc)
+    return { ok: true, venc }
+  }
+
+  function resetAsociar(): void {
+    setCodArtAsociar('')
+    setProductoAsociar(null)
+    setBuscandoAsociar(false)
+    setVinculandoAsociar(false)
+    setErrorAsociar(null)
+  }
+
+  async function handleBuscarParaAsociar(): Promise<void> {
+    const codigo = codArtAsociar.trim()
+    if (!esCodArtValido(codigo)) { setErrorAsociar(MENSAJE_COD_ART_INVALIDO); return }
+
+    setErrorAsociar(null)
+    setBuscandoAsociar(true)
+    let encontrado: Producto | null = null
+    try {
+      encontrado = await searchByBarcode(codigo, sucursalId)
+    } catch (err) {
+      setBuscandoAsociar(false)
+      setErrorAsociar(`No se pudo buscar el código: ${err instanceof Error ? err.message : String(err)}`)
+      return
+    }
+    setBuscandoAsociar(false)
+
+    if (!encontrado) {
+      // Recién acá es un producto nuevo de verdad: ni el EAN ni el código
+      // interno están en la base. El formulario de alta abre con los dos ya
+      // cargados.
+      setNuevoProductoCodArt(codigo)
+      setPaso('nuevo_producto')
+      return
+    }
+
+    if (!verificarFamiliaProducto(encontrado)) {
+      setProductoEncontrado(encontrado)
+      setPaso('familia_bloqueada')
+      return
+    }
+
+    setProductoAsociar(encontrado)
+  }
+
+  async function handleVincularAsociado(): Promise<void> {
+    if (!productoAsociar) return
+    setErrorAsociar(null)
+    setVinculandoAsociar(true)
+    let actualizado: Producto
+    try {
+      // La misma RPC que ya vincula un EAN a un producto sin código de barras:
+      // valida el formato, el alcance, y rechaza si el EAN es de otro producto.
+      actualizado = await vincularEanScanner(sucursalId, productoAsociar.id, nuevoProductoEan)
+    } catch (err) {
+      setVinculandoAsociar(false)
+      setErrorAsociar(`No se pudo vincular el código de barras: ${err instanceof Error ? err.message : String(err)}`)
+      return
+    }
+
+    setProductoEncontrado(actualizado)
+    setEncontradoPorCodArt(true)
+    const venc = await cargarVencimientoExistente(actualizado.id)
+    setVinculandoAsociar(false)
+    if (!venc.ok) { setErrorAsociar(venc.error); return }
+
+    // El operador ya dijo «es este»: no se le vuelve a pedir confirmación.
+    resetAsociar()
+    continuarDesdeProducto(actualizado, venc.venc)
   }
 
   function handleConfirmarProducto(): void {
@@ -206,6 +312,7 @@ export default function Scanner() {
     setErrorEan(null)
     setCodArtCompletando('')
     setErrorCodArtCompletando(null)
+    resetAsociar()
     resetNuevoProducto()
   }
 
@@ -582,6 +689,92 @@ export default function Scanner() {
           </div>
         </div>
       </>
+    )
+  }
+
+  if (paso === 'asociar_ean') {
+    const codArtListo = esCodArtValido(codArtAsociar)
+    return (
+      <div className="min-h-screen bg-surface-base flex flex-col">
+        <SubHeader paso={1} titulo="Asociar código de barras" subtitulo="Este código de barras todavía no está registrado" onBack={handleCancelarConfirmacion} />
+        <div className="flex-1 overflow-y-auto px-4 pb-nav pt-4 flex flex-col gap-4">
+          <div className="bg-brand-light border border-brand-muted rounded-card p-4 flex gap-3 items-start">
+            <Barcode className="h-5 w-5 text-brand shrink-0 mt-0.5" />
+            <div>
+              <p className="text-brand font-semibold text-sm">Código escaneado: <span className="tabular-nums">{nuevoProductoEan}</span></p>
+              <p className="text-brand/70 text-xs mt-1">
+                Ingresá el código interno del producto. Si ya está en el sistema, sólo se le vincula este código de barras.
+              </p>
+            </div>
+          </div>
+
+          {errorAsociar && (
+            <div role="alert" className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-start gap-2 animate-fade-in">
+              <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+              <p className="text-red-600 text-sm">{errorAsociar}</p>
+            </div>
+          )}
+
+          {productoAsociar ? (
+            <>
+              <div className="bg-white rounded-card shadow-card px-4 py-3.5">
+                <ProductIdentity producto={productoAsociar} label="Producto encontrado" compact imageSize="sm" />
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleVincularAsociado()}
+                disabled={vinculandoAsociar}
+                className="w-full min-h-[56px] flex items-center justify-center gap-3 bg-brand hover:bg-brand-hover disabled:opacity-50 text-white font-bold text-base rounded-card shadow-brand transition-all duration-150 active:scale-[0.98]"
+              >
+                {vinculandoAsociar ? (
+                  <><span className="h-5 w-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Vinculando...</>
+                ) : (
+                  <><CheckCircle className="h-5 w-5" />Es este, vincular el código de barras</>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setProductoAsociar(null); setErrorAsociar(null) }}
+                disabled={vinculandoAsociar}
+                className="w-full py-2.5 text-center bg-muted hover:bg-muted/70 text-foreground text-sm font-medium rounded-lg transition-colors"
+              >
+                No es este
+              </button>
+            </>
+          ) : (
+            <div className="bg-white rounded-card shadow-card p-4 flex flex-col gap-3">
+              <label htmlFor="asociar-codart" className="block text-xs font-semibold text-foreground uppercase tracking-wide">
+                Código interno
+              </label>
+              <input
+                id="asociar-codart"
+                type="text"
+                inputMode="numeric"
+                autoFocus
+                maxLength={LARGO_COD_ART}
+                value={codArtAsociar}
+                onChange={(e) => { setCodArtAsociar(e.target.value.replace(/\D/g, '')); setErrorAsociar(null) }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && codArtListo) void handleBuscarParaAsociar() }}
+                placeholder={`${LARGO_COD_ART} dígitos`}
+                className={inputCls}
+              />
+              <button
+                type="button"
+                onClick={() => void handleBuscarParaAsociar()}
+                disabled={!codArtListo || buscandoAsociar}
+                className="w-full h-12 flex items-center justify-center gap-2 bg-brand hover:bg-brand-hover disabled:opacity-50 text-white font-semibold text-sm rounded-lg transition-colors"
+              >
+                {buscandoAsociar ? (
+                  <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+                Buscar
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     )
   }
 

@@ -1440,3 +1440,42 @@ comparten `ordenarSolicitudes` y `agruparPorSucursal`.
 
 **Estado:** PR #200 fusionado. Sin migraciones: el cambio es de presentación y
 no toca el servidor.
+
+### 2026-09-24 · Claude Code · Scanner: asociar un EAN desconocido por código interno
+
+**Origen: uso real.** Al escanear un EAN que la base no conoce, el operador caía
+al formulario de alta completo y tenía que escribir a mano la descripción y los
+demás datos, aunque el producto ya existiera por su código interno.
+
+**Diagnóstico, verificado contra producción antes de escribir.** No era que el
+producto no existiera, ni que se estuvieran creando duplicados:
+
+- **La capacidad ya existía.** `buscar_producto_scanner` busca por código
+  interno cuando no encuentra el EAN, y `vincular_ean_producto_scanner` vincula,
+  admite varios EAN por producto y es idempotente. La pantalla no las usaba en
+  ese momento: saltaba al alta.
+- **Duplicados: cero, y estructuralmente imposibles.** La restricción
+  `productos_organizacion_cod_art_uk` lo garantiza, y al enviar el alta
+  `buscar_conflicto_codigos_scanner` rechazaba el código tomado. El costo era
+  trabajo tirado y un callejón sin salida, no integridad.
+- **Es el caso diario.** 737 de 834 productos (88%) tienen código interno y
+  ningún EAN.
+- **Cuando después llega el 0258, lo reconoce y no lo duplica:** se liga por
+  `cod_art` y la restricción única lo garantiza.
+
+**El orden es la decisión.** Primero SÓLO el código interno; el formulario
+completo recién si no lo encuentra. Si el alta mostrara todos los campos juntos,
+el operador los llenaría de arriba hacia abajo y la búsqueda llegaría con la
+descripción ya escrita. Buscar al escanear no alcanza: con el EAN solo no hay
+nada que buscar, porque ya falló.
+
+**Hallazgo anotado y NO tocado: la descripción del producto es de escritura
+única.** Nada actualiza nunca `productos.descripcion` desde la importación: gana
+quien la escribe primero. Hoy 152 de 587 productos con 0258 tienen una
+descripción distinta a la del origen. Parte es ruido —doble espacio, eñes,
+puntuación— pero parte es alguien escribiendo una descripción **mejor** que la
+del 0258: «TURRON DE MANI ARCOR» donde el origen dice «TURRON DE MANI»,
+agregando la marca que el origen trunca. Eso argumenta en contra de pisarla con
+la del 0258 cuando llegue. Se deja como está por decisión del responsable del
+producto.
+

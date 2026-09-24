@@ -17,6 +17,29 @@ async function buscarProductoScanner(page) {
   await page.getByRole('button', { name: 'Buscar' }).click()
 }
 
+/**
+ * Simula una lectura de cámara recorriendo el camino REAL de producción:
+ * `ScannerModal` pide la cámara, `BarcodeDetector` encuentra el código y
+ * `entregarLectura` lo marca como lectura física antes de entregarlo. Sólo se
+ * reemplazan las dos piezas de hardware —la cámara y el detector—; nada del
+ * código de la app tiene una puerta trasera para el test.
+ *
+ * Es necesario porque el EAN no admite carga manual: la búsqueda escrita acepta
+ * únicamente el código interno de 7 dígitos, a propósito.
+ */
+async function instalarCamaraSimulada(page, codigo) {
+  await page.addInitScript((lectura) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 16
+    canvas.height = 16
+    navigator.mediaDevices.getUserMedia = async () => canvas.captureStream()
+    HTMLMediaElement.prototype.play = async function play() {}
+    window.BarcodeDetector = class {
+      async detect() { return [{ rawValue: lectura }] }
+    }
+  }, codigo)
+}
+
 test.describe('Noven · recorridos críticos multitenant', () => {
   test('cuenta multirrol 091 no expone otras sucursales por el rol jerárquico', async ({ page }) => {
     const fixture = await installNovenFixture(page)
@@ -365,6 +388,70 @@ test.describe('Noven · escrituras críticas Scanner', () => {
     })
     expect(fixture.rpcCalls.filter((call) => call.name === 'finalizar_rag_vigente')).toHaveLength(0)
     expect(fixture.directTableWrites).toEqual([])
+  })
+
+  test('un EAN desconocido se vincula al producto existente sólo con su código interno', async ({ page }) => {
+    // El camino diario de la góndola: el 88% del catálogo entró por el 0258 con
+    // código interno y sin EAN. Escanear, poner el código, y listo. Antes el
+    // operador caía al alta completa, escribía la descripción, y recién al
+    // enviar se enteraba de que el producto ya existía.
+    const fixture = await installScannerWriteFixture(page, { productoSinEan: true })
+    await instalarCamaraSimulada(page, SCANNER_IDS.eanDesconocido)
+    await login(page)
+    await page.goto('/scanner')
+    await expect(page.getByRole('heading', { name: 'Registrar vencimiento' })).toBeVisible()
+
+    await page.getByRole('button', { name: /Escanear producto/ }).click()
+
+    // El EAN no está: la pantalla pide el código interno, y NADA MÁS. Si el
+    // formulario mostrara todos los campos, el operador los llenaría de arriba
+    // hacia abajo y la búsqueda llegaría con la descripción ya escrita.
+    await expect(page.getByRole('heading', { name: 'Asociar código de barras' })).toBeVisible()
+    await expect(page.getByText(SCANNER_IDS.eanDesconocido)).toBeVisible()
+    await expect(page.getByRole('textbox')).toHaveCount(1)
+    await expect(page.getByLabel('Código interno')).toBeVisible()
+
+    await page.getByLabel('Código interno').fill(SCANNER_IDS.codArt)
+    await page.getByRole('button', { name: 'Buscar' }).click()
+
+    await expect(page.getByText('PRODUCTO SCANNER E2E')).toBeVisible()
+    await page.getByRole('button', { name: 'Es este, vincular el código de barras' }).click()
+
+    // Vinculado con el EAN que ya se había escaneado, y directo a la carga del
+    // vencimiento: no se vuelve a pedir el escaneo ni una confirmación.
+    await expect(page.getByRole('heading', { name: 'Cargar vencimiento' })).toBeVisible()
+    expect(fixture.rpcCalls.filter((call) => call.name === 'vincular_ean_producto_scanner')).toEqual([
+      {
+        name: 'vincular_ean_producto_scanner',
+        body: {
+          p_sucursal_id: IDS.s091,
+          p_producto_id: SCANNER_IDS.product,
+          p_ean: SCANNER_IDS.eanDesconocido,
+        },
+      },
+    ])
+
+    // Y la mitad que lo hace prueba: el alta NUNCA se abrió. Ni la pantalla,
+    // ni la RPC. Sin esto, volver al formulario completo dejaría el recorrido
+    // verde.
+    expect(fixture.rpcCalls.filter((call) => call.name === 'crear_producto_scanner')).toHaveLength(0)
+    await expect(page.getByRole('heading', { name: 'Agregar producto' })).toHaveCount(0)
+    expect(fixture.directTableWrites).toEqual([])
+  })
+
+  test('si el código interno tampoco existe, recién ahí se abre el alta con los dos códigos cargados', async ({ page }) => {
+    await installScannerWriteFixture(page, { productoSinEan: true })
+    await instalarCamaraSimulada(page, SCANNER_IDS.eanDesconocido)
+    await login(page)
+    await page.goto('/scanner')
+    await page.getByRole('button', { name: /Escanear producto/ }).click()
+
+    await expect(page.getByRole('heading', { name: 'Asociar código de barras' })).toBeVisible()
+    await page.getByLabel('Código interno').fill('9999999')
+    await page.getByRole('button', { name: 'Buscar' }).click()
+
+    await expect(page.getByRole('heading', { name: 'Agregar producto' })).toBeVisible()
+    await expect(page.locator('#np-codart')).toHaveValue('9999999')
   })
 
   test('una oferta central activa se mide y dice qué hacer, sin decir RAG', async ({ page }) => {
