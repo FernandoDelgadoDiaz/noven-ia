@@ -6,6 +6,9 @@ export const SCANNER_IDS = {
   family: 'ffffffff-ffff-4fff-8fff-fffffffffff1',
   codArt: '9101234',
   ean: '7790000910123',
+  // EAN que la base todavía no conoce: el producto existe por su código
+  // interno —entró por el 0258— y no tiene código de barras.
+  eanDesconocido: '7790000919999',
 }
 
 function jsonHeaders(extra = {}) {
@@ -81,6 +84,8 @@ export async function installScannerWriteFixture(page, options = {}) {
     ofertaCentralActiva = false,
     controlObservationId = null,
     salidaContext = null,
+    // El caso diario: el 88% del catálogo tiene código interno y ningún EAN.
+    productoSinEan = false,
   } = options
 
   await installNovenFixture(page)
@@ -92,6 +97,7 @@ export async function installScannerWriteFixture(page, options = {}) {
     ventaMediaDiaria: productVmd,
     diasDonacion,
   })
+  if (productoSinEan) product.codigo_barras = null
   const control = activeControl({
     cantidad: activeControlQuantity,
     fechaVencimiento: activeControlDate,
@@ -117,13 +123,27 @@ export async function installScannerWriteFixture(page, options = {}) {
       try { body = request.postDataJSON() ?? {} } catch { body = {} }
 
       if (rpc === 'buscar_producto_scanner') {
+        rpcCalls.push({ name: rpc, body })
         const codigo = String(body.p_codigo ?? '').trim()
-        const encontrado = codigo === SCANNER_IDS.codArt || codigo === SCANNER_IDS.ean
+        const encontrado = codigo === SCANNER_IDS.codArt
+          || (product.codigo_barras != null && codigo === product.codigo_barras)
         return route.fulfill({
           status: 200,
           headers: jsonHeaders(),
           body: JSON.stringify(encontrado ? product : null),
         })
+      }
+
+      if (rpc === 'vincular_ean_producto_scanner') {
+        rpcCalls.push({ name: rpc, body })
+        // Como la RPC real: el primer EAN llena el campo de compatibilidad.
+        product.codigo_barras = product.codigo_barras ?? String(body.p_ean ?? '')
+        return route.fulfill({ status: 200, headers: jsonHeaders(), body: JSON.stringify(product) })
+      }
+
+      if (rpc === 'crear_producto_scanner') {
+        rpcCalls.push({ name: rpc, body })
+        return route.fulfill(rpcError('crear_producto_scanner no debería llamarse en este recorrido'))
       }
 
       if (rpc === 'listar_familias_scanner') {

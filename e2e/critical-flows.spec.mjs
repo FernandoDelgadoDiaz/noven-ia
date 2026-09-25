@@ -17,6 +17,29 @@ async function buscarProductoScanner(page) {
   await page.getByRole('button', { name: 'Buscar' }).click()
 }
 
+/**
+ * Simula una lectura de cámara recorriendo el camino REAL de producción:
+ * `ScannerModal` pide la cámara, `BarcodeDetector` encuentra el código y
+ * `entregarLectura` lo marca como lectura física antes de entregarlo. Sólo se
+ * reemplazan las dos piezas de hardware —la cámara y el detector—; nada del
+ * código de la app tiene una puerta trasera para el test.
+ *
+ * Es necesario porque el EAN no admite carga manual: la búsqueda escrita acepta
+ * únicamente el código interno de 7 dígitos, a propósito.
+ */
+async function instalarCamaraSimulada(page, codigo) {
+  await page.addInitScript((lectura) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 16
+    canvas.height = 16
+    navigator.mediaDevices.getUserMedia = async () => canvas.captureStream()
+    HTMLMediaElement.prototype.play = async function play() {}
+    window.BarcodeDetector = class {
+      async detect() { return [{ rawValue: lectura }] }
+    }
+  }, codigo)
+}
+
 test.describe('Noven · recorridos críticos multitenant', () => {
   test('cuenta multirrol 091 no expone otras sucursales por el rol jerárquico', async ({ page }) => {
     const fixture = await installNovenFixture(page)
@@ -365,6 +388,104 @@ test.describe('Noven · escrituras críticas Scanner', () => {
     })
     expect(fixture.rpcCalls.filter((call) => call.name === 'finalizar_rag_vigente')).toHaveLength(0)
     expect(fixture.directTableWrites).toEqual([])
+  })
+
+  test('un EAN desconocido se vincula al producto existente sólo con su código interno', async ({ page }) => {
+    // El camino diario de la góndola: el 88% del catálogo entró por el 0258 con
+    // código interno y sin EAN. Escanear, poner el código, y listo. Antes el
+    // operador caía al alta completa, escribía la descripción, y recién al
+    // enviar se enteraba de que el producto ya existía.
+    const fixture = await installScannerWriteFixture(page, { productoSinEan: true })
+    await instalarCamaraSimulada(page, SCANNER_IDS.eanDesconocido)
+    await login(page)
+    await page.goto('/scanner')
+    await expect(page.getByRole('heading', { name: 'Registrar vencimiento' })).toBeVisible()
+
+    await page.getByRole('button', { name: /Escanear producto/ }).click()
+
+    // El EAN no está: la pantalla pide el código interno, y NADA MÁS. Si el
+    // formulario mostrara todos los campos, el operador los llenaría de arriba
+    // hacia abajo y la búsqueda llegaría con la descripción ya escrita.
+    await expect(page.getByRole('heading', { name: 'Asociar código de barras' })).toBeVisible()
+    await expect(page.getByText(SCANNER_IDS.eanDesconocido)).toBeVisible()
+    await expect(page.getByRole('textbox')).toHaveCount(1)
+    await expect(page.getByLabel('Código interno')).toBeVisible()
+
+    await page.getByLabel('Código interno').fill(SCANNER_IDS.codArt)
+    await page.getByRole('button', { name: 'Buscar' }).click()
+
+    // El nombre es lo más visible, con marca y gramaje: dos productos pueden
+    // tener nombres parecidos. Y hay DOS salidas con peso parecido: si la única
+    // fuera vincular, el operador la aprieta sin leer.
+    const encontrado = page.getByRole('region', { name: 'Producto encontrado' })
+    await expect(encontrado.getByText('PRODUCTO SCANNER E2E')).toBeVisible()
+    await expect(encontrado.getByText('Noven Test · 250 GR')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'No es este, corregir el código' })).toBeVisible()
+    await page.getByRole('button', { name: 'Es este, vincular' }).click()
+
+    // Vinculado con el EAN que ya se había escaneado, y directo a la carga del
+    // vencimiento: no se vuelve a pedir el escaneo ni una confirmación.
+    await expect(page.getByRole('heading', { name: 'Cargar vencimiento' })).toBeVisible()
+    expect(fixture.rpcCalls.filter((call) => call.name === 'vincular_ean_producto_scanner')).toEqual([
+      {
+        name: 'vincular_ean_producto_scanner',
+        body: {
+          p_sucursal_id: IDS.s091,
+          p_producto_id: SCANNER_IDS.product,
+          p_ean: SCANNER_IDS.eanDesconocido,
+        },
+      },
+    ])
+
+    // Y la mitad que lo hace prueba: el alta NUNCA se abrió. Ni la pantalla,
+    // ni la RPC. Sin esto, volver al formulario completo dejaría el recorrido
+    // verde.
+    expect(fixture.rpcCalls.filter((call) => call.name === 'crear_producto_scanner')).toHaveLength(0)
+    await expect(page.getByRole('heading', { name: 'Agregar producto' })).toHaveCount(0)
+    expect(fixture.directTableWrites).toEqual([])
+  })
+
+  test('un código que no está advierte antes del alta, y se puede corregir o seguir', async ({ page }) => {
+    // Puede ser un producto nuevo de verdad o un dígito mal tipeado sobre uno
+    // que existe. No se bloquea el alta —hay productos legítimamente nuevos—,
+    // pero el operador tiene que DECIDIR seguir en vez de seguir sin enterarse.
+    const fixture = await installScannerWriteFixture(page, { productoSinEan: true })
+    await instalarCamaraSimulada(page, SCANNER_IDS.eanDesconocido)
+    await login(page)
+    await page.goto('/scanner')
+    await page.getByRole('button', { name: /Escanear producto/ }).click()
+
+    await expect(page.getByRole('heading', { name: 'Asociar código de barras' })).toBeVisible()
+    // Un dígito mal: el código real es 9101234.
+    await page.getByLabel('Código interno').fill('9101235')
+    await page.getByRole('button', { name: 'Buscar' }).click()
+
+    const aviso = page.getByRole('alert', { name: 'Código no encontrado' })
+    await expect(aviso).toContainText('El código 9101235 no está en la base.')
+    await expect(aviso).toContainText('Revisalo antes de seguir: si está bien, cargá el producto nuevo.')
+    // La advertencia NO abrió el alta por su cuenta.
+    await expect(page.getByRole('heading', { name: 'Agregar producto' })).toHaveCount(0)
+
+    // Corregir vuelve al campo con el código tal como estaba: corregir es
+    // editar un dígito, no reescribir.
+    await aviso.getByRole('button', { name: 'Corregir el código' }).click()
+    await expect(page.getByLabel('Código interno')).toHaveValue('9101235')
+    await page.getByLabel('Código interno').fill(SCANNER_IDS.codArt)
+    await page.getByRole('button', { name: 'Buscar' }).click()
+    await expect(page.getByRole('region', { name: 'Producto encontrado' })).toContainText('PRODUCTO SCANNER E2E')
+
+    // «No es este» también vuelve al campo, con el código para corregir.
+    await page.getByRole('button', { name: 'No es este, corregir el código' }).click()
+    await expect(page.getByLabel('Código interno')).toHaveValue(SCANNER_IDS.codArt)
+    expect(fixture.rpcCalls.filter((call) => call.name === 'vincular_ean_producto_scanner')).toHaveLength(0)
+
+    // Y si el código es nuevo de verdad, se puede seguir: el alta abre con los
+    // dos códigos cargados.
+    await page.getByLabel('Código interno').fill('9999999')
+    await page.getByRole('button', { name: 'Buscar' }).click()
+    await page.getByRole('button', { name: 'Está bien, cargar producto nuevo' }).click()
+    await expect(page.getByRole('heading', { name: 'Agregar producto' })).toBeVisible()
+    await expect(page.locator('#np-codart')).toHaveValue('9999999')
   })
 
   test('una oferta central activa se mide y dice qué hacer, sin decir RAG', async ({ page }) => {

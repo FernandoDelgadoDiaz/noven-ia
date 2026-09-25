@@ -1440,3 +1440,82 @@ comparten `ordenarSolicitudes` y `agruparPorSucursal`.
 
 **Estado:** PR #200 fusionado. Sin migraciones: el cambio es de presentación y
 no toca el servidor.
+
+### 2026-09-24 · Claude Code · Scanner: asociar un EAN desconocido por código interno
+
+**Origen: uso real.** Al escanear un EAN que la base no conoce, el operador caía
+al formulario de alta completo y tenía que escribir a mano la descripción y los
+demás datos, aunque el producto ya existiera por su código interno.
+
+**Diagnóstico, verificado contra producción antes de escribir.** No era que el
+producto no existiera, ni que se estuvieran creando duplicados:
+
+- **La capacidad ya existía.** `buscar_producto_scanner` busca por código
+  interno cuando no encuentra el EAN, y `vincular_ean_producto_scanner` vincula,
+  admite varios EAN por producto y es idempotente. La pantalla no las usaba en
+  ese momento: saltaba al alta.
+- **Duplicados: cero, y estructuralmente imposibles.** La restricción
+  `productos_organizacion_cod_art_uk` lo garantiza, y al enviar el alta
+  `buscar_conflicto_codigos_scanner` rechazaba el código tomado. El costo era
+  trabajo tirado y un callejón sin salida, no integridad.
+- **Es el caso diario.** 737 de 834 productos (88%) tienen código interno y
+  ningún EAN.
+- **Cuando después llega el 0258, lo reconoce y no lo duplica:** se liga por
+  `cod_art` y la restricción única lo garantiza.
+
+**El orden es la decisión.** Primero SÓLO el código interno; el formulario
+completo recién si no lo encuentra. Si el alta mostrara todos los campos juntos,
+el operador los llenaría de arriba hacia abajo y la búsqueda llegaría con la
+descripción ya escrita. Buscar al escanear no alcanza: con el EAN solo no hay
+nada que buscar, porque ya falló.
+
+**Hallazgo anotado y NO tocado: la descripción del producto es de escritura
+única.** Nada actualiza nunca `productos.descripcion` desde la importación: gana
+quien la escribe primero. Hoy 152 de 587 productos con 0258 tienen una
+descripción distinta a la del origen. Parte es ruido —doble espacio, eñes,
+puntuación— pero parte es alguien escribiendo una descripción **mejor** que la
+del 0258: «TURRON DE MANI ARCOR» donde el origen dice «TURRON DE MANI»,
+agregando la marca que el origen trunca. Eso argumenta en contra de pisarla con
+la del 0258 cuando llegue. Se deja como está por decisión del responsable del
+producto.
+
+**Ajustes pedidos antes de mergear, porque vincular es atar un código a un
+producto y el único control es que el operador lea:**
+
+- **El nombre del producto es lo más visible de la pantalla**, con marca y
+  gramaje debajo: dos productos pueden llamarse parecido.
+- **Dos salidas con peso parecido**: «Es este, vincular» y «No es este, corregir
+  el código». Con un solo botón se aprieta sin leer y la protección no existe.
+- **Un código que no está advierte antes del alta**: «El código … no está en la
+  base. Revisalo antes de seguir: si está bien, cargá el producto nuevo.» Puede
+  ser un producto nuevo o un dígito mal tipeado sobre uno que existe. **No
+  bloquea** —hay productos legítimamente nuevos—; el operador decide seguir en
+  vez de seguir sin enterarse. Corregir vuelve al campo con el código tal como
+  estaba, porque corregir es editar un dígito, no reescribir.
+
+**Hallazgo anotado y NO tocado: vínculos EAN–código interno equivocados ya
+cargados antes de este cambio.** Se pueden haber producido por el otro camino de
+vincular (`capturar_ean`, que se abre cuando el producto encontrado no tiene
+EAN). Lo que se verificó en producción, sólo con lecturas:
+
+- **La población es chica: 97 EAN activos en total.** Una revisión humana
+  completa entra en una sentada. Es probablemente la forma más razonable de
+  detectarlos: ordenar la lista por sospecha y que alguien la mire.
+- **Los vínculos no dejan rastro.** `producto_codigos` no guarda quién vinculó
+  ni por qué camino —no hay `created_by` ni origen—, así que no se puede aislar
+  «lo que vinculó el Scanner antes de este cambio» del resto. Registrar actor y
+  origen desde ahora haría rastreable cualquier vínculo futuro.
+- **Heurística del prefijo de empresa (GS1).** Los EAN de un mismo fabricante
+  comparten prefijo; un EAN cuyo prefijo es de la marca A pegado a un producto
+  de la marca B es sospechoso. Probada contra producción marca **un** caso
+  —OBLEA DE ARROZ de GALLO SNACKS bajo un prefijo dominado por CHOCOARROZ— y es
+  **un falso positivo**: Chocoarroz es una marca de Gallo. La marca en la
+  etiqueta no es el fabricante, así que la heurística sirve para ORDENAR la
+  revisión, no para decidir.
+- **Productos con más de un EAN activo: cero hoy.** Es legítimo (cambio de
+  envase), pero vale como señal para revisar a futuro.
+- **El detector natural es el operador**: cuando escanea y aparece un producto
+  distinto al que tiene en la mano. Hoy no hay forma de decir «este no es» desde
+  la confirmación posterior a un escaneo; si la hubiera, esa sospecha se
+  convertiría en dato.
+
