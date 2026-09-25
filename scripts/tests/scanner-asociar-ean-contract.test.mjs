@@ -69,7 +69,35 @@ assert.equal(
   1,
   'el paso de asociar pide UN dato, el código interno: cualquier campo más es el trabajo que este cambio saca',
 )
-assert.match(paso, /Es este, vincular el código de barras/)
+
+// --- 2b. El operador tiene que LEER antes de vincular ------------------------
+//
+// Lo que se está por hacer es atar un código de barras a un producto, y el
+// único control es leer el nombre. Por eso el nombre es lo más visible de la
+// pantalla, van marca y gramaje —dos productos pueden llamarse parecido—, y hay
+// DOS salidas: si la única fuera vincular, se aprieta sin leer y la protección
+// no existe.
+
+export function revisarConfirmacion(fuente) {
+  assert.match(
+    fuente,
+    /<p className="text-2xl font-bold[^"]*">\{productoAsociar\.descripcion\}<\/p>/,
+    'el nombre del producto es lo más visible de la pantalla, no un dato más',
+  )
+  assert.match(
+    fuente,
+    /productoAsociar\.marca\?\.trim\(\), productoAsociar\.gramaje\?\.trim\(\)/,
+    'marca y gramaje se muestran: dos productos pueden tener nombres parecidos',
+  )
+  assert.match(fuente, />Es este, vincular</, 'falta la salida de vincular')
+  assert.match(
+    fuente,
+    /onClick=\{corregirCodigoAsociar\}[\s\S]{0,400}?No es este, corregir el código/,
+    'sin «No es este, corregir el código» el operador aprieta vincular sin leer',
+  )
+}
+
+revisarConfirmacion(paso)
 
 // --- 3. Vincula con el EAN que ya se escaneó --------------------------------
 
@@ -78,13 +106,37 @@ assert.match(
   /vincularEanScanner\(sucursalId, productoAsociar\.id, nuevoProductoEan\)/,
   'se vincula el EAN ya escaneado: pedirlo de nuevo sería un paso de más',
 )
-// Si no lo encuentra, recién ahí es un producto nuevo, y el alta abre con los
-// dos códigos ya cargados.
-assert.match(
-  scanner,
-  /if \(!encontrado\) \{[\s\S]{0,400}?setNuevoProductoCodArt\(codigo\)\s*\n\s*setPaso\('nuevo_producto'\)/,
-  'sin producto por código interno, el alta abre con el código ya puesto',
-)
+// Si no lo encuentra, ADVIERTE antes del alta: puede ser un producto nuevo de
+// verdad o un dígito mal tipeado sobre uno que existe. No bloquea —hay
+// productos legítimamente nuevos—, pero el operador decide seguir.
+export function revisarAdvertencia(fuente) {
+  const rama = fuente.slice(
+    fuente.indexOf('if (!encontrado) {'),
+    fuente.indexOf('if (!verificarFamiliaProducto(encontrado))'),
+  )
+  assert.match(rama, /setCodArtNoEncontrado\(codigo\)/, 'un código que no está se advierte')
+  assert.doesNotMatch(
+    rama,
+    /setPaso\('nuevo_producto'\)/,
+    'un código que no está no puede abrir el alta por su cuenta: el operador tiene que decidir seguir',
+  )
+  assert.match(
+    fuente,
+    /El código <strong[^>]*>\{codArtNoEncontrado\}<\/strong> no está en la base\.\s*\n\s*Revisalo antes de seguir: si está bien, cargá el producto nuevo\./,
+    'la advertencia dice qué pasó y qué revisar',
+  )
+  // No se bloquea: la salida para continuar existe, y abre el alta con el
+  // código ya puesto.
+  assert.match(
+    fuente,
+    /function continuarAltaConCodigo\(\)[\s\S]{0,200}?setNuevoProductoCodArt\(codArtNoEncontrado\)[\s\S]{0,80}?setPaso\('nuevo_producto'\)/,
+    'el alta no se bloquea: hay productos legítimamente nuevos',
+  )
+  assert.match(fuente, /Está bien, cargar producto nuevo/)
+  assert.match(fuente, /Corregir el código/)
+}
+
+revisarAdvertencia(scanner)
 // La familia se verifica igual que en la búsqueda normal.
 assert.match(
   scanner,
@@ -142,6 +194,33 @@ assert.throws(
     ),
   /pedir PRIMERO el código interno|no puede caer al alta completa/,
   'abrir el formulario completo en vez de pedir el código tiene que hacer fallar el contrato',
+)
+
+// Un «no encontrado» que abre el alta directo: el operador sigue sin enterarse.
+assert.throws(
+  () =>
+    revisarAdvertencia(
+      scanner.replace(
+        /setCodArtNoEncontrado\(codigo\)\s*\n\s*return/,
+        "setNuevoProductoCodArt(codigo)\n      setPaso('nuevo_producto')\n      return",
+      ),
+    ),
+  /se advierte|no puede abrir el alta por su cuenta/,
+  'abrir el alta sin advertir tiene que hacer fallar el contrato',
+)
+
+// Una confirmación con un solo botón: se aprieta sin leer.
+assert.throws(
+  () => revisarConfirmacion(paso.replace(/No es este, corregir el código/, '')),
+  /aprieta vincular sin leer/,
+  'sacar la salida de «no es este» tiene que hacer fallar el contrato',
+)
+
+// El nombre como un dato más, del mismo tamaño que el resto.
+assert.throws(
+  () => revisarConfirmacion(paso.replace(/text-2xl font-bold/, 'text-sm')),
+  /lo más visible de la pantalla/,
+  'bajar el nombre a un dato más tiene que hacer fallar el contrato',
 )
 
 console.log('scanner · asociar EAN por código interno: OK')

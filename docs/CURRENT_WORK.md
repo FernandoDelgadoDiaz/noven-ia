@@ -1479,3 +1479,43 @@ agregando la marca que el origen trunca. Eso argumenta en contra de pisarla con
 la del 0258 cuando llegue. Se deja como está por decisión del responsable del
 producto.
 
+**Ajustes pedidos antes de mergear, porque vincular es atar un código a un
+producto y el único control es que el operador lea:**
+
+- **El nombre del producto es lo más visible de la pantalla**, con marca y
+  gramaje debajo: dos productos pueden llamarse parecido.
+- **Dos salidas con peso parecido**: «Es este, vincular» y «No es este, corregir
+  el código». Con un solo botón se aprieta sin leer y la protección no existe.
+- **Un código que no está advierte antes del alta**: «El código … no está en la
+  base. Revisalo antes de seguir: si está bien, cargá el producto nuevo.» Puede
+  ser un producto nuevo o un dígito mal tipeado sobre uno que existe. **No
+  bloquea** —hay productos legítimamente nuevos—; el operador decide seguir en
+  vez de seguir sin enterarse. Corregir vuelve al campo con el código tal como
+  estaba, porque corregir es editar un dígito, no reescribir.
+
+**Hallazgo anotado y NO tocado: vínculos EAN–código interno equivocados ya
+cargados antes de este cambio.** Se pueden haber producido por el otro camino de
+vincular (`capturar_ean`, que se abre cuando el producto encontrado no tiene
+EAN). Lo que se verificó en producción, sólo con lecturas:
+
+- **La población es chica: 97 EAN activos en total.** Una revisión humana
+  completa entra en una sentada. Es probablemente la forma más razonable de
+  detectarlos: ordenar la lista por sospecha y que alguien la mire.
+- **Los vínculos no dejan rastro.** `producto_codigos` no guarda quién vinculó
+  ni por qué camino —no hay `created_by` ni origen—, así que no se puede aislar
+  «lo que vinculó el Scanner antes de este cambio» del resto. Registrar actor y
+  origen desde ahora haría rastreable cualquier vínculo futuro.
+- **Heurística del prefijo de empresa (GS1).** Los EAN de un mismo fabricante
+  comparten prefijo; un EAN cuyo prefijo es de la marca A pegado a un producto
+  de la marca B es sospechoso. Probada contra producción marca **un** caso
+  —OBLEA DE ARROZ de GALLO SNACKS bajo un prefijo dominado por CHOCOARROZ— y es
+  **un falso positivo**: Chocoarroz es una marca de Gallo. La marca en la
+  etiqueta no es el fabricante, así que la heurística sirve para ORDENAR la
+  revisión, no para decidir.
+- **Productos con más de un EAN activo: cero hoy.** Es legítimo (cambio de
+  envase), pero vale como señal para revisar a futuro.
+- **El detector natural es el operador**: cuando escanea y aparece un producto
+  distinto al que tiene en la mano. Hoy no hay forma de decir «este no es» desde
+  la confirmación posterior a un escaneo; si la hubiera, esa sospecha se
+  convertiría en dato.
+

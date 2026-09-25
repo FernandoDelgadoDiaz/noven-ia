@@ -87,6 +87,11 @@ export default function Scanner() {
   const [buscandoAsociar, setBuscandoAsociar] = useState(false)
   const [vinculandoAsociar, setVinculandoAsociar] = useState(false)
   const [errorAsociar, setErrorAsociar] = useState<string | null>(null)
+  // Código interno que no está en la base. No abre el alta directo: puede ser
+  // un producto nuevo de verdad o un error de tipeo sobre uno que sí existe, y
+  // el operador tiene que DECIDIR continuar en vez de continuar sin enterarse.
+  const [codArtNoEncontrado, setCodArtNoEncontrado] = useState<string | null>(null)
+  const inputAsociarRef = useRef<HTMLInputElement>(null)
 
   const [familiasUsuario, setFamiliasUsuario] = useState<Familia[]>([])
 
@@ -220,6 +225,22 @@ export default function Scanner() {
     setBuscandoAsociar(false)
     setVinculandoAsociar(false)
     setErrorAsociar(null)
+    setCodArtNoEncontrado(null)
+  }
+
+  /** Vuelve al campo con el código tal como estaba: corregir es editar un dígito, no reescribir. */
+  function corregirCodigoAsociar(): void {
+    setProductoAsociar(null)
+    setCodArtNoEncontrado(null)
+    setErrorAsociar(null)
+    requestAnimationFrame(() => inputAsociarRef.current?.select())
+  }
+
+  function continuarAltaConCodigo(): void {
+    if (!codArtNoEncontrado) return
+    setNuevoProductoCodArt(codArtNoEncontrado)
+    setCodArtNoEncontrado(null)
+    setPaso('nuevo_producto')
   }
 
   async function handleBuscarParaAsociar(): Promise<void> {
@@ -239,11 +260,11 @@ export default function Scanner() {
     setBuscandoAsociar(false)
 
     if (!encontrado) {
-      // Recién acá es un producto nuevo de verdad: ni el EAN ni el código
-      // interno están en la base. El formulario de alta abre con los dos ya
-      // cargados.
-      setNuevoProductoCodArt(codigo)
-      setPaso('nuevo_producto')
+      // No abre el alta todavía. Un código que no está puede ser un producto
+      // nuevo de verdad o un dígito mal tipeado sobre uno que existe: se
+      // advierte y el operador decide. No se BLOQUEA, porque hay productos
+      // legítimamente nuevos.
+      setCodArtNoEncontrado(codigo)
       return
     }
 
@@ -717,9 +738,28 @@ export default function Scanner() {
 
           {productoAsociar ? (
             <>
-              <div className="bg-white rounded-card shadow-card px-4 py-3.5">
-                <ProductIdentity producto={productoAsociar} label="Producto encontrado" compact imageSize="sm" />
-              </div>
+              {/*
+                * EL NOMBRE ES LO MÁS VISIBLE DE LA PANTALLA, no un dato más.
+                * Lo que se está por hacer es atar un código de barras a un
+                * producto, y el único control que tiene el operador es leer el
+                * nombre. Marca y gramaje van debajo porque dos productos
+                * pueden tener nombres parecidos.
+                */}
+              <section aria-label="Producto encontrado" className="bg-white rounded-card shadow-card p-5 flex flex-col gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">¿Es este el producto que tenés en la mano?</p>
+                <p className="text-2xl font-bold leading-tight text-foreground">{productoAsociar.descripcion}</p>
+                {(productoAsociar.marca?.trim() || productoAsociar.gramaje?.trim()) && (
+                  <p className="text-base font-semibold text-foreground/80">
+                    {[productoAsociar.marca?.trim(), productoAsociar.gramaje?.trim()].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground tabular-nums">Código interno {productoAsociar.cod_art}</p>
+              </section>
+              {/*
+                * DOS BOTONES CON PESO PARECIDO. Si el único botón fuera
+                * vincular, el operador lo aprieta sin leer y la protección no
+                * existe. «No es este» es una salida real, no un link gris.
+                */}
               <button
                 type="button"
                 onClick={() => void handleVincularAsociado()}
@@ -729,18 +769,49 @@ export default function Scanner() {
                 {vinculandoAsociar ? (
                   <><span className="h-5 w-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Vinculando...</>
                 ) : (
-                  <><CheckCircle className="h-5 w-5" />Es este, vincular el código de barras</>
+                  <><CheckCircle className="h-5 w-5" />Es este, vincular</>
                 )}
               </button>
               <button
                 type="button"
-                onClick={() => { setProductoAsociar(null); setErrorAsociar(null) }}
+                onClick={corregirCodigoAsociar}
                 disabled={vinculandoAsociar}
-                className="w-full py-2.5 text-center bg-muted hover:bg-muted/70 text-foreground text-sm font-medium rounded-lg transition-colors"
+                className="w-full min-h-[56px] flex items-center justify-center gap-3 bg-white border-2 border-foreground/20 hover:border-foreground/40 disabled:opacity-50 text-foreground font-bold text-base rounded-card transition-all duration-150 active:scale-[0.98]"
               >
-                No es este
+                No es este, corregir el código
               </button>
             </>
+          ) : codArtNoEncontrado ? (
+            /*
+             * ADVERTIR ANTES DEL ALTA, sin bloquearla. Un código que no está
+             * puede ser un producto nuevo de verdad o un dígito mal tipeado
+             * sobre uno que sí existe. Hay productos legítimamente nuevos, así
+             * que se puede seguir; sólo que el operador decide seguir en vez
+             * de seguir sin enterarse.
+             */
+            <section role="alert" aria-label="Código no encontrado" className="bg-amber-50 border border-amber-300 rounded-card p-4 flex flex-col gap-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-5 w-5 text-amber-700 shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-950">
+                  El código <strong className="tabular-nums">{codArtNoEncontrado}</strong> no está en la base.
+                  Revisalo antes de seguir: si está bien, cargá el producto nuevo.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={corregirCodigoAsociar}
+                className="w-full min-h-[48px] flex items-center justify-center bg-white border-2 border-amber-400 text-amber-950 font-bold text-sm rounded-lg"
+              >
+                Corregir el código
+              </button>
+              <button
+                type="button"
+                onClick={continuarAltaConCodigo}
+                className="w-full min-h-[48px] flex items-center justify-center bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm rounded-lg"
+              >
+                Está bien, cargar producto nuevo
+              </button>
+            </section>
           ) : (
             <div className="bg-white rounded-card shadow-card p-4 flex flex-col gap-3">
               <label htmlFor="asociar-codart" className="block text-xs font-semibold text-foreground uppercase tracking-wide">
@@ -748,6 +819,7 @@ export default function Scanner() {
               </label>
               <input
                 id="asociar-codart"
+                ref={inputAsociarRef}
                 type="text"
                 inputMode="numeric"
                 autoFocus

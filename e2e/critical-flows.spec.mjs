@@ -414,8 +414,14 @@ test.describe('Noven · escrituras críticas Scanner', () => {
     await page.getByLabel('Código interno').fill(SCANNER_IDS.codArt)
     await page.getByRole('button', { name: 'Buscar' }).click()
 
-    await expect(page.getByText('PRODUCTO SCANNER E2E')).toBeVisible()
-    await page.getByRole('button', { name: 'Es este, vincular el código de barras' }).click()
+    // El nombre es lo más visible, con marca y gramaje: dos productos pueden
+    // tener nombres parecidos. Y hay DOS salidas con peso parecido: si la única
+    // fuera vincular, el operador la aprieta sin leer.
+    const encontrado = page.getByRole('region', { name: 'Producto encontrado' })
+    await expect(encontrado.getByText('PRODUCTO SCANNER E2E')).toBeVisible()
+    await expect(encontrado.getByText('Noven Test · 250 GR')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'No es este, corregir el código' })).toBeVisible()
+    await page.getByRole('button', { name: 'Es este, vincular' }).click()
 
     // Vinculado con el EAN que ya se había escaneado, y directo a la carga del
     // vencimiento: no se vuelve a pedir el escaneo ni una confirmación.
@@ -439,17 +445,45 @@ test.describe('Noven · escrituras críticas Scanner', () => {
     expect(fixture.directTableWrites).toEqual([])
   })
 
-  test('si el código interno tampoco existe, recién ahí se abre el alta con los dos códigos cargados', async ({ page }) => {
-    await installScannerWriteFixture(page, { productoSinEan: true })
+  test('un código que no está advierte antes del alta, y se puede corregir o seguir', async ({ page }) => {
+    // Puede ser un producto nuevo de verdad o un dígito mal tipeado sobre uno
+    // que existe. No se bloquea el alta —hay productos legítimamente nuevos—,
+    // pero el operador tiene que DECIDIR seguir en vez de seguir sin enterarse.
+    const fixture = await installScannerWriteFixture(page, { productoSinEan: true })
     await instalarCamaraSimulada(page, SCANNER_IDS.eanDesconocido)
     await login(page)
     await page.goto('/scanner')
     await page.getByRole('button', { name: /Escanear producto/ }).click()
 
     await expect(page.getByRole('heading', { name: 'Asociar código de barras' })).toBeVisible()
-    await page.getByLabel('Código interno').fill('9999999')
+    // Un dígito mal: el código real es 9101234.
+    await page.getByLabel('Código interno').fill('9101235')
     await page.getByRole('button', { name: 'Buscar' }).click()
 
+    const aviso = page.getByRole('alert', { name: 'Código no encontrado' })
+    await expect(aviso).toContainText('El código 9101235 no está en la base.')
+    await expect(aviso).toContainText('Revisalo antes de seguir: si está bien, cargá el producto nuevo.')
+    // La advertencia NO abrió el alta por su cuenta.
+    await expect(page.getByRole('heading', { name: 'Agregar producto' })).toHaveCount(0)
+
+    // Corregir vuelve al campo con el código tal como estaba: corregir es
+    // editar un dígito, no reescribir.
+    await aviso.getByRole('button', { name: 'Corregir el código' }).click()
+    await expect(page.getByLabel('Código interno')).toHaveValue('9101235')
+    await page.getByLabel('Código interno').fill(SCANNER_IDS.codArt)
+    await page.getByRole('button', { name: 'Buscar' }).click()
+    await expect(page.getByRole('region', { name: 'Producto encontrado' })).toContainText('PRODUCTO SCANNER E2E')
+
+    // «No es este» también vuelve al campo, con el código para corregir.
+    await page.getByRole('button', { name: 'No es este, corregir el código' }).click()
+    await expect(page.getByLabel('Código interno')).toHaveValue(SCANNER_IDS.codArt)
+    expect(fixture.rpcCalls.filter((call) => call.name === 'vincular_ean_producto_scanner')).toHaveLength(0)
+
+    // Y si el código es nuevo de verdad, se puede seguir: el alta abre con los
+    // dos códigos cargados.
+    await page.getByLabel('Código interno').fill('9999999')
+    await page.getByRole('button', { name: 'Buscar' }).click()
+    await page.getByRole('button', { name: 'Está bien, cargar producto nuevo' }).click()
     await expect(page.getByRole('heading', { name: 'Agregar producto' })).toBeVisible()
     await expect(page.locator('#np-codart')).toHaveValue('9999999')
   })
