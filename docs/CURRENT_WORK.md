@@ -1519,3 +1519,12 @@ EAN). Lo que se verificó en producción, sólo con lecturas:
   la confirmación posterior a un escaneo; si la hubiera, esa sospecha se
   convertiría en dato.
 
+
+
+### 2026-10-05 · Identidad PWA e inicio de sesión visible
+
+- Origen: uso real en iPhone. El acceso agregado a la pantalla de inicio mostraba un ícono genérico y el estado de verificación era una pantalla vacía con spinner.
+- Alcance deliberadamente visual: se agrega identidad PWA (manifest, apple-touch-icon e íconos 192/512), se alinea favicon/metadatos con la visión actual y se reemplaza únicamente el render de espera de `PrivateRoute`.
+- La marca visual combina retail + inteligencia/radar; evita reducir NoVen a una letra genérica o a una app de vencimientos.
+- Invariante de seguridad: no se modifica `NovenAccessContext`, Auth, consultas de permisos, rutas, Supabase, RLS ni decisiones de autorización. El mismo booleano `loading` sigue gobernando la pantalla; sólo cambia su presentación.
+- Pendiente de cierre: CI completo del PR y verificación visual en iPhone después del deploy. iOS puede cachear el ícono instalado; si ocurre, eliminar el acceso anterior y volver a “Agregar a pantalla de inicio”.

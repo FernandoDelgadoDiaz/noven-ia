@@ -3,6 +3,26 @@ import { useAuth } from '@/hooks/useAuth'
 import { useUsuarioRol } from '@/hooks/useUsuarioRol'
 import { useAccesosMultitenant } from '@/hooks/useAccesosMultitenant'
 
+
+function NovenBrandMark({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 64 64"
+      className={className}
+      aria-hidden="true"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M13 25h7l4 21h24l6-16H23" stroke="currentColor" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="29" cy="52" r="3" fill="currentColor" />
+      <circle cx="47" cy="52" r="3" fill="currentColor" />
+      <path d="M34 18c5-5 13-5 18 0" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+      <path d="M38 22c3-3 7-3 10 0" stroke="#F59E0B" strokeWidth="4" strokeLinecap="round" />
+      <circle cx="43" cy="27" r="3" fill="#F59E0B" />
+    </svg>
+  )
+}
+
 function PantallaAcceso({ titulo, detalle, onSalir }: { titulo: string; detalle: string; onSalir: () => void }) {
   return (
     <div className="min-h-screen bg-surface-base flex items-center justify-center px-5">
@@ -31,10 +51,23 @@ export default function PrivateRoute() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-muted border-t-[#22c55e]" />
-          <p className="text-sm text-muted-foreground">Verificando sesión y permisos...</p>
+      <div className="flex min-h-screen items-center justify-center bg-background px-6">
+        <div className="flex w-full max-w-sm flex-col items-center">
+          <div className="flex h-24 w-24 items-center justify-center rounded-[28px] bg-brand text-white shadow-brand-lg">
+            <NovenBrandMark className="h-16 w-16" />
+          </div>
+
+          <div className="mt-6 text-center">
+            <p className="text-2xl font-black tracking-tight text-foreground">NoVen IA</p>
+            <p className="mt-1 text-sm font-medium text-muted-foreground">
+              Inteligencia operacional para supermercados
+            </p>
+          </div>
+
+          <div className="mt-8 flex items-center gap-3 rounded-full bg-white/70 px-4 py-2.5 shadow-card">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand/20 border-t-brand" />
+            <p className="text-sm font-medium text-muted-foreground">Verificando sesión y permisos...</p>
+          </div>
         </div>
       </div>
     )
