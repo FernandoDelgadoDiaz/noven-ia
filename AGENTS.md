@@ -4,7 +4,7 @@ Capa de inteligencia operacional para supermercados: detecta, evita, recupera y 
 
 **La fuente de verdad de producto es `PRODUCT_VISION.md`.** Si algo de este archivo la contradice, prevalece esa. NoVen no es una app de vencimientos ni un dashboard: la gestión de vencimientos es el primer dominio, no el producto.
 
-Estado actual: productivo en una sola sucursal (091), con arquitectura multitenant ya cerrada. Ver `docs/PRE_PRODUCTION_HARDENING_PLAN.md` para el estado del plan de endurecimiento.
+Estado actual: el piloto interno de vencimientos quedó formalmente cerrado/pausado en octubre de 2026. El producto se conserva estable como activo independiente, con arquitectura multitenant ya cerrada. No abrir nuevos desarrollos específicos del empleador actual sin una decisión explícita de reanudación. Ver `docs/PILOT_Q3_2026_CLOSEOUT.md` para el cierre del piloto y `docs/PRE_PRODUCTION_HARDENING_PLAN.md` para la deuda técnica.
 
 ## Stack
 
@@ -59,6 +59,7 @@ Implementación en `src/lib/riesgo.ts`. Reglas completas en `docs/RISK_AND_RAG_R
 ## Referencias
 
 - `PRODUCT_VISION.md` — visión de producto (normativa)
+- `docs/PILOT_Q3_2026_CLOSEOUT.md` — cierre formal del piloto y condiciones de reanudación
 - `docs/PRE_PRODUCTION_HARDENING_PLAN.md` — estado del plan de endurecimiento
 - `docs/MULTITENANT_ARCHITECTURE_V1.md` — arquitectura e invariantes multitenant
 - `docs/RISK_AND_RAG_RULES_V1.md` — reglas de riesgo, donación y RAG
