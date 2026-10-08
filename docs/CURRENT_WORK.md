@@ -15,7 +15,7 @@ seguridad explotables. Cuando una comprobación requiera ese material, se
 registra el resultado mínimo y se enlaza el PR, CI o documento autorizado que
 contiene la evidencia.
 
-Fecha de corte: **2026-09-18**.
+Fecha de corte: **2026-10-08**.
 
 ## Lectura obligatoria antes de continuar
 
@@ -1528,3 +1528,51 @@ EAN). Lo que se verificó en producción, sólo con lecturas:
 - La marca visual combina retail + inteligencia/radar; evita reducir NoVen a una letra genérica o a una app de vencimientos.
 - Invariante de seguridad: no se modifica `NovenAccessContext`, Auth, consultas de permisos, rutas, Supabase, RLS ni decisiones de autorización. El mismo booleano `loading` sigue gobernando la pantalla; sólo cambia su presentación.
 - Pendiente de cierre: CI completo del PR y verificación visual en iPhone después del deploy. iOS puede cachear el ícono instalado; si ocurre, eliminar el acceso anterior y volver a “Agregar a pantalla de inicio”.
+
+
+### 2026-10-08 · Cierre formal del piloto interno Q3 2026
+
+**Decisión de producto:** el piloto interno queda cerrado/pausado como frente de
+inversión personal. La operación de la sucursal seguirá el proceso corporativo
+vigente definido por la empresa. Esta decisión no elimina ni revierte las
+capacidades construidas; congela el desarrollo específico para ese empleador.
+
+**Qué quedó validado técnicamente y en uso real:**
+
+- un circuito operativo completo de vencimientos basado en cantidad comprometida,
+  VMD y ventana comercial;
+- clasificación de riesgo, trazabilidad y cierres operativos reales;
+- intervenciones RAG/oferta con confirmación física antes de medir;
+- Radar Zonal y coordinación entre sucursales dentro del modelo de zona;
+- roles, permisos/RLS, arquitectura multitenant y flujos productivos;
+- scanner, importaciones y evidencia histórica suficiente para demostrar que no
+  es un prototipo de interfaz.
+
+**Qué NO queda demostrado por el piloto:**
+
+- causalidad económica completa atribuible a Noven;
+- rollout corporativo multi-sucursal;
+- aceptación por Seguridad/Infraestructura/Compras;
+- adecuación a toda política de datos o dispositivo de cualquier retailer.
+
+**Bloqueantes corporativos descubiertos:** la organización no habilita este
+piloto bajo una arquitectura con datos operativos alojados en servicios externos
+y tampoco quiere depender de teléfonos personales para tareas de góndola. Estos
+bloqueantes se registran como requisitos de producto enterprise, no como fallos
+del motor de vencimientos.
+
+**Regla de pausa:** no agregar nuevas particularidades del empleador actual ni
+abrir funcionalidades para intentar revertir esa decisión. Sólo se permiten
+mantenimiento correctivo, seguridad o preservación del producto si fueran
+necesarios.
+
+**Próximo frente cuando se retome:** `Noven Enterprise Readiness`. Antes de
+sumar agentes o nuevas superficies, resolver de forma portable: despliegue SaaS
+cuando esté permitido y alternativas privadas/VPC/on-premise o infraestructura
+aprobada por el cliente; operación device-agnostic; auditoría, integración,
+backups y gobierno de datos; y evidencia económica con mejor contrafactual.
+
+**Checkpoint:** ver `docs/PILOT_Q3_2026_CLOSEOUT.md`. La visión normativa sigue
+en `PRODUCT_VISION.md`. No se publican en este repositorio público conteos
+productivos sensibles ni datos internos del retailer; la evidencia ejecutiva
+queda fuera de Git según las reglas de este archivo.
