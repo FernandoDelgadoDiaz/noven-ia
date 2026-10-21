@@ -1,0 +1,129 @@
+
+== base (justificado) [8, 12, 15, 12, 12, 8, 10, 10, 5, 8]
+ 1 C02 TrendDetective    73.6
+ 2 C14 Jukebox           70.6
+ 3 C09 MODIS-VIIRS       70.2
+ 4 C13 MissionGame       65.8
+ 5 C01 Abandoned         65.2
+ 6 C03 JuniorTrainer     64.8
+ 7 C07 FieldShift        64.6
+ 8 C10 Analogs           64.2
+ 9 C04 CLPS              61.8
+10 C06 SARs              61.6
+11 C11 MartianMap        58.0
+12 C05 Health            56.6
+13 C08 Flame             54.2
+14 C12 SPHEREx           53.2
+
+== pesos iguales [10, 10, 10, 10, 10, 10, 10, 10, 10, 10]
+ 1 C02 TrendDetective    76.0
+ 2 C09 MODIS-VIIRS       74.0
+ 3 C14 Jukebox           72.0
+ 4 C13 MissionGame       70.0
+ 5 C03 JuniorTrainer     70.0
+ 6 C10 Analogs           68.0
+ 7 C07 FieldShift        68.0
+ 8 C01 Abandoned         68.0
+ 9 C04 CLPS              66.0
+10 C11 MartianMap        62.0
+11 C06 SARs              62.0
+12 C12 SPHEREx           60.0
+13 C08 Flame             58.0
+14 C05 Health            58.0
+
+== demo/presentación [8, 8, 10, 8, 14, 8, 18, 6, 5, 15]
+ 1 C02 TrendDetective    73.6
+ 2 C09 MODIS-VIIRS       72.6
+ 3 C14 Jukebox           71.6
+ 4 C03 JuniorTrainer     70.0
+ 5 C01 Abandoned         69.4
+ 6 C13 MissionGame       67.2
+ 7 C10 Analogs           66.8
+ 8 C07 FieldShift        66.0
+ 9 C11 MartianMap        62.0
+10 C04 CLPS              61.6
+11 C12 SPHEREx           60.2
+12 C06 SARs              60.2
+13 C05 Health            59.4
+14 C08 Flame             55.6
+
+== rigor/ciencia [8, 12, 12, 10, 10, 10, 8, 20, 5, 5]
+ 1 C02 TrendDetective    75.6
+ 2 C09 MODIS-VIIRS       71.4
+ 3 C14 Jukebox           69.6
+ 4 C13 MissionGame       68.8
+ 5 C03 JuniorTrainer     67.6
+ 6 C01 Abandoned         67.4
+ 7 C04 CLPS              65.2
+ 8 C10 Analogs           64.8
+ 9 C07 FieldShift        64.8
+10 C06 SARs              61.0
+11 C11 MartianMap        60.0
+12 C08 Flame             55.2
+13 C12 SPHEREx           54.6
+14 C05 Health            54.2
+
+== competencia dura [8, 15, 25, 10, 10, 6, 8, 8, 5, 5]
+ 1 C02 TrendDetective    71.6
+ 2 C14 Jukebox           68.8
+ 3 C09 MODIS-VIIRS       66.4
+ 4 C06 SARs              64.4
+ 5 C13 MissionGame       61.6
+ 6 C10 Analogs           61.4
+ 7 C01 Abandoned         61.0
+ 8 C07 FieldShift        60.8
+ 9 C04 CLPS              59.4
+10 C03 JuniorTrainer     57.2
+11 C05 Health            56.8
+12 C08 Flame             53.4
+13 C11 MartianMap        52.6
+14 C12 SPHEREx           47.4
+
+== sin C (ignora rivales) [10, 14, 0, 14, 14, 10, 12, 12, 6, 8]
+ 1 C02 TrendDetective    76.4
+ 2 C09 MODIS-VIIRS       75.6
+ 3 C03 JuniorTrainer     73.2
+ 4 C14 Jukebox           72.4
+ 5 C13 MissionGame       70.8
+ 6 C01 Abandoned         70.0
+ 7 C07 FieldShift        69.2
+ 8 C10 Analogs           68.8
+ 9 C04 CLPS              66.0
+10 C11 MartianMap        65.2
+11 C12 SPHEREx           59.2
+12 C06 SARs              58.4
+13 C08 Flame             56.8
+14 C05 Health            56.0
+
+== rangos por escenario
+desafio              base (just pesos igua demo/prese rigor/cien competenci sin C (ign
+C01 Abandoned        5          8          5          6          7          6         
+C02 TrendDetective   1          1          1          1          1          1         
+C03 JuniorTrainer    6          5          4          5          10         3         
+C04 CLPS             9          9          10         7          9          9         
+C05 Health           12         14         13         14         11         14        
+C06 SARs             10         11         12         10         4          12        
+C07 FieldShift       7          7          8          9          8          7         
+C08 Flame            13         13         14         12         12         13        
+C09 MODIS-VIIRS      3          2          2          2          3          2         
+C10 Analogs          8          6          7          8          6          8         
+C11 MartianMap       11         10         9          11         13         10        
+C12 SPHEREx          14         12         11         13         14         11        
+C13 MissionGame      4          4          6          4          5          5         
+C14 Jukebox          2          3          3          3          2          4         
+
+== % de simulaciones (ruido ±1 en 40% de celdas) en top-5, pesos base
+C02 TrendDetective    96.0%
+C14 Jukebox           89.0%
+C09 MODIS-VIIRS       85.3%
+C13 MissionGame       45.5%
+C01 Abandoned         39.9%
+C03 JuniorTrainer     38.3%
+C07 FieldShift        37.0%
+C10 Analogs           34.3%
+C04 CLPS              15.6%
+C06 SARs              15.2%
+C11 MartianMap         2.0%
+C05 Health             1.5%
+C08 Flame              0.2%
+C12 SPHEREx            0.2%
