@@ -15,6 +15,7 @@
 | A8 | Reglas, licencias, trabajo previo | Subagente independiente, en paralelo | `agentes/A8_reglas.md` |
 | A10 | Cubrir los huecos (C02, C06, C12) | Subagente posterior. Los títulos no estaban en el brief inicial | `agentes/A10_huecos_SAR_trends_SPHEREx.md` |
 | A9 | Red team | Subagente posterior. Recibió los finalistas sin ranking ni preferencia | `agentes/A9_red_team.md` |
+| A9b | Red team, segunda ronda (C04-4B, C10) | Subagente posterior. Atacó los candidatos que A9 señaló como infravalorados | `agentes/A9b_red_team_C04_C10.md` |
 
 **Independencia, con sus límites:**
 - Todos recibieron el mismo brief (`agentes/BRIEF.md`) sin una conclusión predeterminada.
