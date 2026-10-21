@@ -22,6 +22,7 @@ Fecha: 21/10/2026. Rama: `claude/nasa-space-apps-2026-research-ak4l5t`.
 | `08_REGLAS_Y_RIESGOS.md` | Reglas (en fragmentos), riesgos y 8 consultas listas para enviar |
 | `09_RECOMENDACION_FINAL.md` | Clasificación provisional y respuestas a las 10 preguntas |
 | `10_FUENTES_Y_LIMITACIONES.md` | Organización de los agentes, accesos bloqueados y lo que falta |
+| `11_FASE2_LENTE_LOCAL_COMODORO.md` | Fase 2: problemas patagónicos, datos de CONAE y jurado de Comodoro; red team A9c |
 | `agentes/` | Brief e informes completos sin editar (A1, A2a, A2b, A3–A8, A9, A9b, A10) |
 | `experimentos/matriz.py` | Cálculo reproducible de la matriz (`python3 -I experimentos/matriz.py`) |
 
