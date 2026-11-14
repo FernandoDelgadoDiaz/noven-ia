@@ -66,98 +66,8 @@ async function open({ api = "ok", claude = null, scheme = "light", ctx: reuse, f
   return { page, ctx, errors, state };
 }
 
-test("camino feliz: veredicto, ranking, última actualización", async () => {
-  const { page, ctx, errors } = await open();
-  await page.locator(".hero .verdict").waitFor();
-  assert.match(await page.locator(".hero .verdict").innerText(), /Sí, da/);
-  assert.match(await page.locator(".hero .best-time .big").innerText(), /12:00\s*–\s*15:00/);
-  assert.match(await page.locator(".hero .say").innerText(), /^Hoy entre las 12:00 y las 15:00 es tu mejor oportunidad/);
-  assert.match(await page.locator(".meta").innerText(), /Actualizado: .*10:05/);
-  await tab(page, "semana");
-  assert.equal(await page.locator(".opps .opp").count(), 3, "solo ventanas ideales o con precauciones");
-  assert.equal(await page.locator('.opps .opp[data-level="no"]').count(), 0);
-  const first = await page.locator(".opps .opp").first().innerText();
-  assert.match(first, /Hoy, sábado 14\/11/); assert.match(first, /Ideal para asado/);
-  assert.match(first, /Condiciones ideales de 12:00 a 18:00 \(6 h seguidas\)/);
-  const opps = await page.locator(".opps").innerText();
-  assert.doesNotMatch(opps, /Disponible|disponible/);
-  assert.doesNotMatch(opps, /No conviene/);
-  // días descartados: desplegable, cerrado por defecto
-  const disc = page.locator("details.discarded");
-  assert.match(await disc.locator("summary").innerText(), /Días sin condiciones favorables \(4\)/);
-  assert.equal(await disc.evaluate((e) => e.open), false);
-  await disc.locator("summary").click();
-  const dtxt = await disc.innerText();
-  assert.match(dtxt, /Mañana, domingo 15\/11 — No conviene hacer asado/);
-  assert.match(dtxt, /Lunes 16\/11|Martes 17\/11/);
-  assert.match(dtxt, /Ráfagas de hasta 55 km\/h/);
-  assert.match(dtxt, /Faltan datos del pronóstico/);
-  assert.doesNotMatch(dtxt, /\d\d:00 – \d\d:00/, "los días descartados no muestran horarios como recomendación");
-  if (SHOTS) {
-    await page.screenshot({ path: SHOTS + "/light-top.png", fullPage: true });
-  }
-  assert.deepEqual(errors, []);
-  await ctx.close();
-});
 
-test("preferencias: duración y franja cambian la recomendación y se guardan", async () => {
-  const { page, ctx } = await open();
-  await page.locator(".hero .verdict").waitFor();
-  await tab(page, "semana");
-  await page.getByRole("button", { name: "Preferencias" }).click();
-  await page.locator("#dur-2").click();
-  assert.equal(await page.locator(".opps .opp").count(), 4, "con 2 h aparece la ventana 14–16 del jueves");
-  assert.match(await page.locator(".opps").innerText(), /14:00 – 16:00/);
-  await page.getByRole("button", { name: "Cerrar" }).click();
-  await tab(page, "hoy");
-  await page.getByRole("button", { name: "Preferencias" }).click();
-  await page.locator("#dur-5").click();
-  assert.match(await page.locator(".hero .best-time .big").innerText(), /12:00\s*–\s*17:00/);
-  await page.locator("#slot-noche").click();
-  assert.match(await page.locator(".hero .verdict").innerText(), /Hoy no da/);
-  await page.locator("#slot-libre").click();
-  await page.locator("#exp-protegida").click();
-  await page.locator("#maxGust").fill("20");
-  assert.equal(await page.locator('output[for="maxGust"]').innerText(), "20 km/h");
-  await page.getByRole("button", { name: "Cerrar" }).click();
-  assert.equal(await page.locator(".sheet").count(), 0);
-  await page.reload();
-  await page.locator(".hero .verdict").waitFor();
-  assert.match(await page.locator(".hero .best-time .big").innerText(), /12:00\s*–\s*17:00/, "la duración de 5 h se mantiene tras recargar");
-  await page.getByRole("button", { name: "Preferencias" }).click();
-  assert.equal(await page.locator("#exp-protegida").getAttribute("aria-pressed"), "true");
-  assert.equal(await page.locator('output[for="maxGust"]').innerText(), "20 km/h");
-  await ctx.close();
-});
 
-test("gráfico horario: cambio de día y selección de hora", async () => {
-  const { page, ctx, errors } = await open({ scheme: "dark" });
-  await page.locator(".hero .verdict").waitFor();
-  await tab(page, "pronostico");
-  await page.locator(".chart-wrap svg").waitFor();
-  assert.match(await page.locator(".hour-detail").innerText(), /12:00/);
-  await page.locator(".day-chip").nth(3).click();
-  assert.equal(await page.locator(".day-chip").nth(3).getAttribute("aria-pressed"), "true");
-  assert.match(await page.locator(".hour-detail").innerText(), /Lluvia/);
-  const box = await page.locator(".chart-wrap").boundingBox();
-  // 30 de 360 unidades de margen izquierdo + 24 columnas: la hora 20 cae en x = 30 + 20.5 * 12.5
-  await page.mouse.click(box.x + box.width * ((30 + 20.5 * 12.5) / 360), box.y + box.height / 2);
-  assert.match(await page.locator(".hour-detail .row1").innerText(), /20:00/);
-  assert.match(await page.locator(".hour-detail").innerText(), /80 %/);
-  await tab(page, "semana");
-  await page.locator(".opps .opp").nth(1).click(); // tocar una oportunidad abre el gráfico de ese día
-  assert.equal(await page.locator("#tab-pronostico").getAttribute("aria-current"), "page");
-  const selDate = await page.locator(".day-chip[aria-pressed=true] .dd").innerText();
-  assert.ok(selDate.length > 0);
-  if (SHOTS) {
-    await page.locator(".chart-card").screenshot({ path: SHOTS + "/dark-chart.png" });
-    await tab(page, "semana");
-    await page.locator("details.discarded summary").click();
-    await page.screenshot({ path: SHOTS + "/dark-full.png", fullPage: true });
-  }
-  assert.deepEqual(errors, []);
-  await ctx.close();
-});
 
 test("sin conexión: error claro, sin datos inventados, y reintento", async () => {
   const { page, ctx, state } = await open({ api: "fail" });
@@ -223,203 +133,15 @@ test("dentro de Claude sin conector: indica cómo resolverlo", async () => {
   await r2.ctx.close();
 });
 
-test("sin overflow horizontal a 360 px", async () => {
-  const ctx = await browser.newContext({ viewport: { width: 360, height: 780 } });
-  const { page } = await open({ ctx });
-  await page.locator(".hero .verdict").waitFor();
-  const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  assert.ok(over <= 0, "overflow de " + over + " px");
-  await tab(page, "semana");
-  await page.locator("details.discarded summary").click();
-  const over1 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  assert.ok(over1 <= 0, "overflow con descartados abiertos: " + over1);
-  for (const t of ["pronostico", "planificar"]) {
-    await tab(page, t);
-    if (t === "planificar") await page.locator("#q-anionuevo").click();
-    const o = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    assert.ok(o <= 0, "overflow en " + t + ": " + o);
-  }
-  await page.getByRole("button", { name: "Preferencias" }).click();
-  const over2 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  assert.ok(over2 <= 0);
-  await ctx.close();
-});
 
-test("sin condiciones favorables en 7 días: mensaje claro y ninguna ventana inventada", async () => {
-  const storm = {};
-  for (let d = 0; d < 7; d++) storm[d] = () => ({ temp: 14, feels: 8, prob: 0, precip: 0, code: 3, wind: 35, gust: 62, dir: 250 });
-  const { page, ctx, errors } = await open({ forecast: buildForecast("2026-11-14", storm) });
-  await page.locator(".hero .verdict").waitFor();
-  assert.match(await page.locator(".hero .verdict").innerText(), /Hoy no da/);
-  assert.equal(await page.locator(".hero .best-time").count(), 0, "no se destaca ningún horario");
-  assert.match(await page.locator(".hero").innerText(), /No encontramos condiciones recomendables para hacer asado en los próximos 7 días/);
-  await tab(page, "semana");
-  assert.match(await page.locator(".opps").innerText(), /No encontramos condiciones recomendables para hacer asado en los próximos 7 días/);
-  assert.equal(await page.locator(".opps .opp:not(.empty)").count(), 0);
-  assert.match(await page.locator("details.discarded summary").innerText(), /\(7\)/);
-  await tab(page, "pronostico");
-  assert.equal(await page.locator(".rec-mark").count(), 0, "el gráfico no marca ventanas");
-  assert.equal(await page.locator(".chart-wrap svg").count(), 1, "el gráfico sigue funcionando");
-  assert.deepEqual(errors, []);
-  await ctx.close();
-});
 
-test("fechas: Hoy y Mañana según Río Gallegos aunque el teléfono esté en otro huso", async () => {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: "Asia/Tokyo" });
-  // 02:30 UTC del 15/11 = 23:30 del 14/11 en Río Gallegos, pero ya es 15/11 en Tokio
-  const { page } = await open({ ctx, at: new Date("2026-11-15T02:30:00Z") });
-  await page.locator(".hero .verdict").waitFor();
-  await tab(page, "pronostico");
-  await page.locator(".day-chip").first().waitFor();
-  assert.equal(await page.locator(".day-chip").first().innerText().then((t) => t.replace(/\s+/g, " ").trim()), "Hoy 14/11");
-  assert.equal(await page.locator(".day-chip").nth(1).innerText().then((t) => t.replace(/\s+/g, " ").trim()), "Mañ 15/11");
-  assert.match(await page.locator(".meta").innerText(), /Actualizado: sáb 14\/11, 23:30/);
-  await tab(page, "planificar");
-  assert.equal(await page.locator(".cal-cell.today").getAttribute("data-date"), "2026-11-14", "el calendario marca hoy según Río Gallegos");
-  await tab(page, "hoy");
-  assert.match(await page.locator(".hero .verdict").innerText(), /Por hoy ya fue/);
-  await ctx.close();
-});
 
-test("tarjeta de hoy: puntaje igual al de la lista, sin superposición en iPhone", async () => {
-  for (const width of [320, 375, 390]) {
-    for (const prefs of [null, { minFeels: 16 }]) { // ideal y «con cuidado» (título más largo)
-      const ctx = await browser.newContext({ viewport: { width, height: 800 } });
-      if (prefs) await ctx.addInitScript((p) => { try { localStorage.setItem("dpa:prefs:v1", JSON.stringify(Object.assign({ duration: 3, minFeels: 10, maxWind: 20, maxGust: 30, slot: "libre", exposure: "expuesta" }, p))); } catch (e) {} }, prefs);
-      const { page } = await open({ ctx });
-      await page.locator(".hero .verdict").waitFor();
-      const heroScore = await page.locator(".hero .ring .n").innerText();
-      const heroTone = await page.locator(".hero .ring circle").nth(1).getAttribute("stroke");
-      await tab(page, "semana");
-      const todayCard = page.locator(".opps .opp", { hasText: "Hoy," }).first();
-      assert.equal(heroScore, await todayCard.locator(".ring .n").innerText(), "mismo puntaje que la lista");
-      assert.equal(heroTone, await todayCard.locator(".ring circle").nth(1).getAttribute("stroke"), "mismo color");
-      await tab(page, "hoy");
-      const t = await page.locator(".hero .hero-title").boundingBox();
-      const v = await page.locator(".hero .verdict").boundingBox();
-      const r = await page.locator(".hero .ring").boundingBox();
-      const hero = await page.locator(".hero").boundingBox();
-      assert.ok(v.x + v.width <= r.x + 0.5 && t.x + t.width <= r.x + 0.5, `superposición a ${width}px`);
-      assert.ok(r.x + r.width <= hero.x + hero.width, "el círculo queda dentro de la tarjeta");
-      const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-      assert.ok(over <= 0);
-      if (SHOTS && width === 375) await page.locator(".hero").screenshot({ path: SHOTS + `/hero-${prefs ? "cuidado" : "ideal"}.png` });
-      await ctx.close();
-    }
-  }
-  // sin ventana recomendable hoy: no hay puntaje
-  const storm = {};
-  for (let d = 0; d < 7; d++) storm[d] = () => ({ temp: 14, feels: 8, prob: 0, precip: 0, code: 3, wind: 35, gust: 62, dir: 250 });
-  const s1 = await open({ forecast: buildForecast("2026-11-14", storm) });
-  await s1.page.locator(".hero .verdict").waitFor();
-  assert.equal(await s1.page.locator(".hero .ring").count(), 0);
-  await s1.ctx.close();
-  const s2 = await open({ at: new Date("2026-11-15T02:30:00Z") }); // 23:30, ya no quedan horas
-  await s2.page.locator(".hero .verdict").waitFor();
-  assert.equal(await s2.page.locator(".hero .ring").count(), 0);
-  await s2.ctx.close();
-});
 
-test("¿Da para asado ahora?: observado y modelo separados, duraciones 2/3/4 h", async () => {
-  const { page, ctx, errors } = await open();
-  const sec = page.locator(".now-card");
-  await sec.waitFor();
-  assert.match(await sec.locator('[data-kind="obs"]').innerText(), /Observado · aeropuerto \(SAWG\)[\s\S]*12 °C · 15 km\/h OSO[\s\S]*Sin ráfagas informadas[\s\S]*10:00 \(hace 5 min\)/);
-  assert.match(await sec.locator('[data-kind="model"]').innerText(), /Modelo · Open-Meteo \(estimación\)[\s\S]*no es una medición/);
-  assert.match(await sec.locator(".now-best").innerText(), /12:00 – 15:00/);
-  assert.match(await sec.locator("ul.why").innerText(), /mejor puntaje entre \d+ ventanas aceptables de 3 h/);
-  await page.locator("#now-dur-2").click();
-  assert.match(await sec.locator(".now-best .opp-time").innerText(), /12:00 – 14:00/);
-  assert.ok(await sec.locator(".alt-row").count() >= 1, "con 2 h hay alternativas");
-  await page.locator("#now-dur-4").click();
-  assert.match(await sec.locator(".now-best .opp-time").innerText(), /12:00 – 16:00/);
-  assert.match(await sec.innerText(), /Agradable, pero no para brasas/, "la mañana templada con ráfagas de 45 se advierte");
-  assert.match(await sec.innerText(), /De 10:00 a 12:00 y de 18:00 a 21:00 se esperan/);
-  assert.match(await sec.locator(".src-foot").innerText(), /Pronóstico: Open-Meteo, consultado sáb 14\/11, 10:05[\s\S]*METAR de aviationweather\.gov/);
-  assert.match(await sec.locator('[data-testid="cmp"]').innerText(), /Las ráfagas no se pueden comparar/);
-  assert.deepEqual(errors, []);
-  await ctx.close();
-});
 
-test("si la observación falla, el resto de la app sigue funcionando", async () => {
-  const { page, ctx } = await open({ metar: "fail" });
-  await page.locator(".hero .verdict").waitFor();
-  await page.locator('.now-card [data-kind="obs"]', { hasText: "Sin observación disponible" }).waitFor();
-  assert.match(await page.locator(".now-best").innerText(), /12:00/);
-  assert.equal(await page.locator(".notice[role=alert]").count(), 0);
-  await ctx.close();
-});
 
-test("ráfagas observadas fuertes vuelven roja la hora actual", async () => {
-  const { page, ctx } = await open({ metar: "METAR SAWG 141300Z 25025G42KT CAVOK 12/04 Q1016" });
-  await page.locator(".now-hour").waitFor();
-  assert.match(await page.locator(".now-hour").innerText(), /Esta hora \(10:00\):\s*No conviene\s*según la observación/);
-  assert.match(await page.locator(".now-card").innerText(), /Observado en el aeropuerto a las 10:00: ráfagas de 78 km\/h/);
-  await ctx.close();
-});
 
-test("«¿Por qué no me recomendaste este horario?» explica horas y valores", async () => {
-  const { page, ctx } = await open();
-  await page.locator(".hero .verdict").waitFor();
-  await tab(page, "pronostico");
-  await page.locator(".chart-wrap svg").waitFor();
-  await page.locator(".chart-wrap").scrollIntoViewIfNeeded();
-  const box = await page.locator(".chart-wrap").boundingBox();
-  // hora 19 (fuera del tramo calmo, ráfagas de 45, todavía de día)
-  await page.mouse.click(box.x + box.width * ((30 + 19.5 * 12.5) / 360), box.y + box.height / 2);
-  assert.match(await page.locator(".hour-detail .row1").innerText(), /19:00/);
-  await page.getByRole("button", { name: "¿Por qué no me recomendaste este horario?" }).click();
-  const ans = await page.locator(".why-ans").evaluate((e) => e.textContent);
-  assert.match(ans, /Ventana 19:00–22:00 \(3 h\)/);
-  assert.match(ans, /Aunque la temperatura prevista era agradable[\s\S]*las ráfagas previstas superaban el límite configurado de 40 km\/h/);
-  assert.match(ans, /19:00 — Ráfagas de hasta 45 km\/h/);
-  assert.match(ans, /21:00 — /);
-  // una hora recomendada no ofrece el botón
-  await page.locator(".chart-wrap").scrollIntoViewIfNeeded();
-  const box2 = await page.locator(".chart-wrap").boundingBox();
-  await page.mouse.click(box2.x + box2.width * ((30 + 12.5 * 12.5) / 360), box2.y + box2.height / 2);
-  assert.equal(await page.getByRole("button", { name: "¿Por qué no me recomendaste este horario?" }).count(), 0);
-  assert.match(await page.locator(".hour-detail").innerText(), /Este horario está recomendado/);
-  await ctx.close();
-});
 
-test("cambio de pronóstico entre dos consultas: muestra la nueva oportunidad", async () => {
-  const windy = buildForecast("2026-11-14", { 2: () => ({ temp: 17, feels: 15, prob: 0, precip: 0, code: 1, wind: 28, gust: 55, dir: 250 }) });
-  const { page, ctx, state } = await open({ forecast: windy });
-  await page.locator(".hero .verdict").waitFor();
-  assert.equal(await page.locator(".changes").count(), 0, "la primera consulta no tiene con qué comparar");
-  state.forecast = buildForecast("2026-11-14", { 2: () => ({ temp: 17, feels: 15, prob: 0, precip: 0, code: 1, wind: 8, gust: 15, dir: 250 }) });
-  await page.clock.setFixedTime(new Date(FIXED.getTime() + 20 * 60000));
-  await page.getByRole("button", { name: "Actualizar pronóstico" }).click();
-  await page.locator(".changes").waitFor();
-  const txt = await page.locator(".changes").evaluate((e) => e.textContent);
-  assert.match(txt, /Cambios desde la consulta anterior \(sáb 14\/11, 10:05\)/);
-  assert.match(txt, /Nueva oportunidad: Lunes 16\/11, 09:00–12:00 · ideal para asado \(antes: no conviene\)/);
-  assert.match(txt, /No envía alertas automáticas/);
-  await ctx.close();
-});
 
-test("textos: «límite configurado», fuentes rotuladas y faltan datos ≠ mal tiempo", async () => {
-  const { page, ctx } = await open();
-  await page.locator(".hero .verdict").waitFor();
-  const body = await page.locator("body").evaluate((e) => e.textContent);
-  assert.doesNotMatch(body, /límite seguro/i);
-  assert.match(body, /Límite configurado: 40/);
-  assert.match(await page.locator(".now-hour").innerText(), /según el pronóstico/);
-  await tab(page, "pronostico");
-  assert.match(await page.locator(".hour-detail").innerText(), /Valores del pronóstico de Open-Meteo, no mediciones/);
-  await ctx.close();
-  const f = buildForecast("2026-11-14");
-  delete f.hourly.wind_gusts_10m;
-  const r = await open({ forecast: f });
-  await r.page.locator(".hero .verdict").waitFor();
-  await tab(r.page, "semana");
-  await r.page.locator(".opps").waitFor();
-  const t = await r.page.locator(".opps").innerText();
-  assert.match(t, /Faltan datos del pronóstico \(por ejemplo, las ráfagas\)/);
-  assert.doesNotMatch(t, /No encontramos condiciones recomendables/);
-  await r.ctx.close();
-});
 
 test("planificar: calendario, accesos rápidos, cruce de año y «todavía es pronto»", async () => {
   const { page, ctx, errors } = await open();
@@ -521,9 +243,9 @@ test("diseño: tema oscuro por defecto, foto, brasas y movimiento reducido", asy
   await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
   assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), "rgb(12, 8, 6)");
   assert.match(await page.locator(".hero").evaluate((e) => getComputedStyle(e).backgroundImage), /rgba\(40, 26, 18/);
-  for (const t of ["semana", "pronostico", "planificar"]) {
+  for (const t of ["dias", "planificar"]) {
     await tab(page, t);
-    const light = await page.evaluate(() => [...document.querySelectorAll(".card, .opp, .chart-card, .hero, .now-card, details, .pick, .notice, .day-chip, .cal-cell")].filter((e) => {
+    const light = await page.evaluate(() => [...document.querySelectorAll(".card, .dl-item, .hero, details, .notice, .tile, .cal-cell")].filter((e) => {
       const c = getComputedStyle(e).backgroundColor.match(/\d+(\.\d+)?/g).map(Number);
       return (c[3] === undefined || c[3] > 0.5) && (c[0] + c[1] + c[2]) / 3 > 140;
     }).length);
@@ -559,4 +281,205 @@ test("planificar: estadística histórica a pedido, rotulada y ligada al períod
   await page.locator("#q-anionuevo").click();
   assert.equal(await page.locator('[data-testid="clim"]').count(), 0, "al cambiar el período no queda la estadística vieja");
   await ctx.close();
+});
+
+/* ===== v5: experiencia simplificada ===== */
+const calmH = { temp: 17, feels: 15, prob: 0, precip: 0, code: 1, wind: 8, gust: 15, dir: 250 };
+const T = (page, sel) => page.locator(sel).first().innerText().then((t) => t.replace(/\s+/g, " ").trim());
+
+test("v5 Hoy: «ahora» no se confunde con el futuro (10:05 con ráfagas de 45, mejora a las 12)", async () => {
+  const { page, ctx, errors } = await open();
+  await page.locator(".now-answer .verdict").waitFor();
+  assert.equal(await page.locator(".tab").count(), 3);
+  assert.match(await T(page, ".now-answer .verdict"), /^Ahora no conviene$/);
+  assert.match(await T(page, ".now-answer .lead"), /Las ráfagas son demasiado fuertes para cocinar con brasas/);
+  assert.match(await T(page, ".now-answer .eyebrow"), /10:00/);
+  assert.equal(await page.locator(".now-answer .tile.flag").count(), 1, "solo ráfagas en rojo");
+  assert.match(await T(page, ".now-answer .srcline"), /Pronóstico para esta hora · Medido en el aeropuerto a las 10:00/);
+  const bt = await T(page, '[data-testid="best-today"]');
+  assert.match(bt, /La mejor oportunidad de hoy 12:00 – 15:00 Ideal/i);
+  assert.match(await T(page, '[data-testid="best-today"] .ring .n'), /^100$/);
+  assert.match(await T(page, '[data-testid="week-best"]'), /Mejor día de la semana Hoy · 12:00–15:00 Ideal · 100\/100/i);
+  assert.match(await T(page, '[data-testid="risk"]'), /Agradable, pero no para brasas/, "el riesgo se ve sin expandir nada");
+  // lo técnico queda plegado
+  assert.equal(await page.locator("#detalles").evaluate((e) => e.open), false);
+  assert.equal(await page.locator("#detalles .src-box").first().isVisible(), false);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test("v5 Hoy: estado ideal y con precauciones en este momento", async () => {
+  const a = await open({ at: new Date("2026-11-14T15:05:00Z") }); // 12:05
+  await a.page.locator(".now-answer .verdict").waitFor();
+  assert.match(await T(a.page, ".now-answer .verdict"), /^Ahora da para asado$/);
+  assert.match(await T(a.page, ".now-answer .lead2"), /Alcanza para tu asado de 3 h \(bien hasta las 18:00\)/);
+  assert.equal(await a.page.locator(".now-answer.ideal").count(), 1);
+  await a.ctx.close();
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await c.addInitScript(() => localStorage.setItem("dpa:prefs:v1", JSON.stringify({ duration: 3, minFeels: 16, maxWind: 20, maxGust: 30, slot: "libre", exposure: "expuesta" })));
+  const b = await open({ ctx: c, at: new Date("2026-11-14T15:05:00Z") });
+  await b.page.locator(".now-answer .verdict").waitFor();
+  assert.match(await T(b.page, ".now-answer .verdict"), /^Ahora se puede, con cuidado$/);
+  assert.match(await T(b.page, ".now-answer .lead"), /Va a estar fresco: llevá abrigo/);
+  await c.close();
+});
+
+test("v5 Hoy: sin ventanas por hoy ofrece la próxima de otro día", async () => {
+  const { page, ctx } = await open({ at: new Date("2026-11-15T02:30:00Z") }); // 23:30
+  await page.locator(".now-answer .verdict").waitFor();
+  assert.match(await T(page, ".now-answer .verdict"), /^Ahora no conviene$/);
+  const bt = await T(page, '[data-testid="best-today"]');
+  assert.match(bt, /Hoy ya no quedan horarios recomendables/);
+  assert.match(bt, /Próxima oportunidad Lunes, lunes 16\/11 · 09:00–12:00|Próxima oportunidad Lunes 16\/11 · 09:00–12:00/);
+  assert.equal(await page.locator('[data-testid="best-today"] .ring').count(), 0, "sin puntaje para hoy");
+  await page.locator(".next-row").click();
+  assert.equal(await page.locator("#tab-dias").getAttribute("aria-current"), "page");
+  assert.equal(await page.locator('.dl-item[data-date="2026-11-16"] .dl-row').getAttribute("aria-expanded"), "true");
+  await ctx.close();
+});
+
+test("v5 Próximos días: lista compacta, estados, motivo y detalle expandible", async () => {
+  const { page, ctx, errors } = await open();
+  await page.locator(".now-answer .verdict").waitFor();
+  await tab(page, "dias");
+  assert.equal(await page.locator(".dl-item").count(), 7);
+  const lv = await page.locator(".dl-item").evaluateAll((l) => l.map((e) => e.dataset.date.slice(5) + ":" + e.dataset.level).join(","));
+  assert.equal(lv, "11-14:ideal,11-15:no,11-16:precaucion,11-17:no,11-18:precaucion,11-19:no,11-20:sindatos");
+  assert.match(await T(page, '.dl-item[data-date="2026-11-15"]'), /Mañana 15\/11 No conviene Las ráfagas son demasiado fuertes para cocinar con brasas/);
+  assert.equal(await page.locator('.dl-item[data-date="2026-11-15"] .ring').count(), 0, "un día rojo no tiene puntaje");
+  assert.match(await T(page, '.dl-item[data-date="2026-11-14"]'), /12:00–15:00 MEJOR/);
+  assert.equal(await page.locator(".day-detail").count(), 0, "nada expandido al inicio");
+  await page.locator('.dl-item[data-date="2026-11-16"] .dl-row').click();
+  const dd = page.locator('.dl-item[data-date="2026-11-16"] .day-detail');
+  await dd.waitFor();
+  assert.equal(await dd.locator(".chart-wrap svg").count(), 1, "gráfico detallado");
+  assert.match(await T(page, '.dl-item[data-date="2026-11-16"] .hour-detail'), /Valores del pronóstico de Open-Meteo, no mediciones/);
+  // explicación de un horario descartado
+  await dd.locator(".chart-wrap").scrollIntoViewIfNeeded();
+  const box = await dd.locator(".chart-wrap").boundingBox();
+  await page.mouse.click(box.x + box.width * ((30 + 6.5 * 12.5) / 360), box.y + box.height / 2);
+  await page.getByRole("button", { name: "¿Por qué no me recomendaste este horario?" }).click();
+  assert.match(await dd.locator(".why-ans").evaluate((e) => e.textContent), /Ventana 06:00–09:00/);
+  // un solo día abierto a la vez
+  await page.locator('.dl-item[data-date="2026-11-14"] .dl-row').click();
+  assert.equal(await page.locator(".day-detail").count(), 1);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test("v5 consistencia: Hoy, Próximos días y Planificar muestran la misma ventana y puntaje", async () => {
+  const { page, ctx } = await open();
+  await page.locator(".now-answer .verdict").waitFor();
+  const hoy = await T(page, '[data-testid="best-today"] .bt-time') + "|" + await T(page, '[data-testid="best-today"] .ring .n');
+  await tab(page, "dias");
+  const dias = await T(page, '.dl-item[data-date="2026-11-14"] .dl-time') + "|" + await T(page, '.dl-item[data-date="2026-11-14"] .ring .n');
+  await tab(page, "planificar");
+  await page.locator('[data-date="2026-11-14"]').click();
+  await page.locator('[data-date="2026-11-14"]').click();
+  const plan = await T(page, '.pd[data-kind="horario"] .opp-time') + "|" + await T(page, '.pd[data-kind="horario"] .ring .n');
+  const norm = (x) => x.replace(/\s/g, "").replace(/MEJOR/, "");
+  assert.equal(norm(hoy), "12:00–15:00|100");
+  assert.equal(norm(dias), norm(hoy));
+  assert.equal(norm(plan), norm(hoy));
+  await ctx.close();
+});
+
+test("v5 sin condiciones favorables: mensaje claro en Hoy y en Próximos días", async () => {
+  const storm = {};
+  for (let d = 0; d < 7; d++) storm[d] = () => ({ temp: 14, feels: 8, prob: 0, precip: 0, code: 3, wind: 35, gust: 62, dir: 250 });
+  const { page, ctx } = await open({ forecast: buildForecast("2026-11-14", storm) });
+  await page.locator(".now-answer .verdict").waitFor();
+  assert.match(await T(page, ".now-answer .verdict"), /^Ahora no conviene$/);
+  assert.match(await T(page, '[data-testid="best-today"]'), /Hoy ya no quedan horarios recomendables[\s\S]*No encontramos condiciones recomendables para hacer asado en los próximos 7 días/);
+  assert.match(await T(page, '[data-testid="week-best"]'), /No encontramos condiciones recomendables/);
+  await tab(page, "dias");
+  assert.equal(await page.locator('.dl-item[data-level="no"]').count(), 7);
+  assert.equal(await page.locator(".dl-item .ring").count(), 0);
+  await ctx.close();
+});
+
+test("v5 ahora: 2, 3 y 4 h desde ahora, cruzando la medianoche", async () => {
+  const f = buildForecast("2026-11-14", { 0: (h) => (h >= 22 ? calmH : { ...calmH, gust: 55 }), 1: (h) => (h < 2 ? calmH : { ...calmH, gust: 55 }) });
+  const { page, ctx } = await open({ forecast: f, at: new Date("2026-11-14T17:05:00Z") }); // 14:05
+  await page.locator(".now-answer .verdict").waitFor();
+  await page.locator("#durations > summary").click();
+  await page.locator("#now-dur-4").click();
+  assert.match(await T(page, '[data-testid="dp-list"]'), /★ Hoy 22:00 – 02:00 del domingo/);
+  await page.locator("#now-dur-2").click();
+  assert.match(await T(page, '[data-testid="dp-list"]'), /★ Hoy 22:00 – 00:00 \(medianoche\)|★ Hoy 2[23]:00 – 0[01]:00/);
+  await page.locator("#now-dur-3").click();
+  assert.match(await T(page, '[data-testid="dp-list"]'), /★ Hoy 2[23]:00 – 0[12]:00 del domingo/);
+  await ctx.close();
+});
+
+test("v5 detalles: fuentes, medición vs estimación, ráfagas observadas y cambios entre consultas", async () => {
+  const windy = buildForecast("2026-11-14", { 2: () => ({ ...calmH, wind: 28, gust: 55 }) });
+  const { page, ctx, state } = await open({ forecast: windy, metar: "METAR SAWG 141300Z 25025G42KT CAVOK 12/04 Q1016" });
+  await page.locator(".now-answer .verdict").waitFor();
+  assert.match(await T(page, ".now-answer .lead"), /Se midieron ráfagas demasiado fuertes para las brasas/);
+  assert.match(await T(page, ".now-answer .srcline"), /^Según la medición del aeropuerto/);
+  await page.locator("#detalles > summary").click();
+  const d = await T(page, "#detalles");
+  assert.match(d, /Medido · aeropuerto \(SAWG\)/);
+  assert.match(d, /Estimación del modelo · Open-Meteo .* no es una medición/);
+  assert.match(d, /Observado en el aeropuerto a las 10:00: ráfagas de 78 km\/h/);
+  assert.match(d, /Los límites configurados no son una garantía de seguridad/);
+  assert.match(d, /Cómo se calcula/);
+  state.forecast = buildForecast("2026-11-14", { 2: () => calmH });
+  await page.clock.setFixedTime(new Date(FIXED.getTime() + 20 * 60000));
+  await page.getByRole("button", { name: "Actualizar pronóstico" }).click();
+  await page.locator("#detalles .news-dot").waitFor();
+  assert.match(await page.locator("#detalles .changes").evaluate((e) => e.textContent), /Nueva oportunidad: Lunes 16\/11, 09:00–12:00 · ideal para asado \(antes: no conviene\)/);
+  await ctx.close();
+});
+
+test("v5 conserva preferencias, eventos y enlaces anteriores", async () => {
+  const c = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await c.addInitScript(() => {
+    localStorage.setItem("dpa:prefs:v1", JSON.stringify({ duration: 5, minFeels: 10, maxWind: 20, maxGust: 30, slot: "libre", exposure: "protegida" }));
+    localStorage.setItem("dpa:events:v1", JSON.stringify([{ id: "e1", name: "Cumple de Juan", start: "2026-12-24", end: "2026-12-25", dur: 3, sig: "pronto", savedAt: 1 }]));
+  });
+  const { page } = await open({ ctx: c });
+  await page.locator(".now-answer .verdict").waitFor();
+  assert.match(await T(page, '[data-testid="best-today"] .bt-time'), /12:00 – 17:00/, "duración guardada de 5 h");
+  await tab(page, "planificar");
+  assert.match(await T(page, '[data-event="Cumple de Juan"]'), /24 – 25 dic/);
+  await page.getByRole("button", { name: "Preferencias" }).click();
+  assert.equal(await page.locator("#exp-protegida").getAttribute("aria-pressed"), "true");
+  await page.getByRole("button", { name: "Cerrar" }).click();
+  await page.goto("https://app.test/#semana");
+  await page.locator(".dl").waitFor();
+  assert.equal(await page.locator("#tab-dias").getAttribute("aria-current"), "page", "#semana abre Próximos días");
+  await c.close();
+});
+
+test("v5 fechas: Hoy según Río Gallegos aunque el teléfono esté en otro huso", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: "Asia/Tokyo" });
+  const { page } = await open({ ctx, at: new Date("2026-11-15T02:30:00Z") });
+  await page.locator(".now-answer .verdict").waitFor();
+  assert.match(await T(page, ".now-answer .eyebrow"), /23:00/);
+  await tab(page, "dias");
+  assert.match(await T(page, ".dl-item .dl-day"), /^Hoy 14\/11$/);
+  assert.match(await T(page, ".dl-item:nth-child(2) .dl-day"), /^Mañana 15\/11$/);
+  await ctx.close();
+});
+
+test("v5 iPhone: respuesta principal visible sin desplazarse y sin desbordes", async () => {
+  for (const w of [320, 375, 390, 430]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: w === 320 ? 568 : 812 }, isMobile: true, hasTouch: true });
+    const { page } = await open({ ctx });
+    await page.locator(".now-answer .verdict").waitFor();
+    const v = await page.locator(".now-answer .verdict").boundingBox();
+    const tabbar = await page.locator(".tabbar").boundingBox();
+    assert.ok(v.y + v.height <= tabbar.y, `veredicto visible sin scroll a ${w}px`);
+    for (const t of ["hoy", "dias", "planificar"]) {
+      await tab(page, t);
+      if (t === "dias") await page.locator(".dl-row").first().click();
+      const o = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      assert.ok(o <= 0, `overflow ${o}px en ${t} a ${w}px`);
+    }
+    const small = await page.evaluate(() => [...document.querySelectorAll(".tab, .dl-row, .chip, .cal-cell:not(.empty), .icon-btn")].filter((e) => { const r = e.getBoundingClientRect(); return r.width && r.height < 40; }).length);
+    assert.equal(small, 0, "áreas táctiles de al menos 40 px de alto");
+    await ctx.close();
+  }
 });

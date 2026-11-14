@@ -364,7 +364,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
 .embers i:nth-child(9) { left: 82%; animation-delay: 2.8s; width: 3px; height: 3px; } .embers i:nth-child(10) { left: 74%; animation-delay: 5.4s; }
 .embers i:nth-child(11) { left: 90%; animation-delay: 3.9s; width: 3px; height: 3px; } .embers i:nth-child(12) { left: 47%; animation-delay: 2s; width: 3px; height: 3px; }
 @keyframes ember-rise { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: .95; } 60% { opacity: .6; } 100% { transform: translate(-18px, -190px); opacity: 0; } }
-.tabbar { position: fixed; z-index: 15; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+.tabbar { position: fixed; z-index: 15; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
   padding: 8px max(10px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px));
   background: rgba(20, 13, 9, .92); border-top: 1px solid rgba(242, 138, 34, .2); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
 .tab { border: 0; background: transparent; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 2px; font-size: 12.5px; font-weight: 600; cursor: pointer; min-width: 0; }
@@ -575,6 +575,78 @@ table.rules th, table.rules td { border-bottom-color: rgba(255, 170, 90, .1); }
 .discard-item { border-top-color: rgba(255, 170, 90, .1); }
 
 @media (prefers-reduced-motion: reduce) { .mast-flame { animation: none; } }
+
+/* ===== v5: experiencia simplificada ===== */
+.now-answer .verdict { font-size: clamp(30px, 9.4vw, 40px); margin-top: 8px; }
+.lead { position: relative; margin: 10px 0 0; font-size: 17px; line-height: 1.4; color: var(--ink); text-wrap: pretty; }
+.lead2 { margin: 6px 0 0; font-size: 15px; color: var(--muted); }
+.now-answer.ideal .lead2, .now-answer.precaucion .lead2 { color: var(--ink); }
+.tiles { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 16px; }
+.tile { background: var(--tile); border: 1px solid rgba(255, 170, 90, .1); border-radius: 14px; padding: 9px 8px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tile .tk { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .tk svg { color: var(--ember-2); flex: none; }
+.tile b { font-size: 21px; font-weight: 800; color: var(--ink); line-height: 1.1; }
+.tile b small { font-size: 11px; font-weight: 600; color: var(--muted); }
+.tile .ts { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile.flag { border-color: rgba(255, 107, 87, .5); } .tile.flag b { color: var(--bad); }
+.tile.caution { border-color: rgba(245, 188, 69, .4); } .tile.caution b { color: var(--warn); }
+.srcline { position: relative; margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+.risk h3 { font-size: 15px; } .risk p { font-size: 14px; }
+.best-today { padding: 16px 18px; }
+.bt-row { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.bt-row .ring { flex: none; margin-bottom: 14px; }
+.bt-time { font-family: var(--font-display); font-weight: 900; font-size: 34px; letter-spacing: -.01em; margin-top: 4px; background: var(--amber-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.bt-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-weight: 700; }
+.bt-title { font-family: var(--font-display); font-weight: 800; font-size: 22px; margin-top: 6px; line-height: 1.15; }
+.next-row { margin-top: 12px; width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left; background: var(--tile); border: 1px solid rgba(255, 170, 90, .2); border-radius: 14px; padding: 12px; color: var(--ink); cursor: pointer; min-height: 56px; }
+.next-score { display: flex; align-items: center; gap: 8px; flex: none; }
+.week-best { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; padding: 14px 16px; cursor: pointer; color: var(--ink); background: linear-gradient(135deg, rgba(229, 102, 26, .2), rgba(26, 17, 12, .96) 60%); border-color: rgba(255, 170, 90, .3); }
+.week-best .eyebrow { display: block; }
+.wb-flame { color: var(--ember-2); flex: none; }
+.wb-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.wb-body b { font-size: 18px; }
+.wb-chev { color: var(--muted); flex: none; }
+details.fold { padding: 0 16px; }
+details.fold > summary { list-style: none; cursor: pointer; min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--ink); }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold[open] > summary .chev { transform: rotate(180deg); }
+.fold-body { padding-bottom: 14px; display: flex; flex-direction: column; gap: 10px; }
+.fold-body details.method { box-shadow: none; }
+.news-dot { color: var(--ember-2); font-weight: 700; font-size: 13px; }
+.dl { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.dl-item { background: var(--card); border: 1px solid var(--card-line); border-radius: 18px; box-shadow: var(--shadow); overflow: hidden; }
+.dl-item.tone-ideal { border-color: rgba(99, 208, 138, .35); }
+.dl-item.open { border-color: rgba(255, 181, 71, .45); }
+.dl-row { width: 100%; display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px 10px 14px; background: transparent; border: 0; color: var(--ink); text-align: left; cursor: pointer; min-height: 72px; }
+.dl-day { display: flex; flex-direction: column; } .dl-day b { font-size: 15px; } .dl-day span { font-size: 12.5px; color: var(--muted); }
+.dl-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dl-time { font-family: var(--font-display); font-weight: 800; font-size: 19px; display: flex; align-items: center; gap: 8px; }
+.dl-item.tone-ideal .dl-time { color: var(--good); } .dl-item.tone-precaucion .dl-time { color: var(--warn); } .dl-item.tone-no .dl-time { color: var(--bad); } .dl-item.tone-pasado .dl-time, .dl-item.tone-sindatos .dl-time { color: var(--muted); }
+.dl-reason { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.dl-score .ring { transform: scale(.82); transform-origin: right center; margin-bottom: 8px; }
+.dl-dash { display: inline-grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; border: 2px dashed rgba(255, 170, 90, .2); color: var(--muted); font-weight: 800; }
+.best-tag { font-family: var(--font-body); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #1A0E07; background: var(--amber-grad); border-radius: 999px; padding: 2px 8px; }
+.day-detail { padding: 0 12px 14px; border-top: 1px solid rgba(255, 170, 90, .1); display: flex; flex-direction: column; gap: 10px; }
+.dd-alts { margin-top: 10px; }
+.day-detail .sun-row { padding: 8px 2px 0; }
+@media (max-width: 360px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dl-row { grid-template-columns: 56px minmax(0, 1fr) auto; } }
+
+/* v5: encabezado más compacto para que la respuesta quede arriba */
+.masthead { min-height: 168px; padding-block: 10px 6px; }
+.mast-brand { margin-top: 26px; }
+.mast-flame { width: 44px; height: 56px; }
+.mast-brand h1 span { font-size: 21px; } .mast-brand h1 .big { font-size: 36px; }
+.swoosh { width: 140px; height: 6px; margin-left: 54px; }
+.loc { margin-top: 10px; font-size: 14px; }
+.app { gap: 14px; }
+.tile .tk { font-size: 11.5px; gap: 3px; }
+@media (max-width: 360px) { .mast-brand h1 .big { font-size: 32px; } }
+.tile .tk svg { width: 13px; height: 13px; }
+.now-answer .verdict { font-size: clamp(28px, 8.4vw, 36px); }
+.now-answer { padding: 16px 16px 14px; }
+.lead { font-size: 16px; margin-top: 8px; }
+.tiles { margin-top: 12px; }
+.meta { margin-top: -10px; }
 </style>
 
 <div id="root">
@@ -2368,7 +2440,7 @@ table.rules th, table.rules td { border-bottom-color: rgba(255, 170, 90, .1); }
     return html`<section className="planner">
       <div className="card plan-intro">
         <span className="amber"><${I.calendar} size=${30}/></span>
-        <div><h2>Planificar un período</h2><p>Elegí una fecha o un rango y mirá qué conviene para organizar tu asado.</p></div>
+        <div><h2>Planificar un período</h2><p>Elegí fechas y mirá qué conviene.</p></div>
       </div>
       <div className="chips" role="group" aria-label="Accesos rápidos">
         <button className="chip" id="q-navidad" aria-pressed=${quick === "navidad" ? "true" : "false"} onClick=${function () { go("navidad"); }}><${I.tree} size=${17}/>Navidad</button>
@@ -2435,6 +2507,211 @@ table.rules th, table.rules td { border-bottom-color: rgba(255, 170, 90, .1); }
     </section>`;
   }
 
+  /* ==== v5: experiencia simplificada (solo presentación; todo sale del mismo motor) ==== */
+  // Motivos del motor en lenguaje cotidiano. No calcula nada: traduce los motivos ya clasificados.
+  function plainReason(r) {
+    if (!r) return "";
+    var map = r.sev === "no" ? {
+      gust: "Las ráfagas son demasiado fuertes para cocinar con brasas", obsGust: "Se midieron ráfagas demasiado fuertes para las brasas",
+      wind: "Hay demasiado viento para la parrilla", obsWind: "Se midió demasiado viento para la parrilla",
+      storm: "Hay tormenta prevista", obsWx: "Está lloviendo o hay tormenta en el aeropuerto",
+      precip: "Hay lluvia prevista", prob: "Es probable que llueva", snow: "Hay nieve prevista", cold: "Hace demasiado frío para estar afuera"
+    } : {
+      gust: "Hay ráfagas: armá un reparo y vigilá las brasas", wind: "Algo de viento: buscá un lugar protegido",
+      precip: "Puede lloviznar", prob: "Hay chances de lluvia", wetcode: "Puede lloviznar", cold: "Va a estar fresco: llevá abrigo"
+    };
+    if (r.key === "data") return "Faltan datos del pronóstico";
+    return map[r.key] || A.reasonText(r, A.DEFAULT_PREFS);
+  }
+  var VERDICT_NOW = { ideal: "Ahora da para asado", precaucion: "Ahora se puede, con cuidado", no: "Ahora no conviene", sindatos: "Sin datos de este momento" };
+  var LEVEL_SHORT = { ideal: "Ideal", precaucion: "Con precauciones", no: "No conviene", sindatos: "Sin datos" };
+
+  function Tiles(props) {
+    var h = props.h, prefs = props.prefs, keys = {};
+    (props.reasons || []).forEach(function (r) { keys[r.key] = keys[r.key] === "no" ? "no" : r.sev; });
+    var tone = function (k) { return keys[k] === "no" ? "flag" : keys[k] === "precaucion" ? "caution" : ""; };
+    return html`<div className="tiles">
+      <div className=${"tile " + tone("cold")}><span className="tk"><${I.temp} size=${15}/>Temp.</span><b className="num">${h.temp == null ? "–" : A.fmt0(h.temp) + "°"}</b><span className="ts num">ST ${h.feels == null ? "–" : A.fmt0(h.feels) + "°"}</span></div>
+      <div className=${"tile " + tone("wind")}><span className="tk"><${I.wind} size=${15}/>Viento</span><b className="num">${h.wind == null ? "–" : A.fmt0(h.wind)}<small> km/h</small></b><span className="ts">${h.dir != null ? "Del " + A.cardinal(h.dir) : ""}</span></div>
+      <div className=${"tile " + tone("gust")}><span className="tk"><${I.gust} size=${15}/>Ráfagas</span><b className="num">${h.gust == null ? "–" : A.fmt0(h.gust)}<small> km/h</small></b><span className="ts">límite 40</span></div>
+      <div className=${"tile " + (tone("precip") || tone("prob"))}><span className="tk"><${I.drop} size=${15}/>Lluvia</span><b className="num">${h.prob == null ? "–" : A.fmt0(h.prob)}<small> %</small></b><span className="ts num">${h.precip ? A.fmt1(h.precip) + " mm" : "sin lluvia"}</span></div>
+    </div>`;
+  }
+
+  // 1) ¿Da para asado AHORA? Solo la hora actual (pronóstico de esta hora, endurecido por la observación si corresponde).
+  function NowAnswer(props) {
+    var na = props.nowA, a = props.analysis, prefs = a.prefs, cur = na.current;
+    if (!cur) return html`<section className="hero now-answer" data-now="sindatos"><div className="eyebrow">¿Da para asado ahora?</div><div className="verdict">Sin datos de este momento</div><p className="lead">El pronóstico recibido no incluye la hora actual.</p></section>`;
+    var lvl = cur.cls.level;
+    var main = cur.cls.reasons.find(function (r) { return r.sev === "no" && /^obs/.test(r.key); }) || cur.cls.reasons.find(function (r) { return r.sev === "no"; }) || cur.cls.reasons[0];
+    // horas seguidas aptas desde ahora (mismas clasificaciones del motor)
+    var seq = [cur].concat(na.timeline.filter(function (h) { return h.time > cur.time; }));
+    var run = 0; while (run < seq.length && (seq[run].cls.level === "ideal" || seq[run].cls.level === "precaucion")) run++;
+    var breaker = seq[run];
+    var sub = lvl === "ideal" ? "Poco viento, sin lluvia y temperatura aceptable." : main ? plainReason(main) + "." : "";
+    var lasting = (lvl === "ideal" || lvl === "precaucion") ? (run >= prefs.duration ? "Alcanza para tu asado de " + prefs.duration + " h" + (run < 24 ? " (bien hasta las " + A.hh(cur.hour + run) + ")." : ".")
+      : "Ojo: alcanza solo para " + run + " h. A las " + A.hh(cur.hour + run) + (breaker && breaker.cls.reasons[0] ? ": " + plainReason(breaker.cls.reasons.filter(function (r) { return r.sev === "no"; })[0] || breaker.cls.reasons[0]).toLowerCase() + "." : " cambian las condiciones.")) : null;
+    var o = props.obs && props.obs.data ? props.obs.data.latest : null;
+    return html`<section className=${"hero now-answer " + lvl} data-now=${lvl} aria-live="polite">
+      <div className="eyebrow">¿Da para asado ahora? · ${A.hh(cur.hour)}</div>
+      <div className="verdict"><span className="chip-dot"></span>${VERDICT_NOW[lvl]}</div>
+      <p className="lead">${sub}</p>
+      ${lasting && html`<p className="lead2">${lasting}</p>`}
+      <${Tiles} h=${cur} prefs=${prefs} reasons=${cur.cls.reasons}/>
+      <p className="srcline">${cur.cls.obs ? "Según la medición del aeropuerto" : "Pronóstico para esta hora"}${o ? " · Medido en el aeropuerto a las " + o.local.slice(11, 16) + ": " + (o.temp == null ? "" : o.temp + "°, ") + (o.wind == null ? "" : "viento " + A.fmt0(o.wind) + " km/h") + (o.gust != null ? ", ráfagas " + A.fmt0(o.gust) : "") : ""}</p>
+    </section>`;
+  }
+
+  // 2) La mejor oportunidad de hoy (misma ventana que la fila de hoy en «Próximos días»).
+  function TodayBest(props) {
+    var a = props.analysis, t = a.todayInfo, w = t && t.top;
+    var nd = a.days.find(function (d) { return d.date > a.today && d.top; }); // primer día siguiente con una ventana recomendable
+    var next = nd ? nd.top : null;
+    if (w) {
+      return html`<section className=${"card best-today tone-" + w.level} data-testid="best-today">
+        <div className="bt-row">
+          <div style=${{ minWidth: 0 }}>
+            <div className="eyebrow">La mejor oportunidad de hoy</div>
+            <div className="bt-time num">${A.hh(w.startHour)} – ${A.hh(w.endHour)}</div>
+            <div className="bt-meta"><${Badge} level=${w.level} label=${LEVEL_SHORT[w.level]}/></div>
+          </div>
+          <${ScoreRing} value=${w.score} level=${w.level}/>
+        </div>
+        ${w.reasons.length > 0 && html`<p className="lead2">${plainReason(w.reasons[0])}.</p>`}
+        ${t.recs.length > 1 && html`<p className="muted small">También: ${t.recs.slice(1).map(function (r) { return A.hh(r.startHour) + "–" + A.hh(r.endHour); }).join(", ")}.</p>`}
+      </section>`;
+    }
+    var kind = t && t.discard ? t.discard.kind : "pasado";
+    var why = kind === "pasado" ? "Ya pasaron los horarios de tu franja." : kind === "sindatos" ? "Faltan datos del pronóstico para hoy." : t.discard.reasons[0] ? plainReason(t.discard.reasons[0]) + "." : "No hay " + a.prefs.duration + " horas seguidas aceptables.";
+    return html`<section className="card best-today tone-no" data-testid="best-today" data-none="true">
+      <div className="eyebrow">Resto de hoy</div>
+      <div className="bt-title">Hoy ya no quedan horarios recomendables</div>
+      <p className="lead2">${why}</p>
+      ${next ? html`<button className="next-row" onClick=${function () { props.onOpen(next.date); }}>
+          <span><span className="muted small">Próxima oportunidad</span><br/><b>${fullDay(next.date, a.today)} · ${A.hh(next.startHour)}–${A.hh(next.endHour)}</b></span>
+          <span className="next-score"><${Badge} level=${next.level} label=${LEVEL_SHORT[next.level]}/><b className="num">${next.score}</b></span>
+        </button>` : html`<p className="muted">${noneText(a)}</p>`}
+    </section>`;
+  }
+
+  // 3) El mejor día de la semana.
+  function WeekBest(props) {
+    var a = props.analysis, o = a.overall, t = a.todayInfo && a.todayInfo.top;
+    if (!o) return html`<section className="card week-best" data-testid="week-best"><div className="eyebrow">Esta semana</div><p className="lead2">${noneText(a)}</p></section>`;
+    var same = t && o.date === t.date && o.startHour === t.startHour;
+    return html`<button className="card week-best" data-testid="week-best" onClick=${function () { props.onOpen(o.date); }}>
+      <span className="wb-flame"><${I.flame} size=${26}/></span>
+      <span className="wb-body"><span className="eyebrow">Mejor día de la semana</span>
+        <b>${same ? "Hoy · " : fullDay(o.date, a.today) + " · "}${A.hh(o.startHour)}–${A.hh(o.endHour)}</b>
+        <span className="muted small">${LEVEL_SHORT[o.level]} · ${o.score}/100 · Ver detalle</span></span>
+      <span className="wb-chev"><${I.chevR} size=${20}/></span>
+    </button>`;
+  }
+
+  // Ventanas desde ahora, 2/3/4 h (próximas 24 h, cruza medianoche)
+  function DurationPicker(props) {
+    var na = props.nowA, a = props.analysis;
+    var st = useState(function () { return a.prefs.duration >= 2 && a.prefs.duration <= 4 ? a.prefs.duration : 3; }), dur = st[0], setDur = st[1];
+    var r = na.byDur[dur], w = r.best;
+    return html`<details className="card fold" id="durations">
+      <summary><span><b>Otras duraciones</b><span className="muted small"> · próximas 24 h</span></span><span className="chev"><${I.chev} size=${18}/></span></summary>
+      <div className="fold-body">
+        <${Seg} id="now-dur" label="Duración" value=${dur} onChange=${setDur} options=${[2, 3, 4].map(function (n) { return { value: n, label: n + " h" }; })}/>
+        ${w ? html`<div className="dp-list" data-testid="dp-list">
+            ${[w].concat(r.alts).map(function (x, i) {
+              return html`<div key=${x.i0} className="alt-row"><span className="num">${i === 0 ? "★ " : ""}${A.dayLabel(x.date, a.today)} ${A.hh(x.startHour)} – ${endLabel(x, a.today)}</span><${Badge} level=${x.level} label=${LEVEL_SHORT[x.level]}/><span className="num alt-score">${x.score}</span></div>`;
+            })}
+            ${w.prefWhy && w.prefWhy.some(function (p) { return p.key === "luz"; }) && html`<p className="muted small">★ Se prefirió por tener luz de día.</p>`}
+          </div>` : html`<p className="muted">En las próximas 24 horas no hay ${dur} horas seguidas aceptables.</p>`}
+      </div>
+    </details>`;
+  }
+
+  // Detalles del pronóstico (información técnica, plegada)
+  function ForecastDetails(props) {
+    var na = props.nowA, a = props.analysis, obs = props.obs, o = obs && obs.data ? obs.data.latest : null, cur = props.current;
+    var changed = props.diff && props.diff.changed;
+    return html`<details className="card fold details-fc" id="detalles">
+      <summary><span><b>Detalles del pronóstico</b>${changed && html`<span className="news-dot" title="Hay cambios desde la consulta anterior"> · novedades</span>`}</span><span className="chev"><${I.chev} size=${18}/></span></summary>
+      <div className="fold-body">
+        <p className="small">Pronóstico: Open-Meteo${props.fcSource === "firecrawl" ? " vía Firecrawl" : ""}, actualizado ${props.fcTime}. Observación: METAR del aeropuerto (SAWG), aviationweather.gov${obs && obs.data ? ", consultada " + props.obsTime : ""}.</p>
+        <div className="now-grid">
+          <div className="src-box" data-kind="obs">
+            <div className="src-k">Medido · aeropuerto (SAWG)</div>
+            ${o ? html`<${React.Fragment}><div className="src-v num">${o.temp == null ? "–" : o.temp + " °C"} · ${o.wind == null ? "–" : A.fmt0(o.wind) + " km/h"} ${o.dir != null ? A.cardinal(o.dir) : ""}</div>
+              <div className="src-s">${o.gust != null ? "Ráfagas de " + A.fmt0(o.gust) + " km/h" : "Sin ráfagas informadas"}${o.sky ? " · " + o.sky : ""}</div>
+              <div className="src-t num">${o.local.slice(11, 16)} (${ageText(o.local, a.now)})</div><//>`
+              : html`<div className="src-s">${obs && obs.loading ? "Consultando la estación…" : "Sin observación disponible" + (obs && obs.error ? ": " + obs.error : "")}</div>`}
+          </div>
+          <div className="src-box" data-kind="model">
+            <div className="src-k">Estimación del modelo · Open-Meteo</div>
+            ${cur && cur.temp != null ? html`<${React.Fragment}><div className="src-v num">${A.fmt0(cur.temp)} °C · ${A.fmt0(cur.wind)} km/h ${A.cardinal(cur.dir)}</div>
+              <div className="src-s">Sensación ${A.fmt0(cur.feels)} °C · ráfagas ${A.fmt0(cur.gust)} km/h</div>
+              <div className="src-t num">${cur.time ? cur.time.slice(11, 16) : ""} · no es una medición</div><//>` : html`<div className="src-s">Sin estimación actual en esta consulta.</div>`}
+          </div>
+        </div>
+        ${na.current && na.current.cls.reasons.length > 0 && html`<div><div className="eyebrow" style=${{ marginTop: "12px" }}>Esta hora (${A.hh(na.current.hour)}), ${na.current.cls.obs ? "según la observación" : "según el pronóstico"}</div><${Reasons} reasons=${na.current.cls.reasons} prefs=${a.prefs}/></div>`}
+        ${props.cmp && o && html`<p className="cmp" data-testid="cmp">${cmpText(props.cmp)}</p>`}
+        <${ChangesCard} diff=${props.diff} analysis=${a} prevTime=${props.prevTime}/>
+        <p className="small muted">La observación del aeropuerto solo puede volver más estricta la hora actual y la siguiente; nunca las mejora. Los límites configurados no son una garantía de seguridad.</p>
+        <${Method} analysis=${a}/>
+      </div>
+    </details>`;
+  }
+
+  // PRÓXIMOS DÍAS: lista compacta + detalle expandible por día
+  function DayDetail(props) {
+    var day = props.day, a = props.analysis;
+    var defHour = day.top ? day.top.startHour : (day.hours.find(function (h) { return !h.past; }) || day.hours[0] || {}).hour;
+    var st = useState(defHour), hour = st[0], setHour = st[1];
+    var hObj = day.hours.find(function (h) { return h.hour === hour; });
+    return html`<div className="day-detail" data-testid="day-detail">
+      ${day.recs.length > 1 && html`<div className="dd-alts"><div className="eyebrow">Otras ventanas</div>${day.recs.slice(1).map(function (r) { return html`<div key=${r.startHour} className="alt-row"><span className="num">${A.hh(r.startHour)} – ${A.hh(r.endHour)}</span><${Badge} level=${r.level} label=${LEVEL_SHORT[r.level]}/><span className="num alt-score">${r.score}</span></div>`; })}</div>`}
+      ${day.top && day.top.reasons.length > 0 && html`<${Reasons} reasons=${day.top.reasons} prefs=${a.prefs} max=${3}/>`}
+      ${!day.top && day.discard && day.discard.reasons.length > 1 && html`<${Reasons} reasons=${day.discard.reasons.slice(0, 3)} prefs=${a.prefs}/>`}
+      <div className="sun-row">
+        ${day.sunrise && html`<span><${I.sunrise} size=${15}/>${day.sunrise.slice(11, 16)}</span>`}
+        ${day.sunset && html`<span><${I.sunset} size=${15}/>${day.sunset.slice(11, 16)}</span>`}
+        ${day.code != null && html`<span><${WeatherIcon} code=${day.code} size=${16}/>${A.weatherText(day.code)}</span>`}
+      </div>
+      <${HourChart} day=${day} analysis=${a} selectedHour=${hour} onHour=${setHour}/>
+      <div className="legend">
+        <span><i style=${{ borderColor: "var(--ember)" }}></i>Viento</span>
+        <span><i className="dash" style=${{ borderColor: "var(--bad)" }}></i>Ráfagas</span>
+        <span><i style=${{ borderColor: "var(--temp)" }}></i>Temperatura</span>
+        <span><i className="box" style=${{ background: "var(--rain)", opacity: 0.6 }}></i>Lluvia</span>
+      </div>
+      <${HourDetail} hour=${hObj} prefs=${a.prefs} analysis=${a}/>
+    </div>`;
+  }
+
+  function DaysList(props) {
+    var a = props.analysis, open = props.open;
+    var best = a.overall;
+    return html`<section className="days-list">
+      <div className="section-h"><h2>Próximos días</h2><span>${a.prefs.duration} h · ${a.slot.label.toLowerCase()}</span></div>
+      <div className="dl">
+        ${a.days.map(function (d) {
+          var w = d.top, isOpen = open === d.date;
+          var lvl = w ? w.level : d.discard && d.discard.kind === "sindatos" ? "sindatos" : d.discard && d.discard.kind === "pasado" ? "pasado" : "no";
+          var reason = w ? (w.reasons[0] ? plainReason(w.reasons[0]) : "Buenas condiciones") : d.discard && d.discard.kind === "pasado" ? "Ya pasaron los horarios de tu franja" : d.discard && d.discard.reasons[0] ? plainReason(d.discard.reasons[0]) : "Sin " + a.prefs.duration + " h seguidas aceptables";
+          var isBest = best && w && best.date === w.date && best.startHour === w.startHour;
+          return html`<div key=${d.date} className=${"dl-item tone-" + lvl + (isOpen ? " open" : "")} data-date=${d.date} data-level=${lvl}>
+            <button className="dl-row" aria-expanded=${isOpen ? "true" : "false"} onClick=${function () { props.onToggle(isOpen ? null : d.date); }}>
+              <span className="dl-day"><b>${A.dayLabel(d.date, a.today)}</b><span className="num">${A.shortDate(d.date)}</span></span>
+              <span className="dl-main">
+                <span className="dl-time num">${w ? A.hh(w.startHour) + "–" + A.hh(w.endHour) : lvl === "pasado" ? "Sin horarios" : "No conviene"}${isBest ? html`<span className="best-tag">Mejor</span>` : null}</span>
+                <span className="dl-reason">${reason}</span>
+              </span>
+              <span className="dl-score">${w ? html`<${ScoreRing} value=${w.score} level=${w.level}/>` : html`<span className="dl-dash" aria-label="Sin puntaje">–</span>`}</span>
+            </button>
+            ${isOpen && html`<${DayDetail} day=${d} analysis=${a}/>`}
+          </div>`;
+        })}
+      </div>
+    </section>`;
+  }
+
   /* ---- App ---- */
   function App() {
     var cached = useMemo(function () {
@@ -2456,8 +2733,9 @@ table.rules th, table.rules td { border-bottom-color: rgba(255, 170, 90, .1); }
       if (!p || !p.json) return null;
       try { return { model: A.normalize(p.json), fetchedAt: p.fetchedAt }; } catch (e) { return null; }
     }), prev = s11[0], setPrev = s11[1];
-    var TABS = ["hoy", "pronostico", "planificar", "semana"];
-    var readHash = function () { try { var h = (location.hash || "").replace("#", ""); return TABS.indexOf(h) >= 0 ? h : "hoy"; } catch (e) { return "hoy"; } };
+    var TABS = ["hoy", "dias", "planificar"];
+    var LEGACY = { pronostico: "dias", semana: "dias" }; // enlaces de versiones anteriores
+    var readHash = function () { try { var h = (location.hash || "").replace("#", ""); h = LEGACY[h] || h; return TABS.indexOf(h) >= 0 ? h : "hoy"; } catch (e) { return "hoy"; } };
     var s12 = useState(readHash), tab = s12[0], setTabState = s12[1];
     var setTab = function (t) { setTabState(t); try { if (location.hash !== "#" + t) history.replaceState(null, "", "#" + t); } catch (e) { /* hash no disponible */ } window.scrollTo(0, 0); };
     useEffect(function () { var f = function () { setTabState(readHash()); }; window.addEventListener("hashchange", f); return function () { window.removeEventListener("hashchange", f); }; }, []);
@@ -2524,7 +2802,8 @@ table.rules th, table.rules td { border-bottom-color: rgba(255, 170, 90, .1); }
       [2, 3, 4].forEach(function (k) { o[k] = A.analyze(data.model, Object.assign({}, prefs, { duration: k }), now, { obs: latestObs }); });
       return o;
     }, [data, prefs, now, latestObs]);
-    var openChart = function (d) { setSelDate(d); setTab("pronostico"); };
+    var s17 = useState(null), openDay = s17[0], setOpenDay = s17[1];
+    var openChart = function (d) { setOpenDay(d); setTab("dias"); };
     var activeDate = selDate && analysis && analysis.days.some(function (d) { return d.date === selDate; }) ? selDate : analysis && analysis.days.length ? (analysis.todayInfo && analysis.todayInfo.top ? analysis.today : (analysis.overall ? analysis.overall.date : analysis.days[0].date)) : null;
 
     var ageMin = data ? (Date.now() - data.fetchedAt) / 60000 : 0;
@@ -2563,18 +2842,16 @@ table.rules th, table.rules td { border-bottom-color: rgba(255, 170, 90, .1); }
       ${!data && loading && html`<div className="skel" aria-busy="true"><div className="eyebrow">Consultando el pronóstico real…</div><div className="bar" style=${{ width: "70%" }}></div><div className="bar" style=${{ width: "50%" }}></div><div className="bar" style=${{ width: "85%" }}></div></div>`}
 
       ${analysis && tab === "hoy" && html`<${React.Fragment}>
-        <${Hero} analysis=${analysis}/>
-        <${NowSection} nowA=${nowA} analysis=${analysis} obs=${obs} cmp=${cmp} current=${!data.fromCache && !error ? data.model.current : null} fcSource=${data.source} fcTime=${fmtDateTime(data.fetchedAt)} obsTime=${obs.data ? fmtDateTime(obs.data.fetchedAt) : ""}/>
-        <${ChangesCard} diff=${diff} analysis=${analysis} prevTime=${prev ? fmtDateTime(prev.fetchedAt) : ""}/>
-        <${WeekPick} analysis=${analysis}/>
+        <${NowAnswer} nowA=${nowA} analysis=${analysis} obs=${obs}/>
+        <${TodayBest} analysis=${analysis} onOpen=${openChart}/>
+        ${nowA.pleasantUnsafe && html`<div className="notice warn risk" data-testid="risk"><span style=${{ color: "var(--warn)", flex: "none" }}><${I.alert}/></span><div><h3>Agradable, pero no para brasas</h3><p>${A.cap(nowA.pleasantUnsafe.spans.map(function (x) { return "de " + x.from.slice(11, 16) + " a " + x.to.slice(11, 16); }).join(" y "))}: hasta ${A.fmt0(nowA.pleasantUnsafe.maxTemp)}° y sin lluvia, pero con ráfagas de hasta ${A.fmt0(nowA.pleasantUnsafe.maxGust)} km/h.</p></div></div>`}
+        <${WeekBest} analysis=${analysis} onOpen=${openChart}/>
+        <${DurationPicker} nowA=${nowA} analysis=${analysis}/>
+        <${ForecastDetails} nowA=${nowA} analysis=${analysis} obs=${obs} cmp=${cmp} current=${!data.fromCache && !error ? data.model.current : null} fcSource=${data.source} fcTime=${fmtDateTime(data.fetchedAt)} obsTime=${obs.data ? fmtDateTime(obs.data.fetchedAt) : ""} diff=${diff} prevTime=${prev ? fmtDateTime(prev.fetchedAt) : ""}/>
       <//>`}
-      ${analysis && tab === "semana" && html`<${React.Fragment}>
-        <${Opportunities} analysis=${analysis} selected=${activeDate} onSelect=${openChart}/>
-        <${Discarded} analysis=${analysis} onSelect=${openChart}/>
-      <//>`}
-      ${analysis && tab === "pronostico" && html`<${React.Fragment}>
-        <${ChartSection} analysis=${analysis} date=${activeDate} onDate=${setSelDate} sectionRef=${chartRef}/>
-        <${Method} analysis=${analysis}/>
+      ${analysis && tab === "dias" && html`<${React.Fragment}>
+        <${DaysList} analysis=${analysis} open=${openDay} onToggle=${setOpenDay}/>
+        <${ForecastDetails} nowA=${nowA} analysis=${analysis} obs=${obs} cmp=${cmp} current=${!data.fromCache && !error ? data.model.current : null} fcSource=${data.source} fcTime=${fmtDateTime(data.fetchedAt)} obsTime=${obs.data ? fmtDateTime(obs.data.fetchedAt) : ""} diff=${diff} prevTime=${prev ? fmtDateTime(prev.fetchedAt) : ""}/>
       <//>`}
       ${tab === "planificar" && html`<${Planner} analysis=${analysis} byDur=${byDur} today=${now.slice(0, 10)} trend=${trend} onNeedTrend=${needTrend} climate=${climate} onClimate=${askClimate}
         events=${events} eventsPersisted=${eventsPersisted}
@@ -2582,10 +2859,10 @@ table.rules th, table.rules td { border-bottom-color: rgba(255, 170, 90, .1); }
         onUpdateEvent=${function (ev) { setEvents(function (l) { return l.map(function (x) { return x.id === ev.id ? ev : x; }); }); }}
         onDeleteEvent=${function (id) { setEvents(function (l) { return l.filter(function (x) { return x.id !== id; }); }); }}/>`}
 
-      <p className="disclaimer"><strong>Importante:</strong> estas recomendaciones son orientativas y conservadoras; no certifican que hacer fuego sea seguro. Un pronóstico puede fallar, sobre todo con el viento patagónico. Ante alertas oficiales de incendio o restricciones al fuego al aire libre, rigen esas disposiciones. Mantené siempre agua a mano y no dejes las brasas solas. Esta app no envía notificaciones: detecta los cambios de pronóstico cuando la abrís o actualizás. Versión 3.0.</p>
+      <p className="disclaimer"><strong>Importante:</strong> recomendaciones orientativas; no garantizan que hacer fuego sea seguro. Rigen las alertas oficiales y las restricciones al fuego. Tené agua a mano y no dejes las brasas solas. Sin notificaciones automáticas. Versión 5.0.</p>
 
       <nav className="tabbar" aria-label="Secciones">
-        ${[["hoy", "Hoy", I.flame], ["pronostico", "Pronóstico", I.bars], ["planificar", "Planificar", I.calendar], ["semana", "Semana", I.week]].map(function (t) {
+        ${[["hoy", "Hoy", I.flame], ["dias", "Próximos días", I.week], ["planificar", "Planificar", I.calendar]].map(function (t) {
           return html`<button key=${t[0]} id=${"tab-" + t[0]} className="tab" aria-current=${tab === t[0] ? "page" : null} onClick=${function () { setTab(t[0]); }}><${t[2]} size=${24}/><span>${t[1]}</span></button>`;
         })}
       </nav>
