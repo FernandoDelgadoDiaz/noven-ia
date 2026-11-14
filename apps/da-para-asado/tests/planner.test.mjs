@@ -131,3 +131,20 @@ test("datos reales del planificador: tendencia de 16 días y archivo histórico"
   assert.equal(c.gustOver40, 1);
   assert.equal(Math.round(c.gustAvg * 10) / 10, 103.5);
 });
+
+test("próximos feriados: ventana móvil de 6 meses", () => {
+  const ids = (t) => A.upcomingHolidays(A.HOLIDAYS, t, 6).map((b) => b.start + ".." + b.end);
+  const a = ids("2026-11-14");
+  assert.equal(a[0], "2026-11-21..2026-11-23");
+  assert.ok(a.includes("2026-12-05..2026-12-08"), "puente + Inmaculada Concepción");
+  assert.ok(a.includes("2027-01-01..2027-01-03"), "cruza el año");
+  assert.ok(a.every((x) => x.slice(0, 10) <= "2027-05-14"));
+  const b = A.upcomingHolidays(A.HOLIDAYS, "2026-11-22", 6)[0];
+  assert.equal(b.start + ".." + b.end + "|" + b.days + "|" + b.started, "2026-11-22..2026-11-23|2|true", "ya empezado: desde hoy");
+  assert.ok(!ids("2026-11-24").some((x) => x.startsWith("2026-11-2")), "al pasar desaparece");
+  assert.equal(A.upcomingHolidays([], "2026-11-14", 6).length, 0);
+  assert.equal(A.addMonths("2026-08-31", 6), "2027-02-28");
+  // feriado entre semana: 1 día
+  const mid = A.upcomingHolidays([["2027-03-24", "Día de la Memoria"]], "2027-03-01", 6)[0];
+  assert.equal(mid.days + "|" + mid.long, "1|false");
+});

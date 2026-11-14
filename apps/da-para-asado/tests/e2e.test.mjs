@@ -24,7 +24,7 @@ const tab = (page, t) => page.locator("#tab-" + t).click();
 before(async () => { browser = await chromium.launch(); });
 after(async () => { await browser.close(); });
 
-async function open({ api = "ok", claude = null, scheme = "light", ctx: reuse, forecast = FORECAST, at = FIXED, metar = METAR, trend = null, archive = null } = {}) {
+async function open({ api = "ok", claude = null, scheme = "light", ctx: reuse, forecast = FORECAST, at = FIXED, metar = METAR, trend = null, archive = null, feriados = null } = {}) {
   const ctx = reuse || await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: scheme });
   const page = await ctx.newPage();
   const errors = [];
@@ -43,6 +43,11 @@ async function open({ api = "ok", claude = null, scheme = "light", ctx: reuse, f
       state.metarCalls = (state.metarCalls || 0) + 1;
       if (state.metar === "fail" || state.api === "fail") return route.abort();
       return route.fulfill({ contentType: "text/plain", body: state.metar, headers: { "access-control-allow-origin": "*" } });
+    }
+    if (u.startsWith("https://api.argentinadatos.com/v1/feriados/")) {
+      state.feriadoCalls = (state.feriadoCalls || 0) + 1;
+      const y = u.split("/").pop();
+      return feriados && feriados[y] ? route.fulfill({ contentType: "application/json", body: JSON.stringify(feriados[y]), headers: { "access-control-allow-origin": "*" } }) : route.abort();
     }
     if (u.startsWith("https://archive-api.open-meteo.com/")) {
       return archive ? route.fulfill({ contentType: "application/json", body: JSON.stringify(archive), headers: { "access-control-allow-origin": "*" } }) : route.abort();
@@ -149,20 +154,23 @@ test("planificar: calendario, accesos rápidos, cruce de año y «todavía es pr
   await tab(page, "planificar");
   assert.match(await page.locator(".cal-head h3").innerText(), /Noviembre 2026/);
   assert.equal(await page.locator(".cal-cell.today").getAttribute("data-date"), "2026-11-14");
-  // Año Nuevo cruza el año: el calendario salta a diciembre y el período abarca 2 años
-  await page.locator("#q-anionuevo").click();
+  // Período que cruza el año, elegido en el calendario: 31/12/2026 → 1/1/2027
+  await page.locator(".cal-nav").nth(1).click();
   assert.match(await page.locator(".cal-head h3").innerText(), /Diciembre 2026/);
+  await page.locator('[data-date="2026-12-31"]').click();
+  await page.locator(".cal-nav").nth(1).click();
+  await page.locator('[data-date="2027-01-01"]').click();
   assert.match(await page.locator('[data-testid="range"]').innerText(), /31 dic 2026 – 1 ene 2027/);
   assert.equal(await page.locator('.pd[data-kind="pronto"]').count(), 2);
   assert.match(await page.locator(".pd-list").innerText(), /Todavía es pronto para recomendar un horario/);
   assert.equal(await page.locator(".pd-list .ring").count(), 0, "sin puntajes para fechas lejanas");
   assert.doesNotMatch(await page.locator(".pd-list").innerText(), /\d\d:00 – \d\d:00/, "sin horarios inventados");
   assert.match(await page.locator('[data-testid="trend-card"]').innerText(), /Tendencia orientativa/);
-  await page.locator(".cal-nav").nth(1).click();
   assert.match(await page.locator(".cal-head h3").innerText(), /Enero 2027/);
-  // Navidad
-  await page.locator("#q-navidad").click();
-  assert.match(await page.locator('[data-testid="range"]').innerText(), /24 – 25 dic/);
+  // Feriado de la lista: Navidad (viernes 25) con su fin de semana
+  await page.locator('[data-hol="2026-12-25"]').click();
+  assert.match(await page.locator('[data-testid="range"]').innerText(), /25 – 27 dic/);
+  assert.match(await page.locator(".cal-head h3").innerText(), /Diciembre 2026/);
   // Selección manual dentro del pronóstico horario: 15 → 17/11
   await page.locator(".cal-nav").first().click();
   await page.locator('[data-date="2026-11-17"]').click();
@@ -174,7 +182,7 @@ test("planificar: calendario, accesos rápidos, cruce de año y «todavía es pr
   const t = await page.locator(".pd-list").innerText();
   assert.match(t, /Lunes 16\/11/);
   assert.match(await page.locator(".plan-res").innerText(), /Mejor ventana del período: .*\(\d+ puntos\)/);
-  assert.deepEqual(errors, []);
+  assert.deepEqual(errors.filter((e) => !/Failed to load resource/.test(e)), [], "solo el aviso de red de la consulta de feriados bloqueada");
   await ctx.close();
 });
 
@@ -205,13 +213,13 @@ test("planificar: guardar, ver, detectar cambios y borrar eventos", async () => 
   const { page, ctx } = await open();
   await page.locator(".hero .verdict").waitFor();
   await tab(page, "planificar");
-  await page.locator("#q-navidad").click();
+  await page.locator('[data-hol="2026-12-25"]').click();
   await page.locator("#save-period").click();
   await page.locator("#event-name").fill("Asado de Navidad con la familia");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   const ev = page.locator('[data-event="Asado de Navidad con la familia"]');
   await ev.waitFor();
-  assert.match(await ev.innerText(), /24 – 25 dic[\s\S]*Todavía es pronto para recomendar un horario/);
+  assert.match(await ev.innerText(), /25 – 27 dic[\s\S]*Todavía es pronto para recomendar un horario/);
   // evento cercano guardado con una firma vieja: se detecta el cambio
   await page.evaluate(() => {
     const l = JSON.parse(localStorage.getItem("dpa:events:v1"));
@@ -270,15 +278,15 @@ test("planificar: estadística histórica a pedido, rotulada y ligada al períod
   const { page, ctx } = await open({ archive });
   await page.locator(".hero .verdict").waitFor();
   await tab(page, "planificar");
-  await page.locator("#q-navidad").click();
+  await page.locator('[data-hol="2026-12-25"]').click(); // 25–27 dic
   await page.getByRole("button", { name: "Ver cómo fue en años anteriores" }).click();
   const c = page.locator('[data-testid="clim"]');
   await c.waitFor();
   const t = await c.innerText();
-  assert.match(t, /En 2024–2025, para estas fechas: ráfaga máxima diaria promedio de 76 km\/h; en el 75 % de los días superó los 40 km\/h/);
+  assert.match(t, /En 2024–2025, para estas fechas: ráfaga máxima diaria promedio de 81 km\/h; en el 100 % de los días superó los 40 km\/h/);
   assert.match(t, /no es una medición de la estación/);
   assert.match(t, /Es estadística de años anteriores, no un pronóstico\./);
-  await page.locator("#q-anionuevo").click();
+  await page.locator('[data-hol="2027-01-01"]').click();
   assert.equal(await page.locator('[data-testid="clim"]').count(), 0, "al cambiar el período no queda la estadística vieja");
   await ctx.close();
 });
@@ -482,4 +490,48 @@ test("v5 iPhone: respuesta principal visible sin desplazarse y sin desbordes", a
     assert.equal(small, 0, "áreas táctiles de al menos 40 px de alto");
     await ctx.close();
   }
+});
+
+test("v5.1 próximos feriados: ventana de 6 meses, desaparecen al pasar y se actualizan", async () => {
+  // a) 14/11/2026, sin conexión a la API: usa la lista incluida
+  const a = await open();
+  await a.page.locator(".now-answer .verdict").waitFor();
+  await tab(a.page, "planificar");
+  const rows = a.page.locator('[data-testid="holidays"] .hol-row');
+  await rows.first().waitFor();
+  assert.match(await T(a.page, '[data-testid="holidays"] .hol-row'), /21 – 23 nov Día de la Soberanía Nacional Finde largo · 3 días/);
+  assert.equal(await rows.count(), 4, "se muestran 4 y el resto a pedido");
+  await a.page.getByRole("button", { name: /Ver los \d+ feriados/ }).click();
+  const all = await a.page.locator('[data-testid="holidays"] .hol-row').evaluateAll((l) => l.map((e) => e.dataset.hol));
+  assert.equal(all[0], "2026-11-21");
+  assert.ok(all.includes("2027-01-01"), "cruza el año");
+  assert.ok(all.every((d) => d <= "2027-05-14"), "nada más allá de 6 meses");
+  assert.match(await T(a.page, '[data-testid="holidays"]'), /lista incluida en la app/);
+  await a.ctx.close();
+  // b) 24/11/2026: la Soberanía ya pasó y desaparece; aparece lo que entra en la ventana
+  const b = await open({ at: new Date("2026-11-24T13:00:00Z") });
+  await b.page.locator(".now-answer .verdict").waitFor();
+  await tab(b.page, "planificar");
+  await b.page.locator('[data-testid="holidays"] .hol-row').first().waitFor();
+  assert.equal(await b.page.locator('[data-hol="2026-11-21"]').count(), 0);
+  assert.equal(await b.page.locator('[data-testid="holidays"] .hol-row').first().getAttribute("data-hol"), "2026-12-05");
+  await b.ctx.close();
+  // c) Datos SINTÉTICOS de la API (formato real): 2027 con un puente nuevo; reemplaza la lista incluida
+  const feriados = {
+    2026: [{ fecha: "2026-11-23", tipo: "trasladable", nombre: "Día de la Soberanía Nacional (20/11)" }, { fecha: "2026-12-25", tipo: "inamovible", nombre: "Navidad" }],
+    2027: [{ fecha: "2027-01-01", tipo: "inamovible", nombre: "Año nuevo" }, { fecha: "2027-03-22", tipo: "puente", nombre: "Puente turístico no laborable" }, { fecha: "2027-03-24", tipo: "inamovible", nombre: "Día de la Memoria" }]
+  };
+  const c = await open({ feriados });
+  await c.page.locator(".now-answer .verdict").waitFor();
+  await tab(c.page, "planificar");
+  await c.page.locator('[data-hol="2027-03-20"]').waitFor(); // sáb 20 + dom 21 + puente lun 22
+  assert.match(await T(c.page, '[data-hol="2027-03-20"]'), /20 – 22 mar Puente turístico no laborable Finde largo · 3 días/);
+  assert.match(await T(c.page, '[data-testid="holidays"]'), /\(actualizados\)/);
+  assert.equal(c.state.feriadoCalls, 2, "consulta el año actual y el de dentro de 6 meses");
+  // segunda apertura: usa lo guardado (no vuelve a consultar)
+  await c.page.reload();
+  await c.page.locator(".planner").waitFor();
+  await c.page.locator('[data-hol="2027-03-20"]').waitFor();
+  assert.equal(c.state.feriadoCalls, 2);
+  await c.ctx.close();
 });

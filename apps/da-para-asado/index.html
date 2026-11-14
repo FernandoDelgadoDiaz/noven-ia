@@ -647,6 +647,21 @@ details.fold[open] > summary .chev { transform: rotate(180deg); }
 .lead { font-size: 16px; margin-top: 8px; }
 .tiles { margin-top: 12px; }
 .meta { margin-top: -10px; }
+
+/* v5.1: próximos feriados */
+.hol-card { padding: 14px 14px 12px; }
+.hol-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.hol-head h3 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 19px; }
+.hol-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.hol-row { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "d k" "n n"; gap: 2px 10px; align-items: baseline; text-align: left; width: 100%; min-height: 56px; padding: 9px 12px; background: var(--tile); border: 1px solid rgba(255, 170, 90, .14); border-radius: 14px; color: var(--ink); cursor: pointer; }
+.hol-row[aria-pressed="true"] { border-color: var(--ember-2); box-shadow: 0 0 0 1px var(--ember-2) inset, 0 0 18px rgba(242, 138, 34, .2); }
+.hol-date { grid-area: d; font-weight: 800; font-size: 16px; color: var(--ember-2); }
+.hol-kind { grid-area: k; justify-self: end; font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.hol-kind.long { color: var(--good); }
+.hol-name { grid-area: n; font-size: 14px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hol-more { align-self: center; margin-top: 4px; min-height: 40px; }
+.btn.wide { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 48px; border-radius: 14px; }
+.btn.wide svg { color: var(--ember-2); }
 </style>
 
 <div id="root">
@@ -1436,6 +1451,35 @@ details.fold[open] > summary .chev { transform: rotate(180deg); }
     return "Cambió el estado del pronóstico.";
   }
 
+  /* ---- v5.1: próximos feriados (ventana móvil de 6 meses) ---- */
+  function addMonths(date, n) {
+    var y = +date.slice(0, 4), m = +date.slice(5, 7) - 1 + n, d = +date.slice(8, 10);
+    var last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(y, m, Math.min(d, last))).toISOString().slice(0, 10);
+  }
+  // Agrupa cada feriado con los fines de semana y feriados pegados. Devuelve solo los que todavía no
+  // terminaron y empiezan dentro de los próximos `months` meses; los que ya pasaron desaparecen solos.
+  function upcomingHolidays(list, today, months) {
+    var hm = {};
+    (list || []).forEach(function (h) { if (h && /^\d{4}-\d{2}-\d{2}$/.test(h[0])) hm[h[0]] = h[1]; });
+    var limit = addMonths(today, months || 6);
+    var dates = Object.keys(hm).sort();
+    var out = [], seen = {};
+    dates.forEach(function (d) {
+      if (seen[d]) return;
+      var off = function (x) { return dowMon(x) >= 5 || !!hm[x]; };
+      var a = d, b = d;
+      while (off(dateAdd(a, -1))) a = dateAdd(a, -1);
+      while (off(dateAdd(b, 1))) b = dateAdd(b, 1);
+      var names = [];
+      for (var x = a; x <= b; x = dateAdd(x, 1)) { if (hm[x]) { seen[x] = true; if (names.indexOf(hm[x]) < 0) names.push(hm[x]); } }
+      if (b < today || a > limit) return;
+      var st = a < today ? today : a;
+      out.push({ start: st, end: b, origStart: a, names: names, days: dayDiff(st, b) + 1, long: dayDiff(a, b) + 1 >= 3, started: a < today });
+    });
+    return out;
+  }
+
   /* ---- Textos ---- */
   var WEEKDAYS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
   function dateParts(date) { return { y: Number(date.slice(0, 4)), m: Number(date.slice(5, 7)), d: Number(date.slice(8, 10)) }; }
@@ -1515,7 +1559,7 @@ details.fold[open] > summary .chev { transform: rotate(180deg); }
     PROTECTED_FACTOR: PROTECTED_FACTOR, LEVEL_RANK: LEVEL_RANK,
     sanitizePrefs: sanitizePrefs, buildApiUrl: buildApiUrl, nowLocal: nowLocal, normalize: normalize,
     classifyHour: classifyHour, evalWindow: evalWindow, analyze: analyze, bandScore: bandScore,
-    reasonText: reasonText, describeWindow: describeWindow, HOLIDAYS: HOLIDAYS, HOLIDAY_SOURCE: HOLIDAY_SOURCE, HOURLY_HORIZON: HOURLY_HORIZON, TREND_HORIZON: TREND_HORIZON, MAX_RANGE: MAX_RANGE, dateAdd: dateAdd, dowMon: dowMon, monthGrid: monthGrid, normRange: normRange, rangeDates: rangeDates, pickDate: pickDate, holidayMap: holidayMap, longWeekends: longWeekends, quickRange: quickRange, normalizeTrend: normalizeTrend, trendText: trendText, climatology: climatology, planRange: planRange, planSummary: planSummary, eventSignature: eventSignature, eventChange: eventChange, dayDiff: dayDiff, parseMetar: parseMetar, analyzeNow: analyzeNow, compareObs: compareObs, explainWindow: explainWindow, diffForecast: diffForecast, obsContext: obsContext, addHours: addHours, DAY_PREF_MARGIN: DAY_PREF_MARGIN, OBS_MAX_AGE: OBS_MAX_AGE, discardText: discardText, MAX_RECS_PER_DAY: MAX_RECS_PER_DAY, dayLabel: dayLabel, dayPhrase: dayPhrase,
+    reasonText: reasonText, describeWindow: describeWindow, addMonths: addMonths, upcomingHolidays: upcomingHolidays, HOLIDAYS: HOLIDAYS, HOLIDAY_SOURCE: HOLIDAY_SOURCE, HOURLY_HORIZON: HOURLY_HORIZON, TREND_HORIZON: TREND_HORIZON, MAX_RANGE: MAX_RANGE, dateAdd: dateAdd, dowMon: dowMon, monthGrid: monthGrid, normRange: normRange, rangeDates: rangeDates, pickDate: pickDate, holidayMap: holidayMap, longWeekends: longWeekends, quickRange: quickRange, normalizeTrend: normalizeTrend, trendText: trendText, climatology: climatology, planRange: planRange, planSummary: planSummary, eventSignature: eventSignature, eventChange: eventChange, dayDiff: dayDiff, parseMetar: parseMetar, analyzeNow: analyzeNow, compareObs: compareObs, explainWindow: explainWindow, diffForecast: diffForecast, obsContext: obsContext, addHours: addHours, DAY_PREF_MARGIN: DAY_PREF_MARGIN, OBS_MAX_AGE: OBS_MAX_AGE, discardText: discardText, MAX_RECS_PER_DAY: MAX_RECS_PER_DAY, dayLabel: dayLabel, dayPhrase: dayPhrase,
     shortDate: shortDate, weekday: weekday, cap: cap, hh: hh, cardinal: cardinal, weatherText: weatherText,
     fmt0: fmt0, fmt1: fmt1, skyFactor: skyFactor
   };
@@ -1568,6 +1612,8 @@ details.fold[open] > summary .chev { transform: rotate(180deg); }
     else if (typeof p === "string") raw = p;
     if (!raw && res && Array.isArray(res.content)) raw = res.content.map(function (b) { return b && b.text ? b.text : ""; }).join("");
     if (typeof raw !== "string") { var e0 = new Error("El conector no devolvió el pronóstico."); e0.kind = "parse"; throw e0; }
+    var tr = raw.trim();
+    if (tr.charAt(0) === "[") return JSON.parse(tr.replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
     var i = raw.indexOf("{"), j = raw.lastIndexOf("}");
     if (i < 0 || j <= i) { var e1 = new Error("El conector no devolvió el pronóstico."); e1.kind = "parse"; throw e1; }
     var txt = raw.slice(i, j + 1).replace(/&quot;/g, '"').replace(/&amp;/g, "&");
@@ -2407,7 +2453,11 @@ details.fold[open] > summary .chev { transform: rotate(180deg); }
 
   function Planner(props) {
     var a = props.analysis, today = props.today;
-    var hm = useMemo(function () { return A.holidayMap(); }, []);
+    var holList = props.holidays && props.holidays.list ? props.holidays.list : A.HOLIDAYS;
+    var hm = useMemo(function () { var m = {}; holList.forEach(function (h) { m[h[0]] = h[1]; }); return m; }, [holList]);
+    var blocks = useMemo(function () { return A.upcomingHolidays(holList, today, 6); }, [holList, today]);
+    var sAll = useState(false), showAll = sAll[0], setShowAll = sAll[1];
+    useEffect(function () { if (props.onNeedHolidays) props.onNeedHolidays(); }, [today]);
     var s1 = useState(function () { return { y: +today.slice(0, 4), m: +today.slice(5, 7) }; }), month = s1[0], setMonth = s1[1];
     var s2 = useState(null), sel = s2[0], setSel = s2[1];
     var s3 = useState(3), dur = s3[0], setDur = s3[1];
@@ -2420,13 +2470,11 @@ details.fold[open] > summary .chev { transform: rotate(180deg); }
     var needsTrend = plan && plan.some(function (p) { return p.kind === "tendencia"; });
     useEffect(function () { if (needsTrend) props.onNeedTrend(); }, [needsTrend]);
     var hasEarly = plan && plan.some(function (p) { return p.kind === "pronto"; });
-    var go = function (kind) {
+    var go = function (kind, b) {
       setQuick(kind);
-      if (kind === "custom") { setSel(null); return; }
-      var r = A.quickRange(kind, today);
-      if (!r) return;
-      setSel({ start: r.start, end: r.end, done: true, label: r.label });
-      setMonth({ y: +r.start.slice(0, 4), m: +r.start.slice(5, 7) });
+      if (kind === "custom") { setSel(null); setMonth({ y: +today.slice(0, 4), m: +today.slice(5, 7) }); return; }
+      setSel({ start: b.start, end: b.end, done: true, label: b.names.join(" + ") });
+      setMonth({ y: +b.start.slice(0, 4), m: +b.start.slice(5, 7) });
     };
     var sum = plan ? A.planSummary(plan, dur) : null;
     var clim = props.climate.key === (range ? range.start + "|" + range.end : null) ? props.climate : { loading: false, data: null, error: null };
@@ -2442,13 +2490,24 @@ details.fold[open] > summary .chev { transform: rotate(180deg); }
         <span className="amber"><${I.calendar} size=${30}/></span>
         <div><h2>Planificar un período</h2><p>Elegí fechas y mirá qué conviene.</p></div>
       </div>
-      <div className="chips" role="group" aria-label="Accesos rápidos">
-        <button className="chip" id="q-navidad" aria-pressed=${quick === "navidad" ? "true" : "false"} onClick=${function () { go("navidad"); }}><${I.tree} size=${17}/>Navidad</button>
-        <button className="chip" id="q-anionuevo" aria-pressed=${quick === "anionuevo" ? "true" : "false"} onClick=${function () { go("anionuevo"); }}><${I.sparkle} size=${17}/>Año Nuevo</button>
-        <button className="chip" id="q-feriado" aria-pressed=${quick === "feriado" ? "true" : "false"} onClick=${function () { go("feriado"); }}><${I.calendar} size=${17}/>Feriado largo</button>
-        <button className="chip" id="q-custom" aria-pressed=${quick === "custom" ? "true" : "false"} onClick=${function () { go("custom"); }}><${I.calendar} size=${17}/>Elegir período</button>
+      <div className="card hol-card" data-testid="holidays">
+        <div className="hol-head"><h3>Próximos feriados</h3><span className="muted small">próximos 6 meses</span></div>
+        ${blocks.length ? html`<div className="hol-list">
+          ${(showAll ? blocks : blocks.slice(0, 4)).map(function (b) {
+            var on = quick === "hol-" + b.origStart;
+            return html`<button key=${b.origStart} className="hol-row" data-hol=${b.origStart} aria-pressed=${on ? "true" : "false"} onClick=${function () { go("hol-" + b.origStart, b); }}>
+              <span className="hol-date num">${rangeLabel(b)}</span>
+              <span className="hol-name">${b.names.join(" + ")}</span>
+              <span className=${"hol-kind" + (b.long ? " long" : "")}>${b.long ? (b.started ? "Finde largo, ya empezó" : "Finde largo · " + b.days + " días") : b.days === 1 ? "1 día" : b.days + " días"}</span>
+            </button>`;
+          })}
+          ${blocks.length > 4 && html`<button className="link hol-more" onClick=${function () { setShowAll(!showAll); }}>${showAll ? "Ver menos" : "Ver los " + blocks.length + " feriados"}</button>`}
+        </div>` : html`<p className="muted">${props.holidays && props.holidays.loading ? "Consultando feriados…" : "No hay feriados nacionales cargados para los próximos 6 meses."}</p>`}
+        ${props.holidays && props.holidays.missing && props.holidays.missing.length > 0 && html`<p className="muted small">No pude cargar los feriados de ${props.holidays.missing.join(" y ")}.</p>`}
+        <p className="muted small">Feriados nacionales de api.argentinadatos.com${props.holidays && props.holidays.liveYears && props.holidays.liveYears.length ? " (actualizados)" : " (lista incluida en la app)"}. Los que pasan desaparecen solos.</p>
       </div>
-      ${sel && sel.label && html`<p className="muted small" data-testid="quick-label">${sel.label}. Feriados: ${A.HOLIDAY_SOURCE}; los de 2027 todavía no incluyen puentes turísticos.</p>`}
+      <button className="btn wide" id="q-custom" aria-pressed=${quick === "custom" ? "true" : "false"} onClick=${function () { go("custom"); }}><${I.calendar} size=${18}/>Otra fecha: elegila en el calendario</button>
+      ${sel && sel.label && html`<p className="muted small" data-testid="quick-label">${sel.label}</p>`}
       <${Calendar} month=${month} onMonth=${setMonth} sel=${range && Object.assign({}, range, { done: sel.done })} today=${today} holidays=${hm} onPick=${function (d) { setQuick(quick === "custom" ? "custom" : null); setSel(Object.assign(A.pickDate(sel, d), {})); }}/>
       ${!range && html`<p className="muted center">Tocá un día para empezar. Tocá otro para cerrar el período.</p>`}
       ${plan && html`<div className="plan-res">
@@ -2744,6 +2803,34 @@ details.fold[open] > summary .chev { transform: rotate(180deg); }
     useEffect(function () { setEventsPersisted(store(KEY_EVENTS, events)); }, [events]);
     var s15 = useState({ loading: false, data: null, error: null, asked: false }), trend = s15[0], setTrend = s15[1];
     var s16 = useState({ loading: false, data: null, error: null, key: null }), climate = s16[0], setClimate = s16[1];
+    var KEY_HOL = "dpa:feriados:v1";
+    var s18 = useState(function () { return { list: A.HOLIDAYS, liveYears: [], missing: [], loading: false, asked: false }; }), holidays = s18[0], setHolidays = s18[1];
+    var needHolidays = function () {
+      if (holidays.asked) return;
+      var today = now.slice(0, 10);
+      var years = [+today.slice(0, 4), +A.addMonths(today, 6).slice(0, 4)].filter(function (y, i, l) { return l.indexOf(y) === i; });
+      var cache = load(KEY_HOL) || {};
+      var fresh = function (y) { var c = cache[y]; return c && Array.isArray(c.list) && Date.now() - c.fetchedAt < 30 * 864e5; };
+      setHolidays(function (h) { return Object.assign({}, h, { loading: true, asked: true }); });
+      Promise.all(years.map(function (y) {
+        if (fresh(y)) return Promise.resolve({ y: y, list: cache[y].list, live: true });
+        return fetchJsonAny("https://api.argentinadatos.com/v1/feriados/" + y, "Obtener los feriados nacionales de Argentina de " + y + " para planificar asados", 24 * 60).then(function (r) {
+          if (!Array.isArray(r.json)) throw new Error("respuesta inesperada");
+          var list = r.json.filter(function (x) { return x && /^\d{4}-\d{2}-\d{2}$/.test(x.fecha) && x.nombre; }).map(function (x) { return [x.fecha, x.nombre]; });
+          if (!list.length) throw new Error("sin feriados");
+          cache[y] = { fetchedAt: Date.now(), list: list };
+          return { y: y, list: list, live: true };
+        }).catch(function () { return { y: y, list: null, live: false }; });
+      })).then(function (res) {
+        store(KEY_HOL, cache);
+        var byYear = {};
+        A.HOLIDAYS.forEach(function (h) { var y = h[0].slice(0, 4); (byYear[y] = byYear[y] || []).push(h); });
+        var live = [], missing = [];
+        res.forEach(function (r) { if (r.list) { byYear[r.y] = r.list; live.push(r.y); } else if (!byYear[r.y]) missing.push(r.y); });
+        var all = []; Object.keys(byYear).sort().forEach(function (y) { all = all.concat(byYear[y]); });
+        setHolidays({ list: all, liveYears: live, missing: missing, loading: false, asked: true });
+      });
+    };
     var needTrend = function () {
       if (trend.asked) return;
       setTrend({ loading: true, data: null, error: null, asked: true });
@@ -2853,7 +2940,7 @@ details.fold[open] > summary .chev { transform: rotate(180deg); }
         <${DaysList} analysis=${analysis} open=${openDay} onToggle=${setOpenDay}/>
         <${ForecastDetails} nowA=${nowA} analysis=${analysis} obs=${obs} cmp=${cmp} current=${!data.fromCache && !error ? data.model.current : null} fcSource=${data.source} fcTime=${fmtDateTime(data.fetchedAt)} obsTime=${obs.data ? fmtDateTime(obs.data.fetchedAt) : ""} diff=${diff} prevTime=${prev ? fmtDateTime(prev.fetchedAt) : ""}/>
       <//>`}
-      ${tab === "planificar" && html`<${Planner} analysis=${analysis} byDur=${byDur} today=${now.slice(0, 10)} trend=${trend} onNeedTrend=${needTrend} climate=${climate} onClimate=${askClimate}
+      ${tab === "planificar" && html`<${Planner} holidays=${holidays} onNeedHolidays=${needHolidays} analysis=${analysis} byDur=${byDur} today=${now.slice(0, 10)} trend=${trend} onNeedTrend=${needTrend} climate=${climate} onClimate=${askClimate}
         events=${events} eventsPersisted=${eventsPersisted}
         onSaveEvent=${function (ev) { setEvents(function (l) { return l.concat([ev]); }); }}
         onUpdateEvent=${function (ev) { setEvents(function (l) { return l.map(function (x) { return x.id === ev.id ? ev : x; }); }); }}
