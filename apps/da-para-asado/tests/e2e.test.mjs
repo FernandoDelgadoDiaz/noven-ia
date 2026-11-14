@@ -514,7 +514,23 @@ test("planificar: guardar, ver, detectar cambios y borrar eventos", async () => 
 test("diseño: tema oscuro por defecto, foto, brasas y movimiento reducido", async () => {
   const { page, ctx } = await open();
   await page.locator(".hero .verdict").waitFor();
-  assert.equal(await page.evaluate(() => document.documentElement.getAttribute("data-theme")), "dark");
+  // fondo carbón aun con el visor en claro, el teléfono en modo claro y un tema viejo guardado
+  await page.evaluate(() => { document.documentElement.setAttribute("data-theme", "light"); localStorage.setItem("dpa:theme:v1", JSON.stringify("sistema")); });
+  await page.reload();
+  await page.locator(".hero .verdict").waitFor();
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+  assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), "rgb(12, 8, 6)");
+  assert.match(await page.locator(".hero").evaluate((e) => getComputedStyle(e).backgroundImage), /rgba\(40, 26, 18/);
+  for (const t of ["semana", "pronostico", "planificar"]) {
+    await tab(page, t);
+    const light = await page.evaluate(() => [...document.querySelectorAll(".card, .opp, .chart-card, .hero, .now-card, details, .pick, .notice, .day-chip, .cal-cell")].filter((e) => {
+      const c = getComputedStyle(e).backgroundColor.match(/\d+(\.\d+)?/g).map(Number);
+      return (c[3] === undefined || c[3] > 0.5) && (c[0] + c[1] + c[2]) / 3 > 140;
+    }).length);
+    assert.equal(light, 0, "sin fondos claros en " + t);
+  }
+  await tab(page, "hoy");
+  assert.equal(await page.evaluate(() => localStorage.getItem("dpa:theme:v1")), null, "se descarta el tema viejo");
   const bg = await page.locator(".mast-photo").evaluate((e) => getComputedStyle(e).backgroundImage);
   assert.match(bg, /data:image\/jpeg;base64/);
   assert.equal(await page.locator(".embers i").count(), 12);
