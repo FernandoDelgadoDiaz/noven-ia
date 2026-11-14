@@ -28,77 +28,137 @@ test("umbrales por hora (valores por defecto)", () => {
   assert.equal(A.classifyHour(hour({ wind: null }), P).level, "sindatos");
 });
 
-test("el viento manda: un día soleado y templado con ráfagas fuertes nunca es ideal", () => {
+const calm = { temp: 17, feels: 15, prob: 0, precip: 0, code: 1, wind: 8, gust: 15, dir: 250 };
+const keyOf = (w) => w.date + " " + w.startHour + "-" + w.endHour;
+
+test("el viento manda: un día soleado con ráfagas de 55 nunca se recomienda y queda descartado", () => {
   const a = A.analyze(model, P, NOW);
   const d1 = a.days[1];
-  assert.ok(d1.windows.length > 0);
-  assert.ok(d1.windows.every((w) => w.level === "no"));
-  assert.ok(d1.best.score <= 39);
-  assert.match(A.reasonText(d1.best.reasons[0], a.prefs), /Ráfagas de hasta 55/);
+  assert.ok(d1.windows.length > 0 && d1.windows.every((w) => w.level === "no"));
+  assert.equal(d1.recs.length, 0);
+  assert.equal(d1.discard.kind, "clima");
+  assert.equal(d1.discard.reasons[0].key, "gust");
+  assert.match(A.discardText(d1, a.prefs), /Ráfagas de hasta 55 km\/h.*en 15 de 15 horas/);
+  assert.ok(a.discarded.some((d) => d.date === d1.date));
+});
+
+test("caso reportado: viento 22 y ráfagas 48 de 13 a 16 nunca aparece como recomendado", () => {
+  const f = buildForecast(TODAY, { 2: (h) => (h >= 13 && h < 16 ? { ...calm, wind: 22, gust: 48 } : { ...calm, wind: 26, gust: 52 }) });
+  const a = A.analyze(A.normalize(f), P, NOW);
+  const d = a.days[2];
+  const w = d.windows.find((x) => x.startHour === 13);
+  assert.equal(w.level, "no");
+  assert.ok(w.score <= 39);
+  assert.equal(d.recs.length, 0);
+  assert.ok(!a.recs.some((r) => r.stats.maxGust > 40), "ninguna recomendación supera 40 km/h de ráfagas");
+  assert.ok(a.recs.every((r) => r.level === "ideal" || r.level === "precaucion"));
+  assert.match(A.discardText(d, a.prefs), /Ráfagas de hasta 52 km\/h/);
 });
 
 test("la ventana toma la peor hora: una sola hora mala la descalifica", () => {
-  const f = buildForecast(TODAY, { 2: (h) => ({ temp: 17, feels: 15, prob: 0, precip: 0, code: 1, wind: 8, gust: h === 15 ? 45 : 15, dir: 250 }) });
+  const f = buildForecast(TODAY, { 2: (h) => ({ ...calm, gust: h === 15 ? 45 : 15 }) });
   const a = A.analyze(A.normalize(f), { ...P, slot: "tarde" }, NOW);
   const d = a.days[2];
   const inc15 = d.windows.filter((w) => w.startHour <= 15 && w.endHour > 15);
-  const exc15 = d.windows.filter((w) => !(w.startHour <= 15 && w.endHour > 15));
   assert.ok(inc15.length && inc15.every((w) => w.level === "no"));
-  assert.ok(exc15.length && exc15.every((w) => w.level === "ideal"));
-  assert.ok(d.best.startHour >= 16, "la mejor ventana evita las 15 h");
+  assert.ok(d.recs.length >= 1);
+  assert.ok(d.recs.every((r) => r.startHour >= 16), "ninguna recomendación incluye las 15 h");
 });
 
-test("hoy: la mejor ventana está en el tramo calmo y no usa horas pasadas", () => {
+test("un día con varias ventanas favorables devuelve todas las alternativas, sin superponerse", () => {
+  // ideal 9–12 y 16–20, con precaución (ráfagas 35) entre medio y rojo a la noche
+  const f = buildForecast(TODAY, { 2: (h) => (h >= 9 && h < 12) || (h >= 16 && h < 20) ? calm : h >= 12 && h < 16 ? { ...calm, gust: 35 } : { ...calm, gust: 50 } });
+  const a = A.analyze(A.normalize(f), P, NOW);
+  const d = a.days[2];
+  const ideal = d.recs.filter((r) => r.level === "ideal");
+  assert.equal(ideal.length, 2);
+  assert.deepEqual(Array.from(ideal, (r) => r.startHour).sort((x, y) => x - y).join(","), "9,16");
+  const caution = d.recs.filter((r) => r.level === "precaucion");
+  assert.equal(caution.length, 1);
+  assert.ok(caution[0].startHour >= 12 && caution[0].endHour <= 16);
+  for (let i = 0; i < d.recs.length; i++) for (let j = i + 1; j < d.recs.length; j++) {
+    const x = d.recs[i], y = d.recs[j];
+    assert.ok(!(x.startHour < y.endHour && y.startHour < x.endHour), "superpuestas: " + keyOf(x) + " / " + keyOf(y));
+  }
+  assert.ok(d.recs.length <= A.MAX_RECS_PER_DAY);
+  const scores = Array.from(a.recs, (r) => r.score);
+  assert.equal(scores.join(","), [...scores].sort((x, y) => y - x).join(","));
+});
+
+test("un tramo ideal largo no se repite en ventanas duplicadas", () => {
   const a = A.analyze(model, P, NOW);
   const t = a.todayInfo;
-  assert.equal(t.best.level, "ideal");
-  assert.ok(t.best.startHour >= 12 && t.best.endHour <= 18);
-  assert.equal(t.best.run.start + "-" + t.best.run.end, "12-18");
-  assert.ok(t.windows.every((w) => w.startHour >= 10));
-  const late = A.analyze(model, P, TODAY + "T10:40");
-  assert.ok(late.todayInfo.windows.every((w) => w.startHour >= 11));
+  assert.equal(t.recs.length, 1, "12–18 ideal genera una sola recomendación");
+  assert.equal(t.top.level, "ideal");
+  assert.equal(t.top.startHour + "-" + t.top.endHour, "12-15");
+  assert.equal(t.top.span.start + "-" + t.top.span.end, "12-18");
+  assert.equal(t.top.spanKind, "ideal");
+});
+
+test("hoy no usa horas pasadas", () => {
+  const a = A.analyze(model, P, TODAY + "T12:40");
+  assert.ok(a.todayInfo.windows.every((w) => w.startHour >= 13));
+  assert.equal(a.todayInfo.top.startHour, 13);
   const night = A.analyze(model, P, TODAY + "T23:30");
-  assert.equal(night.todayInfo.best, null);
+  assert.equal(night.todayInfo.recs.length, 0);
+  assert.equal(night.todayInfo.discard.kind, "pasado");
 });
 
-test("precaución, lluvia, frío y datos faltantes", () => {
+test("clasificación de días: precaución, lluvia, frío y datos faltantes", () => {
   const a = A.analyze(model, P, NOW);
-  assert.equal(a.days[2].best.level, "precaucion");
-  assert.ok(a.days[2].best.score >= 40 && a.days[2].best.score <= 69);
-  assert.equal(a.days[3].best.level, "no");
-  assert.ok(a.days[3].best.reasons.some((r) => r.key === "precip" && r.sev === "no"));
-  assert.equal(a.days[4].best.level, "precaucion");
-  assert.ok(a.days[4].best.startHour >= 9 && a.days[4].best.endHour <= 15);
-  assert.equal(a.days[6].best.level, "sindatos");
-  assert.equal(a.days[6].best.score, null);
-  assert.equal(a.ranked.at(-1).level, "sindatos", "los días sin datos quedan al final");
+  assert.equal(a.days[2].top.level, "precaucion");
+  assert.ok(a.days[2].top.score >= 40 && a.days[2].top.score <= 69);
+  assert.equal(a.days[3].recs.length, 0);
+  assert.ok(["precip", "prob"].includes(a.days[3].discard.reasons[0].key));
+  assert.equal(a.days[4].top.level, "precaucion");
+  assert.ok(a.days[4].top.startHour >= 9 && a.days[4].top.endHour <= 15);
+  assert.equal(a.days[5].recs.length, 0, "solo 2 h ideales no alcanzan para 3 h");
+  assert.equal(a.days[6].recs.length, 0);
+  assert.equal(a.days[6].discard.kind, "sindatos");
+  assert.equal(Array.from(a.discarded, (d) => d.date).join(","), [1, 3, 5, 6].map((i) => a.days[i].date).join(","));
+  assert.ok(a.recs.every((r) => r.level !== "no" && r.level !== "sindatos"));
 });
 
-test("cambiar la duración cambia el resultado", () => {
+test("sin condiciones favorables en 7 días: lista vacía, nada inventado", () => {
+  const storm = {};
+  for (let d = 0; d < 7; d++) storm[d] = () => ({ ...calm, wind: 35, gust: 70 });
+  const a = A.analyze(A.normalize(buildForecast(TODAY, storm)), P, NOW);
+  assert.equal(a.recs.length, 0);
+  assert.equal(a.overall, null);
+  assert.equal(a.discarded.length, 7);
+});
+
+test("las recomendaciones reflejan las preferencias", () => {
   const d3 = A.analyze(model, { ...P, duration: 3 }, NOW).days[5];
   const d2 = A.analyze(model, { ...P, duration: 2 }, NOW).days[5];
-  assert.equal(d3.best.level, "no");
-  assert.equal(d2.best.level, "ideal");
-  assert.equal(d2.best.startHour + "-" + d2.best.endHour, "14-16");
-  const d5h = A.analyze(model, { ...P, duration: 5 }, NOW).todayInfo.best;
-  assert.equal(d5h.endHour - d5h.startHour, 5);
-});
-
-test("cambiar umbrales cambia la categoría", () => {
-  const strict = A.analyze(model, { ...P, maxWind: 10, maxGust: 20, minFeels: 16 }, NOW);
-  assert.equal(strict.todayInfo.best.level, "precaucion", "sensación 15 < 16");
+  assert.equal(d3.recs.length, 0);
+  assert.equal(d2.top.level, "ideal");
+  assert.equal(d2.top.startHour + "-" + d2.top.endHour, "14-16");
+  const five = A.analyze(model, { ...P, duration: 5 }, NOW).todayInfo.top;
+  assert.equal(five.endHour - five.startHour, 5);
+  const strict = A.analyze(model, { ...P, minFeels: 16 }, NOW);
+  assert.equal(strict.todayInfo.top.level, "precaucion", "sensación 15 < 16");
   const loose = A.analyze(model, { ...P, maxWind: 25, maxGust: 35 }, NOW);
-  assert.equal(loose.days[2].best.level, "ideal", "viento 25 / ráfagas 35 entran en el ideal permisivo");
+  assert.equal(loose.days[2].top.level, "ideal");
+  const tight = A.analyze(model, { ...P, maxGust: 20 }, NOW);
+  assert.equal(tight.todayInfo.top.level, "ideal", "ráfagas de 15 siguen dentro");
 });
 
-test("la franja horaria limita las ventanas", () => {
+test("la franja horaria limita las ventanas y admite cierre a medianoche", () => {
   const a = A.analyze(model, { ...P, slot: "noche" }, NOW);
   a.days.forEach((d) => d.windows.forEach((w) => { assert.ok(w.startHour >= 19 && w.endHour <= 24); }));
+  const f = buildForecast(TODAY, { 2: (h) => (h >= 19 ? calm : { ...calm, gust: 60 }) });
+  const n = A.analyze(A.normalize(f), { ...P, slot: "noche", duration: 5 }, NOW);
+  const r = n.days[2].top;
+  assert.equal(r.startHour + "-" + r.endHour, "19-24");
+  assert.equal(A.hh(r.endHour), "00:00");
+  assert.match(A.describeWindow(r, n.prefs, n.today), /entre las 19:00 y la medianoche/);
+  assert.equal(r.date, n.days[2].date, "la ventana pertenece al día en que empieza");
   const b = A.analyze(model, { ...P, slot: "almuerzo" }, NOW);
   b.days.forEach((d) => d.windows.forEach((w) => { assert.ok(w.startHour >= 11 && w.endHour <= 16); }));
 });
 
-test("parrilla protegida: mejora el puntaje, nunca la categoría", () => {
+test("parrilla protegida: mejora el puntaje, nunca la categoría ni las recomendaciones rojas", () => {
   const e = A.analyze(model, { ...P, exposure: "expuesta" }, NOW);
   const p = A.analyze(model, { ...P, exposure: "protegida" }, NOW);
   for (let i = 0; i < 6; i++) {
@@ -108,18 +168,16 @@ test("parrilla protegida: mejora el puntaje, nunca la categoría", () => {
       if (w.score !== null) assert.ok(wp[k].score >= w.score);
     });
   }
-  assert.ok(p.days[2].best.score > e.days[2].best.score);
-  assert.ok(p.days[1].windows.every((w) => w.level === "no"), "las ráfagas de 55 siguen descalificando");
+  assert.ok(p.days[2].top.score > e.days[2].top.score);
+  assert.equal(p.days[1].recs.length, 0, "las ráfagas de 55 siguen descalificando");
 });
 
-test("bandas de puntaje y ranking ordenado", () => {
+test("bandas de puntaje", () => {
   assert.equal(A.bandScore("ideal", 0), 70);
   assert.equal(A.bandScore("ideal", 100), 100);
   assert.equal(A.bandScore("precaucion", 100), 69);
   assert.equal(A.bandScore("no", 100), 39);
   const a = A.analyze(model, P, NOW);
-  const scores = Array.from(a.ranked.filter((w) => w.score !== null), (w) => w.score);
-  assert.deepEqual(scores, [...scores].sort((x, y) => y - x));
   assert.equal(a.overall.level, "ideal");
   assert.equal(a.overall.date, TODAY);
 });
@@ -137,7 +195,7 @@ test("preferencias saneadas: no se pueden relajar los límites duros", () => {
 
 test("textos en español argentino", () => {
   const a = A.analyze(model, P, NOW);
-  const txt = A.describeWindow(a.todayInfo.best, a.prefs, a.today);
+  const txt = A.describeWindow(a.todayInfo.top, a.prefs, a.today);
   assert.match(txt, /^Hoy entre las 1\d:00 y las 1\d:00 es tu mejor oportunidad\./);
   assert.match(txt, /sin lluvia prevista/);
   assert.equal(A.dayLabel("2026-11-15", TODAY), "Mañana");
@@ -146,8 +204,8 @@ test("textos en español argentino", () => {
   assert.equal(A.cardinal(250), "OSO");
   assert.equal(A.cardinal(270), "O");
   assert.equal(A.hh(24), "00:00");
-  const no = A.describeWindow(a.days[3].best, a.prefs, a.today);
-  assert.match(no, /no conviene/);
+  assert.equal(A.dayLabel(TODAY, TODAY), "Hoy");
+  assert.equal(A.weekday(TODAY), "sábado");
 });
 
 test("normalize rechaza respuestas inválidas", () => {
@@ -159,6 +217,8 @@ test("normalize rechaza respuestas inválidas", () => {
 });
 
 test("hora local de Río Gallegos independiente del huso del dispositivo", () => {
+  assert.equal(A.nowLocal(new Date("2026-11-15T02:59:00Z")), "2026-11-14T23:59");
+  assert.equal(A.nowLocal(new Date("2026-11-15T03:00:00Z")), "2026-11-15T00:00");
   assert.equal(A.nowLocal(new Date("2026-11-14T13:05:00Z")), "2026-11-14T10:05");
   assert.equal(A.nowLocal(new Date("2026-11-15T02:30:00Z")), "2026-11-14T23:30");
 });

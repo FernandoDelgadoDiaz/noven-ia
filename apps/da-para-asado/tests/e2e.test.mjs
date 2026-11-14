@@ -21,13 +21,13 @@ let browser;
 before(async () => { browser = await chromium.launch(); });
 after(async () => { await browser.close(); });
 
-async function open({ api = "ok", claude = null, scheme = "light", ctx: reuse } = {}) {
+async function open({ api = "ok", claude = null, scheme = "light", ctx: reuse, forecast = FORECAST, at = FIXED } = {}) {
   const ctx = reuse || await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: scheme });
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
-  await page.clock.setFixedTime(FIXED);
+  await page.clock.setFixedTime(at);
   const state = { api, calls: 0 };
   await page.route("**/*", (route) => {
     const u = route.request().url();
@@ -41,7 +41,7 @@ async function open({ api = "ok", claude = null, scheme = "light", ctx: reuse } 
       assert.match(u, /latitude=-51\.62&longitude=-69\.22/);
       assert.match(u, /wind_gusts_10m/);
       assert.match(u, /timezone=America%2FArgentina%2FRio_Gallegos/);
-      if (state.api === "ok") return route.fulfill({ contentType: "application/json", body: JSON.stringify(FORECAST), headers: { "access-control-allow-origin": "*" } });
+      if (state.api === "ok") return route.fulfill({ contentType: "application/json", body: JSON.stringify(forecast), headers: { "access-control-allow-origin": "*" } });
       if (state.api === "400") return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: true, reason: "Parámetro inválido" }), headers: { "access-control-allow-origin": "*" } });
       return route.abort();
     }
@@ -59,12 +59,25 @@ test("camino feliz: veredicto, ranking, última actualización", async () => {
   assert.match(await page.locator(".hero .best-time .big").innerText(), /12:00\s*–\s*15:00/);
   assert.match(await page.locator(".hero .say").innerText(), /^Hoy entre las 12:00 y las 15:00 es tu mejor oportunidad/);
   assert.match(await page.locator(".meta").innerText(), /Actualizado: .*10:05/);
-  assert.equal(await page.locator(".opps .opp").count(), 7);
+  assert.equal(await page.locator(".opps .opp").count(), 3, "solo ventanas ideales o con precauciones");
+  assert.equal(await page.locator('.opps .opp[data-level="no"]').count(), 0);
   const first = await page.locator(".opps .opp").first().innerText();
-  assert.match(first, /Hoy/); assert.match(first, /Ideal para asado/);
-  const all = await page.locator(".opps").innerText();
-  assert.match(all, /Ráfagas de hasta 55 km\/h/); // se explica por qué se descarta
-  assert.match(all, /Faltan datos del pronóstico/);
+  assert.match(first, /Hoy, sábado 14\/11/); assert.match(first, /Ideal para asado/);
+  assert.match(first, /Condiciones ideales de 12:00 a 18:00 \(6 h seguidas\)/);
+  const opps = await page.locator(".opps").innerText();
+  assert.doesNotMatch(opps, /Disponible|disponible/);
+  assert.doesNotMatch(opps, /No conviene/);
+  // días descartados: desplegable, cerrado por defecto
+  const disc = page.locator("details.discarded");
+  assert.match(await disc.locator("summary").innerText(), /Días sin condiciones favorables \(4\)/);
+  assert.equal(await disc.evaluate((e) => e.open), false);
+  await disc.locator("summary").click();
+  const dtxt = await disc.innerText();
+  assert.match(dtxt, /Mañana, domingo 15\/11 — No conviene hacer asado/);
+  assert.match(dtxt, /Lunes 16\/11|Martes 17\/11/);
+  assert.match(dtxt, /Ráfagas de hasta 55 km\/h/);
+  assert.match(dtxt, /Faltan datos del pronóstico/);
+  assert.doesNotMatch(dtxt, /\d\d:00 – \d\d:00/, "los días descartados no muestran horarios como recomendación");
   if (SHOTS) {
     await page.screenshot({ path: SHOTS + "/light-top.png", fullPage: true });
   }
@@ -76,6 +89,9 @@ test("preferencias: duración y franja cambian la recomendación y se guardan", 
   const { page, ctx } = await open();
   await page.locator(".hero .verdict").waitFor();
   await page.getByRole("button", { name: "Preferencias" }).click();
+  await page.locator("#dur-2").click();
+  assert.equal(await page.locator(".opps .opp").count(), 4, "con 2 h aparece la ventana 14–16 del jueves");
+  assert.match(await page.locator(".opps").innerText(), /14:00 – 16:00/);
   await page.locator("#dur-5").click();
   assert.match(await page.locator(".hero .best-time .big").innerText(), /12:00\s*–\s*17:00/);
   await page.locator("#slot-noche").click();
@@ -113,7 +129,8 @@ test("gráfico horario: cambio de día y selección de hora", async () => {
   if (SHOTS) {
     await page.locator(".chart-card").screenshot({ path: SHOTS + "/dark-chart.png" });
     await page.evaluate(() => window.scrollTo(0, 0));
-    await page.screenshot({ path: SHOTS + "/dark-top.png" });
+    await page.locator("details.discarded summary").click();
+    await page.screenshot({ path: SHOTS + "/dark-full.png", fullPage: true });
   }
   assert.deepEqual(errors, []);
   await ctx.close();
@@ -188,8 +205,40 @@ test("sin overflow horizontal a 360 px", async () => {
   await page.locator(".hero .verdict").waitFor();
   const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   assert.ok(over <= 0, "overflow de " + over + " px");
+  await page.locator("details.discarded summary").click();
+  const over1 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  assert.ok(over1 <= 0, "overflow con descartados abiertos: " + over1);
   await page.getByRole("button", { name: "Preferencias" }).click();
   const over2 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   assert.ok(over2 <= 0);
+  await ctx.close();
+});
+
+test("sin condiciones favorables en 7 días: mensaje claro y ninguna ventana inventada", async () => {
+  const storm = {};
+  for (let d = 0; d < 7; d++) storm[d] = () => ({ temp: 14, feels: 8, prob: 0, precip: 0, code: 3, wind: 35, gust: 62, dir: 250 });
+  const { page, ctx, errors } = await open({ forecast: buildForecast("2026-11-14", storm) });
+  await page.locator(".hero .verdict").waitFor();
+  assert.match(await page.locator(".hero .verdict").innerText(), /Hoy no da/);
+  assert.equal(await page.locator(".hero .best-time").count(), 0, "no se destaca ningún horario");
+  assert.match(await page.locator(".hero").innerText(), /No encontramos condiciones recomendables para hacer asado en los próximos 7 días/);
+  assert.match(await page.locator(".opps").innerText(), /No encontramos condiciones recomendables para hacer asado en los próximos 7 días/);
+  assert.equal(await page.locator(".opps .opp:not(.empty)").count(), 0);
+  assert.match(await page.locator("details.discarded summary").innerText(), /\(7\)/);
+  assert.equal(await page.locator(".rec-mark").count(), 0, "el gráfico no marca ventanas");
+  assert.equal(await page.locator(".chart-wrap svg").count(), 1, "el gráfico sigue funcionando");
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test("fechas: Hoy y Mañana según Río Gallegos aunque el teléfono esté en otro huso", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: "Asia/Tokyo" });
+  // 02:30 UTC del 15/11 = 23:30 del 14/11 en Río Gallegos, pero ya es 15/11 en Tokio
+  const { page } = await open({ ctx, at: new Date("2026-11-15T02:30:00Z") });
+  await page.locator(".day-chip").first().waitFor();
+  assert.equal(await page.locator(".day-chip").first().innerText().then((t) => t.replace(/\s+/g, " ").trim()), "Hoy 14/11");
+  assert.equal(await page.locator(".day-chip").nth(1).innerText().then((t) => t.replace(/\s+/g, " ").trim()), "Mañ 15/11");
+  assert.match(await page.locator(".meta").innerText(), /Actualizado: sáb 14\/11, 23:30/);
+  assert.match(await page.locator(".hero .verdict").innerText(), /Por hoy ya fue/);
   await ctx.close();
 });

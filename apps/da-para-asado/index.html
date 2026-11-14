@@ -214,6 +214,16 @@ button:focus-visible, input:focus-visible, summary:focus-visible, [tabindex]:foc
 .opp.empty { cursor: default; grid-template-columns: 1fr; }
 .opp.empty p { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
 
+.span-note { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+details.discarded summary { color: var(--ink); }
+.discard-list { display: flex; flex-direction: column; gap: 10px; padding-bottom: 14px; }
+.discard-item { border-top: 1px solid var(--line); padding-top: 10px; }
+.discard-item:first-child { border-top: 0; padding-top: 0; }
+.discard-title { display: flex; gap: 8px; align-items: baseline; }
+.discard-title strong { font-size: 14.5px; }
+.discard-item p { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
+.dot-tone { width: 8px; height: 8px; border-radius: 50%; background: var(--tone); flex: none; transform: translateY(-1px); }
+
 /* Gráfico */
 .chart-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 14px 12px 12px; }
 .days { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 10px; scrollbar-width: none; }
@@ -554,15 +564,50 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
     });
   }
 
-  function extendRun(w, hours, slot) {
-    var rank = LEVEL_RANK[w.level];
-    var byHour = {};
-    hours.forEach(function (h) { byHour[h.hour] = h; });
-    var ok = function (hr) { var h = byHour[hr]; return h && !h.past && hr >= slot.from && hr < slot.to && LEVEL_RANK[h.cls.level] <= rank; };
-    var a = w.startHour, b = w.endHour;
-    while (ok(a - 1)) a--;
-    while (ok(b)) b++;
-    return { start: a, end: b, len: b - a };
+  var MAX_RECS_PER_DAY = 3;
+
+  // Tramos máximos de horas consecutivas que cumplen `pred`.
+  function runsOf(hours, pred) {
+    var runs = [], cur = null;
+    hours.forEach(function (h) {
+      if (pred(h)) {
+        if (cur && h.hour === cur.end) cur.end++;
+        else { cur = { start: h.hour, end: h.hour + 1 }; runs.push(cur); }
+      } else cur = null;
+    });
+    runs.forEach(function (r) { r.len = r.end - r.start; });
+    return runs;
+  }
+  function overlaps(a, b) { return a.startHour < b.endHour && b.startHour < a.endHour; }
+  function byScore(a, b) {
+    return b.score - a.score || (a.date < b.date ? -1 : a.date > b.date ? 1 : a.startHour - b.startHour);
+  }
+  function isOk(level) { return level === "ideal" || level === "precaucion"; }
+
+  // Motivo del descarte de un día: el límite "no conviene" que se repite en más horas de la franja.
+  function discardInfo(hours, prefs) {
+    var pool = hours.filter(function (h) { return !h.past && h.inSlot; });
+    if (!pool.length) return { kind: "pasado", total: 0, reasons: [] };
+    var withData = pool.filter(function (h) { return h.cls.level !== "sindatos"; });
+    if (!withData.length) return { kind: "sindatos", total: pool.length, reasons: [{ key: "data", sev: "sindatos", val: null, count: pool.length }] };
+    var map = {};
+    withData.forEach(function (h) {
+      h.cls.reasons.forEach(function (x) {
+        if (x.sev !== "no") return;
+        var cur = map[x.key];
+        if (!cur) { map[x.key] = { key: x.key, sev: "no", val: x.val, count: 1 }; return; }
+        cur.count++;
+        if (x.key === "cold" ? x.val < cur.val : x.val > cur.val) cur.val = x.val;
+      });
+    });
+    var reasons = Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) {
+      return b.count - a.count || REASON_ORDER.indexOf(a.key) - REASON_ORDER.indexOf(b.key);
+    });
+    var missing = pool.length - withData.length;
+    if (!reasons.length) {
+      return { kind: missing ? "sindatos" : "fragmentado", total: pool.length, reasons: missing ? [{ key: "data", sev: "sindatos", val: null, count: missing }] : [] };
+    }
+    return { kind: "clima", total: pool.length, reasons: reasons };
   }
 
   function analyze(model, prefsIn, now) {
@@ -571,6 +616,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
     var nowH = Number(now.slice(11, 13)), nowM = Number(now.slice(14, 16));
     var firstHourToday = nowM <= 15 ? nowH : nowH + 1;
     var slot = SLOTS[prefs.slot];
+    var dur = prefs.duration;
     var days = model.days.filter(function (d) { return d.date >= today; }).slice(0, 7).map(function (day) {
       var isToday = day.date === today;
       var hours = day.hours.map(function (h) {
@@ -582,32 +628,70 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
       });
       var byHour = {};
       hours.forEach(function (h) { byHour[h.hour] = h; });
+
+      // 1) Todas las ventanas consecutivas de la duración elegida (la última puede terminar a las 24:00).
       var windows = [];
-      for (var s = slot.from; s + prefs.duration <= slot.to; s++) {
+      for (var s = slot.from; s + dur <= slot.to; s++) {
         var hs = [];
-        for (var k = 0; k < prefs.duration; k++) {
+        for (var k = 0; k < dur; k++) {
           var h = byHour[s + k];
           if (!h || h.past) { hs = null; break; }
           hs.push(h);
         }
         if (hs) windows.push(evalWindow(hs, prefs));
       }
-      var valid = windows.filter(function (w) { return w.level !== "sindatos"; });
-      valid.sort(function (a, b) { return b.score - a.score || a.startHour - b.startHour; });
-      var best = valid[0] || windows[0] || null;
-      if (best && best.level !== "sindatos") best.run = extendRun(best, hours, slot);
+
+      // 2) Alternativas sin superposición: la mejor ventana de cada tramo ideal y, fuera de ellos,
+      //    de cada tramo aceptable. Nunca entra una ventana roja ni sin datos.
+      var eligible = function (h) { return !h.past && h.inSlot && isOk(h.cls.level); };
+      var recs = [];
+      var bestIn = function (span) {
+        var c = windows.filter(function (w) {
+          return isOk(w.level) && w.startHour >= span.start && w.endHour <= span.end &&
+            !recs.some(function (r) { return overlaps(r, w); });
+        });
+        c.sort(byScore);
+        return c[0] || null;
+      };
+      var idealRuns = runsOf(hours, function (h) { return eligible(h) && h.cls.level === "ideal"; }).filter(function (r) { return r.len >= dur; });
+      var inIdeal = {};
+      idealRuns.forEach(function (r) {
+        for (var x = r.start; x < r.end; x++) inIdeal[x] = true;
+        var w = bestIn(r);
+        if (w) recs.push(Object.assign({}, w, { span: r, spanKind: "ideal" }));
+      });
+      runsOf(hours, function (h) { return eligible(h) && !inIdeal[h.hour]; }).forEach(function (r) {
+        if (r.len < dur) return;
+        var w = bestIn(r);
+        if (w) recs.push(Object.assign({}, w, { span: r, spanKind: "aceptable" }));
+      });
+      recs.sort(byScore);
+      recs = recs.slice(0, MAX_RECS_PER_DAY);
+
       var counts = { ideal: 0, precaucion: 0, no: 0, sindatos: 0 };
       windows.forEach(function (w) { counts[w.level]++; });
-      return Object.assign({}, day, { isToday: isToday, hours: hours, windows: windows, best: best, counts: counts });
+      var discard = recs.length ? null : discardInfo(hours, prefs);
+      return Object.assign({}, day, { isToday: isToday, hours: hours, windows: windows, recs: recs, top: recs[0] || null, discard: discard, counts: counts });
     });
-    var ranked = days.filter(function (d) { return d.best; }).map(function (d) { return d.best; });
-    ranked.sort(function (a, b) {
-      if (a.score === null) return 1;
-      if (b.score === null) return -1;
-      return b.score - a.score || (a.date < b.date ? -1 : a.date > b.date ? 1 : a.startHour - b.startHour);
-    });
-    var overall = ranked.find(function (w) { return w.level !== "sindatos"; }) || null;
-    return { prefs: prefs, now: now, today: today, slot: slot, days: days, ranked: ranked, overall: overall, todayInfo: days.find(function (d) { return d.isToday; }) || null };
+    var recs = [];
+    days.forEach(function (d) { recs = recs.concat(d.recs); });
+    recs.sort(byScore);
+    return {
+      prefs: prefs, now: now, today: today, slot: slot, days: days, recs: recs,
+      overall: recs[0] || null,
+      discarded: days.filter(function (d) { return !d.recs.length; }),
+      todayInfo: days.find(function (d) { return d.isToday; }) || null
+    };
+  }
+
+  function discardText(d, prefs) {
+    var x = d.discard;
+    if (!x) return "";
+    if (x.kind === "pasado") return "Ya pasaron las horas de tu franja para hoy.";
+    if (x.kind === "fragmentado") return "No hay " + prefs.duration + " horas seguidas aceptables en tu franja.";
+    var main = x.reasons[0];
+    if (main.key === "data") return "Faltan datos del pronóstico para tu franja.";
+    return reasonText(main, prefs) + ", en " + main.count + " de " + x.total + " horas analizadas.";
   }
 
   /* ---- Textos ---- */
@@ -657,7 +741,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
   function describeWindow(w, prefs, today) {
     if (!w) return "";
     if (w.level === "sindatos") return "No hay datos suficientes del pronóstico para recomendar un horario.";
-    var when = dayPhrase(w.date, today) + " entre las " + hh(w.startHour) + " y las " + hh(w.endHour);
+    var when = dayPhrase(w.date, today) + " entre las " + hh(w.startHour) + (w.endHour === 24 ? " y la medianoche" : " y las " + hh(w.endHour));
     var s = w.stats;
     if (w.level === "ideal") {
       return cap(when) + " es tu mejor oportunidad. " + windPhrase(s) + ", " + rainPhrase(s) + " y " + tempPhrase(s) + ".";
@@ -666,7 +750,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
     if (w.level === "precaucion") {
       return cap(when) + " se puede, con precauciones. " + windPhrase(s) + ", " + rainPhrase(s) + ". Ojo: " + main + ".";
     }
-    return "Ningún horario cumple las condiciones mínimas. Lo menos malo sería " + when + ", pero no conviene: " + main + ".";
+    return "No conviene hacer asado: " + main + ".";
   }
 
   var CARDINALS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSO", "SO", "OSO", "O", "ONO", "NO", "NNO"];
@@ -689,7 +773,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
     PROTECTED_FACTOR: PROTECTED_FACTOR, LEVEL_RANK: LEVEL_RANK,
     sanitizePrefs: sanitizePrefs, buildApiUrl: buildApiUrl, nowLocal: nowLocal, normalize: normalize,
     classifyHour: classifyHour, evalWindow: evalWindow, analyze: analyze, bandScore: bandScore,
-    reasonText: reasonText, describeWindow: describeWindow, dayLabel: dayLabel, dayPhrase: dayPhrase,
+    reasonText: reasonText, describeWindow: describeWindow, discardText: discardText, MAX_RECS_PER_DAY: MAX_RECS_PER_DAY, dayLabel: dayLabel, dayPhrase: dayPhrase,
     shortDate: shortDate, weekday: weekday, hh: hh, cardinal: cardinal, weatherText: weatherText,
     fmt0: fmt0, fmt1: fmt1, skyFactor: skyFactor
   };
@@ -897,56 +981,97 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
     return ra === rb ? ra + unit : ra + "–" + rb + unit;
   }
 
+  function fullDay(date, today) {
+    var label = A.dayLabel(date, today), wd = A.weekday(date);
+    return label.toLowerCase() === wd ? label + " " + A.shortDate(date) : label + ", " + wd + " " + A.shortDate(date);
+  }
+
+  // Resumen de las horas que quedan en la franja (solo informativo, no es una recomendación).
+  function slotStats(hours) {
+    var hs = hours.filter(function (h) { return !h.past && h.inSlot && h.cls.level !== "sindatos"; });
+    if (!hs.length) return null;
+    var mx = function (k) { return Math.max.apply(null, hs.map(function (h) { return h[k]; })); };
+    var mn = function (k) { return Math.min.apply(null, hs.map(function (h) { return h[k]; })); };
+    var temps = hs.filter(function (h) { return h.temp != null; }).map(function (h) { return h.temp; });
+    var top = hs.reduce(function (a, h) { return h.wind > a.wind ? h : a; }, hs[0]);
+    return {
+      maxWind: mx("wind"), maxGust: mx("gust"), minFeels: mn("feels"), maxFeels: mx("feels"),
+      minTemp: temps.length ? Math.min.apply(null, temps) : null, maxTemp: temps.length ? Math.max.apply(null, temps) : null,
+      maxProb: mx("prob"), totalPrecip: Math.round(hs.reduce(function (s, h) { return s + h.precip; }, 0) * 10) / 10, dir: top.dir
+    };
+  }
+
+  function StatsGrid(props) {
+    var s = props.s, prefs = props.prefs;
+    var gustFlag = s.maxGust > A.HARD.gust ? "flag" : s.maxGust > prefs.maxGust ? "caution" : "";
+    var windFlag = s.maxWind > A.HARD.wind ? "flag" : s.maxWind > prefs.maxWind ? "caution" : "";
+    var rainFlag = s.maxProb >= A.HARD.prob ? "flag" : s.maxProb >= 20 || s.totalPrecip > 0 ? "caution" : "";
+    var feelsFlag = s.minFeels < prefs.minFeels - A.HARD.coldDelta ? "flag" : s.minFeels < prefs.minFeels ? "caution" : "";
+    return html`<div className="stats">
+      <div className=${"stat " + feelsFlag}><div className="k"><${I.temp} size=${15}/>Temperatura</div><div className="v num">${s.minTemp == null ? "–" : range(s.minTemp, s.maxTemp, " °C")}</div><div className="s num">Sensación ${range(s.minFeels, s.maxFeels, " °C")}</div></div>
+      <div className=${"stat " + windFlag}><div className="k"><${I.wind} size=${15}/>Viento máx.</div><div className="v num">${A.fmt0(s.maxWind)} km/h</div><div className="s" style=${{ display: "flex", alignItems: "center", gap: "4px" }}>${s.dir != null && html`<${I.arrow} deg=${s.dir} size=${13}/>`}Desde el ${A.cardinal(s.dir) || "–"}</div></div>
+      <div className=${"stat " + gustFlag}><div className="k"><${I.gust} size=${15}/>Ráfagas máx.</div><div className="v num">${A.fmt0(s.maxGust)} km/h</div><div className="s">Límite seguro: 40</div></div>
+      <div className=${"stat " + rainFlag}><div className="k"><${I.drop} size=${15}/>Lluvia</div><div className="v num">${A.fmt0(s.maxProb)} %</div><div className="s num">${s.totalPrecip > 0 ? A.fmt1(s.totalPrecip) + " mm previstos" : "0 mm previstos"}</div></div>
+    </div>`;
+  }
+
+  var NONE_TEXT = "No encontramos condiciones recomendables para hacer asado en los próximos 7 días.";
+
+  function spanText(w) {
+    var dur = w.endHour - w.startHour;
+    if (!w.span || w.span.len <= dur) return null;
+    return (w.spanKind === "ideal" ? "Condiciones ideales de " : "Condiciones aceptables de ") + A.hh(w.span.start) + (w.span.end === 24 ? " a la medianoche" : " a " + A.hh(w.span.end)) + " (" + w.span.len + " h seguidas)";
+  }
+
   function Hero(props) {
     var a = props.analysis, t = a.todayInfo, prefs = a.prefs;
-    var w = t && t.best;
     if (!t) {
       return html`<section className="hero"><div className="eyebrow">Hoy</div><div className="verdict">Sin datos para hoy</div><p className="say">El pronóstico recibido no incluye el día de hoy.</p></section>`;
     }
+    var w = t.top;
+    var next = a.overall;
+    var nextTxt = next ? "Próxima oportunidad: " + A.describeWindow(next, prefs, a.today) : NONE_TEXT;
     if (!w) {
-      var next = a.overall;
-      return html`<section className="hero" aria-live="polite">
+      var kind = t.discard ? t.discard.kind : "pasado";
+      var s0 = slotStats(t.hours);
+      var headline = kind === "pasado" ? "Por hoy ya fue" : kind === "sindatos" ? "Sin datos suficientes" : "Hoy no da";
+      return html`<section className=${"hero " + (kind === "clima" || kind === "fragmentado" ? "no" : "")} aria-live="polite" data-today="descartado">
         <div className="eyebrow">¿Da para asado hoy?</div>
-        <div className="verdict"><span className="chip-dot"></span>Por hoy ya fue</div>
-        <p className="say">No quedan ${prefs.duration} horas seguidas dentro de tu horario preferido (${a.slot.label.toLowerCase()}, ${a.slot.hint}).${next ? " " + A.describeWindow(next, prefs, a.today) : ""}</p>
+        <div className="verdict"><span className="chip-dot"></span>${headline}</div>
+        <p className="say" style=${{ marginTop: "10px" }}>${kind === "pasado" ? "No quedan " + prefs.duration + " horas seguidas dentro de tu horario preferido (" + a.slot.label.toLowerCase() + ", " + a.slot.hint + ")." : A.discardText(t, prefs)}</p>
+        ${t.discard && t.discard.reasons.length > 1 && html`<${Reasons} reasons=${t.discard.reasons.slice(1, 3)} prefs=${prefs}/>`}
+        ${s0 && kind !== "pasado" && html`<div><div className="eyebrow" style=${{ marginTop: "14px" }}>Lo que queda de tu franja hoy</div><${StatsGrid} s=${s0} prefs=${prefs}/></div>`}
+        <p className="say">${nextTxt}</p>
       </section>`;
     }
-    if (w.level === "sindatos") {
-      return html`<section className="hero"><div className="eyebrow">¿Da para asado hoy?</div><div className="verdict">Sin datos suficientes</div><p className="say">Al pronóstico de hoy le faltan valores para las horas de tu franja. Probá actualizar en un rato.</p></section>`;
-    }
     var s = w.stats;
-    var headline = w.level === "ideal" ? "Sí, da" : w.level === "precaucion" ? "Da, con cuidado" : "Hoy no da";
-    var label = w.level === "no" ? "Lo menos malo de hoy" : "Mejor horario de hoy";
-    var gustFlag = s.maxGust > A.HARD.gust ? "flag" : s.maxGust > prefs.maxGust ? "caution" : "";
-    var windFlag = s.maxWind > A.HARD.wind ? "flag" : s.maxWind > prefs.maxWind ? "caution" : "";
-    var rainFlag = s.maxProb >= A.HARD.prob || s.totalPrecip >= A.HARD.precip ? "flag" : s.maxProb >= 20 || s.totalPrecip > 0 ? "caution" : "";
-    var feelsFlag = s.minFeels < prefs.minFeels - A.HARD.coldDelta ? "flag" : s.minFeels < prefs.minFeels ? "caution" : "";
-    return html`<section className=${"hero " + w.level} aria-live="polite">
+    var sp = spanText(w);
+    return html`<section className=${"hero " + w.level} aria-live="polite" data-today=${w.level}>
       <div className="eyebrow">¿Da para asado hoy?</div>
-      <div className="verdict"><span className="chip-dot"></span>${headline}</div>
+      <div className="verdict"><span className="chip-dot"></span>${w.level === "ideal" ? "Sí, da" : "Da, con cuidado"}</div>
       <div className="best-time">
         <span className="big num">${A.hh(w.startHour)} – ${A.hh(w.endHour)}</span>
-        <span className="sub">${label}${w.run && w.run.len > (w.endHour - w.startHour) ? " · se extiende de " + A.hh(w.run.start) + " a " + A.hh(w.run.end) : ""}</span>
+        <span className="sub">Mejor horario de hoy${sp ? " · " + sp : ""}</span>
       </div>
-      <div className="stats">
-        <div className=${"stat " + feelsFlag}><div className="k"><${I.temp} size=${15}/>Temperatura</div><div className="v num">${s.minTemp == null ? "–" : range(s.minTemp, s.maxTemp, " °C")}</div><div className="s num">Sensación ${range(s.minFeels, s.maxFeels, " °C")}</div></div>
-        <div className=${"stat " + windFlag}><div className="k"><${I.wind} size=${15}/>Viento máx.</div><div className="v num">${A.fmt0(s.maxWind)} km/h</div><div className="s" style=${{ display: "flex", alignItems: "center", gap: "4px" }}>${s.dir != null && html`<${I.arrow} deg=${s.dir} size=${13}/>`}Desde el ${A.cardinal(s.dir) || "–"}</div></div>
-        <div className=${"stat " + gustFlag}><div className="k"><${I.gust} size=${15}/>Ráfagas máx.</div><div className="v num">${A.fmt0(s.maxGust)} km/h</div><div className="s">Límite seguro: 40</div></div>
-        <div className=${"stat " + rainFlag}><div className="k"><${I.drop} size=${15}/>Lluvia</div><div className="v num">${A.fmt0(s.maxProb)} %</div><div className="s num">${s.totalPrecip > 0 ? A.fmt1(s.totalPrecip) + " mm previstos" : "0 mm previstos"}</div></div>
-      </div>
+      <${StatsGrid} s=${s} prefs=${prefs}/>
       <p className="say">${A.describeWindow(w, prefs, a.today)}</p>
       ${w.level !== "ideal" && html`<${Reasons} reasons=${w.reasons} prefs=${prefs} max=${4}/>`}
+      ${t.recs.length > 1 && html`<p className="say" style=${{ fontSize: "14px", color: "var(--muted)" }}>Otras opciones hoy: ${t.recs.slice(1).map(function (r) { return A.hh(r.startHour) + "–" + A.hh(r.endHour) + " (" + LEVEL_LABEL[r.level].toLowerCase() + ")"; }).join(", ")}.</p>`}
     </section>`;
   }
 
   function WeekPick(props) {
     var a = props.analysis, o = a.overall;
-    if (!o) return null;
-    var t = a.todayInfo && a.todayInfo.best;
-    if (t && t.date === o.date && t.startHour === o.startHour && o.date === a.today) return null; // ya es el de hoy
+    if (!o) {
+      return html`<section className="pick" data-none="true">
+        <span className="flame"><${I.alert} size=${24}/></span>
+        <div><div className="eyebrow">Próximos 7 días</div><p>${NONE_TEXT}</p></div>
+      </section>`;
+    }
+    if (o.date === a.today) return null; // la mejor ya está en el veredicto de hoy
     return html`<section className="pick">
       <span className="flame"><${I.flame} size=${24}/></span>
-      <div><div className="eyebrow">${o.level === "no" ? "Esta semana" : "La mejor de la semana"}</div><p>${A.describeWindow(o, a.prefs, a.today)}</p></div>
+      <div><div className="eyebrow">La mejor de la semana</div><p>${A.describeWindow(o, a.prefs, a.today)}</p></div>
     </section>`;
   }
 
@@ -967,50 +1092,57 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
   function OppCard(props) {
     var w = props.w, a = props.analysis, prefs = a.prefs, s = w.stats;
     var dur = w.endHour - w.startHour;
-    var dateTxt = A.shortDate(w.date);
-    var label = A.dayLabel(w.date, a.today);
-    if (w.level === "sindatos") {
-      return html`<button className=${"opp" + (props.selected ? " selected" : "")} onClick=${props.onSelect}>
-        <div><div className="opp-day"><strong>${label}</strong><span className="date">${dateTxt}</span><${Badge} level="sindatos"/></div>
-        <div className="opp-time num">${A.hh(w.startHour)} – ${A.hh(w.endHour)}</div></div>
-        <${ScoreRing} value=${null} level="sindatos"/>
-        <${Reasons} reasons=${w.reasons} prefs=${prefs}/>
-      </button>`;
-    }
-    var avail = w.run ? w.run.len : dur;
-    return html`<button className=${"opp" + (props.selected ? " selected" : "")} onClick=${props.onSelect} style=${{ animationDelay: (props.index * 40) + "ms" }} aria-label=${label + " " + dateTxt + ", " + A.hh(w.startHour) + " a " + A.hh(w.endHour) + ", " + LEVEL_LABEL[w.level] + ", puntaje " + w.score}>
+    var title = fullDay(w.date, a.today);
+    var sp = spanText(w);
+    return html`<button className=${"opp" + (props.selected ? " selected" : "")} onClick=${props.onSelect} style=${{ animationDelay: (props.index * 40) + "ms" }} data-level=${w.level} aria-label=${title + ", " + A.hh(w.startHour) + " a " + A.hh(w.endHour) + ", " + LEVEL_LABEL[w.level] + ", puntaje " + w.score}>
       <div style=${{ minWidth: 0 }}>
-        <div className="opp-day"><strong>${label}</strong><span className="date">${A.weekday(w.date) !== label.toLowerCase() ? A.weekday(w.date) + " " : ""}${dateTxt}</span><${Badge} level=${w.level}/></div>
-        <div className="opp-time num">${A.hh(w.startHour)} – ${A.hh(w.endHour)}<small>${avail > dur ? "disponible " + A.hh(w.run.start) + "–" + A.hh(w.run.end) + " (" + avail + " h)" : dur + " h"}</small></div>
+        <div className="opp-day"><strong>${title}</strong><${Badge} level=${w.level}/></div>
+        <div className="opp-time num">${A.hh(w.startHour)} – ${A.hh(w.endHour)}<small>${dur} h</small></div>
+        ${sp && html`<div className="span-note">${sp}</div>`}
       </div>
       <${ScoreRing} value=${w.score} level=${w.level}/>
       <div className="opp-metrics">
-        <${Metric} k="Viento máx." v=${A.fmt0(s.maxWind) + " km/h"} tone=${s.maxWind > A.HARD.wind ? "bad" : s.maxWind > prefs.maxWind ? "warn" : ""}/>
-        <${Metric} k="Ráfaga máx." v=${A.fmt0(s.maxGust) + " km/h"} tone=${s.maxGust > A.HARD.gust ? "bad" : s.maxGust > prefs.maxGust ? "warn" : ""}/>
-        <${Metric} k="Temp. / sens." v=${(s.maxTemp == null ? "–" : A.fmt0(s.maxTemp)) + "° / " + A.fmt0(s.minFeels) + "°"} tone=${s.minFeels < prefs.minFeels - A.HARD.coldDelta ? "bad" : s.minFeels < prefs.minFeels ? "warn" : ""}/>
-        <${Metric} k="Lluvia máx." v=${A.fmt0(s.maxProb) + " %"} tone=${s.maxProb >= A.HARD.prob || s.totalPrecip >= A.HARD.precip ? "bad" : s.maxProb >= 20 || s.totalPrecip > 0 ? "warn" : ""}/>
+        <${Metric} k="Viento máx." v=${A.fmt0(s.maxWind) + " km/h"} tone=${s.maxWind > prefs.maxWind ? "warn" : ""}/>
+        <${Metric} k="Ráfaga máx." v=${A.fmt0(s.maxGust) + " km/h"} tone=${s.maxGust > prefs.maxGust ? "warn" : ""}/>
+        <${Metric} k="Temp. / sens." v=${(s.maxTemp == null ? "–" : A.fmt0(s.maxTemp)) + "° / " + A.fmt0(s.minFeels) + "°"} tone=${s.minFeels < prefs.minFeels ? "warn" : ""}/>
+        <${Metric} k="Lluvia máx." v=${A.fmt0(s.maxProb) + " %"} tone=${s.maxProb >= 20 || s.totalPrecip > 0 ? "warn" : ""}/>
       </div>
-      ${w.level !== "ideal" && html`<${Reasons} reasons=${w.reasons} prefs=${prefs} max=${w.level === "no" ? 3 : 3}/>`}
+      ${w.level !== "ideal" && html`<${Reasons} reasons=${w.reasons} prefs=${prefs} max=${3}/>`}
     </button>`;
   }
 
   function Opportunities(props) {
     var a = props.analysis;
-    var missing = a.days.filter(function (d) { return !d.best; });
-    var nIdeal = a.ranked.filter(function (w) { return w.level === "ideal"; }).length;
+    var nDays = a.days.filter(function (d) { return d.recs.length; }).length;
     return html`<section>
-      <div className="section-h"><h2>Próximos asados posibles</h2><span>${nIdeal} ${nIdeal === 1 ? "día ideal" : "días ideales"} de ${a.days.length}</span></div>
-      <p className="disclaimer" style=${{ margin: "4px 2px 10px" }}>La mejor ventana de ${a.prefs.duration} h de cada día (${a.slot.label.toLowerCase()}, ${a.slot.hint}), ordenadas por puntaje. Tocá una para verla hora por hora.</p>
+      <div className="section-h"><h2>Próximos asados posibles</h2><span>${a.recs.length ? nDays + (nDays === 1 ? " día con opciones" : " días con opciones") : "Sin opciones"}</span></div>
+      <p className="disclaimer" style=${{ margin: "4px 2px 10px" }}>Solo ventanas ideales o con precauciones de ${a.prefs.duration} h (${a.slot.label.toLowerCase()}, ${a.slot.hint}), sin superponerse, ordenadas por puntaje. Tocá una para verla hora por hora.</p>
       <div className="opps">
-        ${a.ranked.map(function (w, i) {
-          return html`<${OppCard} key=${w.date} w=${w} index=${i} analysis=${a} selected=${props.selected === w.date} onSelect=${function () { props.onSelect(w.date); }}/>`;
-        })}
-        ${missing.map(function (d) {
-          return html`<div key=${d.date} className="opp empty"><div className="opp-day"><strong>${A.dayLabel(d.date, a.today)}</strong><span className="date">${A.shortDate(d.date)}</span><${Badge} level="pasado" label="Sin ventana"/></div>
-            <p>${d.isToday ? "Ya pasaron las horas de tu franja para hoy." : "El pronóstico no cubre " + a.prefs.duration + " horas seguidas en tu franja."}</p></div>`;
-        })}
+        ${a.recs.length ? a.recs.map(function (w, i) {
+          return html`<${OppCard} key=${w.date + "-" + w.startHour} w=${w} index=${i} analysis=${a} selected=${props.selected === w.date} onSelect=${function () { props.onSelect(w.date); }}/>`;
+        }) : html`<div className="opp empty" data-none="true"><strong>Sin oportunidades</strong><p>${NONE_TEXT}</p></div>`}
       </div>
     </section>`;
+  }
+
+  function Discarded(props) {
+    var a = props.analysis, list = a.discarded;
+    if (!list.length) return null;
+    return html`<details className="method discarded">
+      <summary>Días sin condiciones favorables (${list.length}) <span className="chev"><${I.chev} size=${18}/></span></summary>
+      <div className="discard-list">
+        ${list.map(function (d) {
+          var x = d.discard;
+          var verdict = x.kind === "pasado" ? "Sin horarios restantes" : x.kind === "sindatos" ? "Sin datos suficientes" : "No conviene hacer asado";
+          return html`<div key=${d.date} className="discard-item" data-date=${d.date}>
+            <div className="discard-title"><span className=${"dot-tone tone-" + (x.kind === "clima" || x.kind === "fragmentado" ? "no" : "pasado")}></span><strong>${fullDay(d.date, a.today)} — ${verdict}</strong></div>
+            <p>${A.discardText(d, a.prefs)}</p>
+            ${x.reasons.length > 1 && html`<${Reasons} reasons=${x.reasons.slice(1, 3)} prefs=${a.prefs}/>`}
+            ${x.kind !== "pasado" && html`<button className="btn" style=${{ marginTop: "8px", fontSize: "13px", padding: "6px 12px" }} onClick=${function () { props.onSelect(d.date); }}>Ver hora por hora</button>`}
+          </div>`;
+        })}
+      </div>
+    </details>`;
   }
 
   /* ---- Gráfico horario ---- */
@@ -1044,8 +1176,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
     };
     var sel = props.selectedHour;
     var selIdx = hours.findIndex(function (h) { return h.hour === sel; });
-    var best = day.best && day.best.level !== "sindatos" ? day.best : null;
-    var bestI0 = best ? hours.findIndex(function (h) { return h.hour === best.startHour; }) : -1;
+    var recs = day.recs || [];
     var tone = { ideal: "var(--good)", precaucion: "var(--warn)", no: "var(--bad)", sindatos: "var(--muted)" };
     var opac = { ideal: 0.2, precaucion: 0.16, no: 0.1, sindatos: 0.06 };
     var gridVals = [];
@@ -1091,11 +1222,17 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
           var hgt = rainH * h.prob / 100;
           return html`<rect key=${"r" + i} x=${pl + i * bw + bw * 0.2} y=${pt + plotH - hgt} width=${bw * 0.6} height=${hgt} rx="1.2" fill="var(--rain)" fillOpacity="0.55"/>`;
         })}
-        ${best && bestI0 >= 0 && html`<g>
-          <rect x=${pl + bestI0 * bw + 0.5} y=${pt + 0.5} width=${bw * (best.endHour - best.startHour) - 1} height=${plotH - 1} fill="none" stroke="var(--ember)" strokeWidth="1.6" rx="3"/>
-          <rect x=${pl + bestI0 * bw + 0.5} y=${pt - 12} width=${Math.max(52, bw * (best.endHour - best.startHour) - 1)} height="11" rx="3" fill="var(--ember)"/>
-          <text x=${pl + bestI0 * bw + 4} y=${pt - 4} fontSize="7.5" fontWeight="700" fill="#fff">MEJOR · ${best.score}</text>
-        </g>`}
+        ${recs.map(function (r, k) {
+          var i0 = hours.findIndex(function (h) { return h.hour === r.startHour; });
+          if (i0 < 0) return null;
+          var x0 = pl + i0 * bw + 0.5, wd = bw * (r.endHour - r.startHour) - 1;
+          var lw = k === 0 ? 52 : 40, lx = Math.min(x0, W - pr - lw);
+          return html`<g key=${"rec" + r.startHour} className="rec-mark">
+            <rect x=${x0} y=${pt + 0.5} width=${wd} height=${plotH - 1} fill="none" stroke="var(--ember)" strokeWidth=${k === 0 ? 1.6 : 1} strokeDasharray=${k === 0 ? null : "3 2"} rx="3"/>
+            <rect x=${lx} y=${pt - 12} width=${lw} height="11" rx="3" fill="var(--ember)" fillOpacity=${k === 0 ? 1 : 0.75}/>
+            <text x=${lx + 4} y=${pt - 4} fontSize="7.5" fontWeight="700" fill="#fff">${k === 0 ? "MEJOR · " : "ALT. · "}${r.score}</text>
+          </g>`;
+        })}
         <path d=${path("temp", yt)} fill="none" stroke="var(--temp)" strokeWidth="1.6"/>
         <path d=${path("gust", y)} fill="none" stroke="var(--bad)" strokeWidth="1.6" strokeDasharray="4 2.5"/>
         <path d=${path("wind", y)} fill="none" stroke="var(--ember)" strokeWidth="2.4"/>
@@ -1141,7 +1278,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
     var day = a.days.find(function (d) { return d.date === props.date; }) || a.days[0];
     var defHour = useMemo(function () {
       if (!day) return null;
-      if (day.best && day.best.level !== "sindatos") return day.best.startHour;
+      if (day.top) return day.top.startHour;
       var f = day.hours.find(function (h) { return !h.past; });
       return f ? f.hour : day.hours[0] && day.hours[0].hour;
     }, [day && day.date, a]);
@@ -1149,7 +1286,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
     useEffect(function () { setHour(defHour); }, [defHour]);
     if (!day) return null;
     var hObj = day.hours.find(function (h) { return h.hour === hour; });
-    var tone = function (d) { return d.best ? d.best.level : "pasado"; };
+    var tone = function (d) { return d.top ? d.top.level : d.discard && (d.discard.kind === "clima" || d.discard.kind === "fragmentado") ? "no" : "pasado"; };
     return html`<section ref=${props.sectionRef}>
       <div className="section-h"><h2>Hora por hora</h2><span>Tocá el gráfico</span></div>
       <div className="chart-card" style=${{ marginTop: "10px" }}>
@@ -1187,7 +1324,8 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
     return html`<details className="method">
       <summary>Cómo se calcula <span className="chev"><${I.chev} size=${18}/></span></summary>
       <div className="method-body">
-        <p>Para cada día se prueban todas las ventanas de ${p.duration} horas seguidas dentro de tu franja (${a.slot.hint}). Cada hora de la ventana se evalúa por separado con el pronóstico horario de Open-Meteo, y la ventana queda en la categoría de su <strong>peor hora</strong>. No se usan promedios diarios.</p>
+        <p>Para cada día se evalúan todas las ventanas de ${p.duration} horas seguidas dentro de tu franja (${a.slot.hint}); la última puede terminar a la medianoche. Cada hora se evalúa por separado con el pronóstico horario de Open-Meteo, y la ventana queda en la categoría de su <strong>peor hora</strong>. No se usan promedios diarios.</p>
+        <p>Solo se recomiendan ventanas ideales o con precauciones. Por cada tramo continuo de horas ideales se elige su mejor ventana, y después se buscan alternativas con precauciones fuera de esos tramos. Las ventanas recomendadas no se superponen (hasta ${A.MAX_RECS_PER_DAY} por día) y se ordenan por puntaje. Un día sin ninguna ventana aceptable pasa a “Días sin condiciones favorables” con el motivo que más horas afecta; nunca se completa la lista con horarios desfavorables.</p>
         <h4>Categorías</h4>
         <div className="tbl-wrap"><table className="rules">
           <thead><tr><th></th><th>Ideal</th><th>Con precauciones</th><th>No conviene</th></tr></thead>
@@ -1325,7 +1463,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
     }, [theme]);
 
     var analysis = useMemo(function () { return data ? A.analyze(data.model, prefs, now) : null; }, [data, prefs, now]);
-    var activeDate = selDate && analysis && analysis.days.some(function (d) { return d.date === selDate; }) ? selDate : analysis && analysis.days.length ? (analysis.todayInfo && analysis.todayInfo.best ? analysis.today : (analysis.overall ? analysis.overall.date : analysis.days[0].date)) : null;
+    var activeDate = selDate && analysis && analysis.days.some(function (d) { return d.date === selDate; }) ? selDate : analysis && analysis.days.length ? (analysis.todayInfo && analysis.todayInfo.top ? analysis.today : (analysis.overall ? analysis.overall.date : analysis.days[0].date)) : null;
 
     var ageMin = data ? (Date.now() - data.fetchedAt) / 60000 : 0;
     var stale = data && (data.fromCache || error) ;
@@ -1361,6 +1499,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
         <${NowStrip} current=${!data.fromCache && !error ? data.model.current : null}/>
         <${WeekPick} analysis=${analysis}/>
         <${Opportunities} analysis=${analysis} selected=${activeDate} onSelect=${function (d) { setSelDate(d); setTimeout(function () { if (chartRef.current) chartRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }, 30); }}/>
+        <${Discarded} analysis=${analysis} onSelect=${function (d) { setSelDate(d); setTimeout(function () { if (chartRef.current) chartRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); }, 30); }}/>
         <${ChartSection} analysis=${analysis} date=${activeDate} onDate=${setSelDate} sectionRef=${chartRef}/>
         <${Method} analysis=${analysis}/>
       <//>`}
