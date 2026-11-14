@@ -143,6 +143,9 @@ button:focus-visible, input:focus-visible, summary:focus-visible, [tabindex]:foc
   display: flex; align-items: center; gap: 10px;
 }
 .verdict .chip-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--tone); flex: none; box-shadow: 0 0 0 5px color-mix(in srgb, var(--tone) 22%, transparent); }
+.hero-head { position: relative; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.hero-title { min-width: 0; flex: 1; }
+.hero-head .ring { flex: none; margin: 2px 0 14px; }
 .best-time { position: relative; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .best-time .big { font-family: var(--font-display); font-weight: 800; font-stretch: 100%; font-size: 26px; letter-spacing: -.01em; }
 .best-time .sub { color: var(--muted); font-size: 13.5px; }
@@ -1047,8 +1050,13 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
     var s = w.stats;
     var sp = spanText(w);
     return html`<section className=${"hero " + w.level} aria-live="polite" data-today=${w.level}>
-      <div className="eyebrow">¿Da para asado hoy?</div>
-      <div className="verdict"><span className="chip-dot"></span>${w.level === "ideal" ? "Sí, da" : "Da, con cuidado"}</div>
+      <div className="hero-head">
+        <div className="hero-title">
+          <div className="eyebrow">¿Da para asado hoy?</div>
+          <div className="verdict"><span className="chip-dot"></span>${w.level === "ideal" ? "Sí, da" : "Da, con cuidado"}</div>
+        </div>
+        <${ScoreRing} value=${w.score} level=${w.level}/>
+      </div>
       <div className="best-time">
         <span className="big num">${A.hh(w.startHour)} – ${A.hh(w.endHour)}</span>
         <span className="sub">Mejor horario de hoy${sp ? " · " + sp : ""}</span>

@@ -242,3 +242,40 @@ test("fechas: Hoy y Mañana según Río Gallegos aunque el teléfono esté en ot
   assert.match(await page.locator(".hero .verdict").innerText(), /Por hoy ya fue/);
   await ctx.close();
 });
+
+test("tarjeta de hoy: puntaje igual al de la lista, sin superposición en iPhone", async () => {
+  for (const width of [320, 375, 390]) {
+    for (const prefs of [null, { minFeels: 16 }]) { // ideal y «con cuidado» (título más largo)
+      const ctx = await browser.newContext({ viewport: { width, height: 800 } });
+      if (prefs) await ctx.addInitScript((p) => { try { localStorage.setItem("dpa:prefs:v1", JSON.stringify(Object.assign({ duration: 3, minFeels: 10, maxWind: 20, maxGust: 30, slot: "libre", exposure: "expuesta" }, p))); } catch (e) {} }, prefs);
+      const { page } = await open({ ctx });
+      await page.locator(".hero .verdict").waitFor();
+      const heroScore = await page.locator(".hero .ring .n").innerText();
+      const todayCard = page.locator(".opps .opp", { hasText: "Hoy," }).first();
+      assert.equal(heroScore, await todayCard.locator(".ring .n").innerText(), "mismo puntaje que la lista");
+      const heroTone = await page.locator(".hero .ring circle").nth(1).getAttribute("stroke");
+      assert.equal(heroTone, await todayCard.locator(".ring circle").nth(1).getAttribute("stroke"), "mismo color");
+      const t = await page.locator(".hero .hero-title").boundingBox();
+      const v = await page.locator(".hero .verdict").boundingBox();
+      const r = await page.locator(".hero .ring").boundingBox();
+      const hero = await page.locator(".hero").boundingBox();
+      assert.ok(v.x + v.width <= r.x + 0.5 && t.x + t.width <= r.x + 0.5, `superposición a ${width}px`);
+      assert.ok(r.x + r.width <= hero.x + hero.width, "el círculo queda dentro de la tarjeta");
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      assert.ok(over <= 0);
+      if (SHOTS && width === 375) await page.locator(".hero").screenshot({ path: SHOTS + `/hero-${prefs ? "cuidado" : "ideal"}.png` });
+      await ctx.close();
+    }
+  }
+  // sin ventana recomendable hoy: no hay puntaje
+  const storm = {};
+  for (let d = 0; d < 7; d++) storm[d] = () => ({ temp: 14, feels: 8, prob: 0, precip: 0, code: 3, wind: 35, gust: 62, dir: 250 });
+  const s1 = await open({ forecast: buildForecast("2026-11-14", storm) });
+  await s1.page.locator(".hero .verdict").waitFor();
+  assert.equal(await s1.page.locator(".hero .ring").count(), 0);
+  await s1.ctx.close();
+  const s2 = await open({ at: new Date("2026-11-15T02:30:00Z") }); // 23:30, ya no quedan horas
+  await s2.page.locator(".hero .verdict").waitFor();
+  assert.equal(await s2.page.locator(".hero .ring").count(), 0);
+  await s2.ctx.close();
+});
