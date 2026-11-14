@@ -166,7 +166,7 @@ test("dentro de Claude: usa el conector Firecrawl cuando el fetch directo está 
   assert.equal(call.tool, "firecrawl_scrape");
   assert.match(call.input.url, /^https:\/\/api\.open-meteo\.com\/v1\/forecast\?/);
   assert.deepEqual(call.input.formats, ["rawHtml"]);
-  assert.deepEqual(errors, []);
+  assert.deepEqual(errors.filter((e) => !/Failed to load resource/.test(e)), [], "solo se espera el fetch directo bloqueado");
   await ctx.close();
 });
 
