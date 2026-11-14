@@ -16,19 +16,21 @@ const PAGE = readFileSync(here + "../index.html", "utf8");
 const SKELETON = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}body{margin:0;font:14px system-ui}img{max-width:100%}[hidden]{display:none!important}</style></head><body>' + PAGE + "</body></html>";
 const FIXED = new Date("2026-11-14T13:05:00Z"); // 10:05 en Río Gallegos
 const FORECAST = buildForecast("2026-11-14");
+// METAR SINTÉTICO de prueba (formato real, valores inventados para el escenario de prueba).
+const METAR = "METAR SAWG 141300Z 25008KT CAVOK 12/04 Q1016\nMETAR SAWG 141200Z 26006KT CAVOK 10/04 Q1017";
 
 let browser;
 before(async () => { browser = await chromium.launch(); });
 after(async () => { await browser.close(); });
 
-async function open({ api = "ok", claude = null, scheme = "light", ctx: reuse, forecast = FORECAST, at = FIXED } = {}) {
+async function open({ api = "ok", claude = null, scheme = "light", ctx: reuse, forecast = FORECAST, at = FIXED, metar = METAR } = {}) {
   const ctx = reuse || await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: scheme });
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   await page.clock.setFixedTime(at);
-  const state = { api, calls: 0 };
+  const state = { api, calls: 0, metar, forecast };
   await page.route("**/*", (route) => {
     const u = route.request().url();
     if (u.startsWith("https://app.test/")) return route.fulfill({ contentType: "text/html", body: SKELETON });
@@ -36,12 +38,17 @@ async function open({ api = "ok", claude = null, scheme = "light", ctx: reuse, f
     if (u.includes("react.production.min.js")) return route.fulfill({ contentType: "text/javascript", body: readFileSync(VENDOR + "/react-18.3.1/package/umd/react.production.min.js") });
     if (u.includes("htm.umd.js")) return route.fulfill({ contentType: "text/javascript", body: readFileSync(VENDOR + "/htm-3.1.1/package/dist/htm.umd.js") });
     if (u.includes("fonts.googleapis.com")) return route.fulfill({ contentType: "text/css", body: "" });
+    if (u.startsWith("https://aviationweather.gov/")) {
+      state.metarCalls = (state.metarCalls || 0) + 1;
+      if (state.metar === "fail" || state.api === "fail") return route.abort();
+      return route.fulfill({ contentType: "text/plain", body: state.metar, headers: { "access-control-allow-origin": "*" } });
+    }
     if (u.startsWith("https://api.open-meteo.com/")) {
       state.calls++;
       assert.match(u, /latitude=-51\.62&longitude=-69\.22/);
       assert.match(u, /wind_gusts_10m/);
       assert.match(u, /timezone=America%2FArgentina%2FRio_Gallegos/);
-      if (state.api === "ok") return route.fulfill({ contentType: "application/json", body: JSON.stringify(forecast), headers: { "access-control-allow-origin": "*" } });
+      if (state.api === "ok") return route.fulfill({ contentType: "application/json", body: JSON.stringify(state.forecast), headers: { "access-control-allow-origin": "*" } });
       if (state.api === "400") return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: true, reason: "Parámetro inválido" }), headers: { "access-control-allow-origin": "*" } });
       return route.abort();
     }
@@ -138,19 +145,19 @@ test("gráfico horario: cambio de día y selección de hora", async () => {
 
 test("sin conexión: error claro, sin datos inventados, y reintento", async () => {
   const { page, ctx, state } = await open({ api: "fail" });
-  await page.locator(".notice").waitFor();
-  assert.match(await page.locator(".notice").innerText(), /Sin conexión/);
-  assert.match(await page.locator(".notice").innerText(), /No se muestran datos inventados/);
+  await page.locator(".notice[role=alert]").waitFor();
+  assert.match(await page.locator(".notice[role=alert]").innerText(), /Sin conexión/);
+  assert.match(await page.locator(".notice[role=alert]").innerText(), /No se muestran datos inventados/);
   assert.equal(await page.locator(".hero").count(), 0);
   state.api = "ok";
   await page.getByRole("button", { name: "Reintentar" }).click();
   await page.locator(".hero .verdict").waitFor();
-  assert.equal(await page.locator(".notice").count(), 0);
+  assert.equal(await page.locator(".notice[role=alert]").count(), 0);
   // falla posterior: se conserva el último pronóstico real con aviso
   state.api = "fail";
   await page.getByRole("button", { name: "Actualizar pronóstico" }).click();
-  await page.locator(".notice.warn").waitFor();
-  assert.match(await page.locator(".notice").innerText(), /último pronóstico descargado/);
+  await page.locator(".notice.warn[role=alert]").waitFor();
+  assert.match(await page.locator(".notice[role=alert]").innerText(), /último pronóstico descargado/);
   assert.equal(await page.locator(".hero").count(), 1);
   await ctx.close();
 });
@@ -167,6 +174,7 @@ function mockClaude(mode) {
     window.claude = { use: function (name) {
       if (name !== "mcp") return Promise.resolve(null);
       return Promise.resolve({ callTool: function (server, tool, input) {
+        if (/aviationweather/.test(input.url)) return ${JSON.stringify(mode)} === "ok" ? Promise.resolve({ content: [], payload: { rawHtml: "METAR SAWG 141300Z 25008KT CAVOK 12/04 Q1016" } }) : Promise.reject({ code: ${JSON.stringify(mode)}, message: "x" });
         window.__mcpCall = { server: server, tool: tool, input: input };
         if (${JSON.stringify(mode)} === "ok") return Promise.resolve({ content: [], payload: { rawHtml: fixture, metadata: { statusCode: 200 } } });
         return Promise.reject({ code: ${JSON.stringify(mode)}, message: "x" });
@@ -278,4 +286,81 @@ test("tarjeta de hoy: puntaje igual al de la lista, sin superposición en iPhone
   await s2.page.locator(".hero .verdict").waitFor();
   assert.equal(await s2.page.locator(".hero .ring").count(), 0);
   await s2.ctx.close();
+});
+
+test("¿Da para asado ahora?: observado y modelo separados, duraciones 2/3/4 h", async () => {
+  const { page, ctx, errors } = await open();
+  const sec = page.locator(".now-card");
+  await sec.waitFor();
+  assert.match(await sec.locator('[data-kind="obs"]').innerText(), /Observado · aeropuerto \(SAWG\)[\s\S]*12 °C · 15 km\/h OSO[\s\S]*Sin ráfagas informadas[\s\S]*10:00 \(hace 5 min\)/);
+  assert.match(await sec.locator('[data-kind="model"]').innerText(), /Modelo · Open-Meteo \(estimación\)[\s\S]*no es una medición/);
+  assert.match(await sec.locator(".now-best").innerText(), /12:00 – 15:00/);
+  assert.match(await sec.locator("ul.why").innerText(), /mejor puntaje entre \d+ ventanas aceptables de 3 h/);
+  await page.locator("#now-dur-2").click();
+  assert.match(await sec.locator(".now-best .opp-time").innerText(), /12:00 – 14:00/);
+  assert.ok(await sec.locator(".alt-row").count() >= 1, "con 2 h hay alternativas");
+  await page.locator("#now-dur-4").click();
+  assert.match(await sec.locator(".now-best .opp-time").innerText(), /12:00 – 16:00/);
+  assert.match(await sec.innerText(), /Agradable, pero no para brasas/, "la mañana templada con ráfagas de 45 se advierte");
+  assert.match(await sec.innerText(), /De 10:00 a 12:00 y de 18:00 a 21:00 se esperan/);
+  assert.match(await sec.locator(".src-foot").innerText(), /Pronóstico: Open-Meteo, consultado sáb 14\/11, 10:05[\s\S]*METAR de aviationweather\.gov/);
+  assert.match(await sec.locator('[data-testid="cmp"]').innerText(), /Las ráfagas no se pueden comparar/);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test("si la observación falla, el resto de la app sigue funcionando", async () => {
+  const { page, ctx } = await open({ metar: "fail" });
+  await page.locator(".hero .verdict").waitFor();
+  await page.locator('.now-card [data-kind="obs"]', { hasText: "Sin observación disponible" }).waitFor();
+  assert.match(await page.locator(".now-best").innerText(), /12:00/);
+  assert.equal(await page.locator(".notice[role=alert]").count(), 0);
+  await ctx.close();
+});
+
+test("ráfagas observadas fuertes vuelven roja la hora actual", async () => {
+  const { page, ctx } = await open({ metar: "METAR SAWG 141300Z 25025G42KT CAVOK 12/04 Q1016" });
+  await page.locator(".now-hour").waitFor();
+  assert.match(await page.locator(".now-hour").innerText(), /Esta hora \(10:00\):\s*No conviene/);
+  assert.match(await page.locator(".now-card").innerText(), /Observado en el aeropuerto a las 10:00: ráfagas de 78 km\/h/);
+  await ctx.close();
+});
+
+test("«¿Por qué no me recomendaste este horario?» explica horas y valores", async () => {
+  const { page, ctx } = await open();
+  await page.locator(".chart-wrap svg").waitFor();
+  await page.locator(".chart-wrap").scrollIntoViewIfNeeded();
+  const box = await page.locator(".chart-wrap").boundingBox();
+  // hora 19 (fuera del tramo calmo, ráfagas de 45, todavía de día)
+  await page.mouse.click(box.x + box.width * ((30 + 19.5 * 12.5) / 360), box.y + box.height / 2);
+  assert.match(await page.locator(".hour-detail .row1").innerText(), /19:00/);
+  await page.getByRole("button", { name: "¿Por qué no me recomendaste este horario?" }).click();
+  const ans = await page.locator(".why-ans").evaluate((e) => e.textContent);
+  assert.match(ans, /Ventana 19:00–22:00 \(3 h\)/);
+  assert.match(ans, /Aunque la temperatura era agradable[\s\S]*las ráfagas previstas superaban el límite seguro de 40 km\/h/);
+  assert.match(ans, /19:00 — Ráfagas de hasta 45 km\/h/);
+  assert.match(ans, /21:00 — /);
+  // una hora recomendada no ofrece el botón
+  await page.locator(".chart-wrap").scrollIntoViewIfNeeded();
+  const box2 = await page.locator(".chart-wrap").boundingBox();
+  await page.mouse.click(box2.x + box2.width * ((30 + 12.5 * 12.5) / 360), box2.y + box2.height / 2);
+  assert.equal(await page.getByRole("button", { name: "¿Por qué no me recomendaste este horario?" }).count(), 0);
+  assert.match(await page.locator(".hour-detail").innerText(), /Este horario está recomendado/);
+  await ctx.close();
+});
+
+test("cambio de pronóstico entre dos consultas: muestra la nueva oportunidad", async () => {
+  const windy = buildForecast("2026-11-14", { 2: () => ({ temp: 17, feels: 15, prob: 0, precip: 0, code: 1, wind: 28, gust: 55, dir: 250 }) });
+  const { page, ctx, state } = await open({ forecast: windy });
+  await page.locator(".hero .verdict").waitFor();
+  assert.equal(await page.locator(".changes").count(), 0, "la primera consulta no tiene con qué comparar");
+  state.forecast = buildForecast("2026-11-14", { 2: () => ({ temp: 17, feels: 15, prob: 0, precip: 0, code: 1, wind: 8, gust: 15, dir: 250 }) });
+  await page.clock.setFixedTime(new Date(FIXED.getTime() + 20 * 60000));
+  await page.getByRole("button", { name: "Actualizar pronóstico" }).click();
+  await page.locator(".changes").waitFor();
+  const txt = await page.locator(".changes").evaluate((e) => e.textContent);
+  assert.match(txt, /Cambios desde la consulta anterior \(sáb 14\/11, 10:05\)/);
+  assert.match(txt, /Nueva oportunidad: Lunes 16\/11, 09:00–12:00 · ideal para asado \(antes: no conviene\)/);
+  assert.match(txt, /No envía alertas automáticas/);
+  await ctx.close();
 });
