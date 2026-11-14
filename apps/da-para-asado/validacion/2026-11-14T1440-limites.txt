@@ -1,0 +1,5 @@
+{}                                             recomendaciones semana: 9 · ahora 2/3/4 h: 4/4/2
+{"maxWind":10,"maxGust":20,"minFeels":16}      recomendaciones semana: 7 · ahora 2/3/4 h: 3/3/1
+{"maxWind":25,"maxGust":35,"minFeels":5}       recomendaciones semana: 9 · ahora 2/3/4 h: 4/4/2
+{"duration":5,"slot":"noche"}                  recomendaciones semana: 3 · ahora 2/3/4 h: 4/4/2
+horas verificadas: 193 · violaciones: 0

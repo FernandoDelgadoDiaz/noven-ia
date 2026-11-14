@@ -35,7 +35,7 @@ test("caso real 14/11: el mediodía se descarta por ráfagas, no por temperatura
   assert.ok(d.windows.filter((w) => w.startHour >= 11 && w.startHour <= 12).every((w) => w.level === "no"));
   const ex = A.explainWindow(a, "2026-11-14", 11, 3);
   assert.equal(ex.status, "descartada");
-  assert.match(ex.text, /^Aunque la temperatura era agradable \(17–24 °C, sensación 13–21 °C\) y no se esperaba lluvia, las ráfagas previstas superaban el límite seguro de 40 km\/h\.$/);
+  assert.match(ex.text, /^Aunque la temperatura prevista era agradable \(17–24 °C, sensación 13–21 °C\) y no se esperaba lluvia, las ráfagas previstas superaban el límite configurado de 40 km\/h\.$/);
   assert.equal(ex.lines.length, 2, "11 y 12 en rojo; 13 solo precaución");
   assert.match(ex.lines[0].texts[0], /Ráfagas de hasta 44 km\/h/);
 });

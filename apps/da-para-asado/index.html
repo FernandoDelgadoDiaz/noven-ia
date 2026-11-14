@@ -927,10 +927,10 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
       var keys = {};
       hs.forEach(function (h) { h.cls.reasons.forEach(function (r) { if (r.sev === "no") keys[r.key] = true; }); });
       var windy = keys.gust || keys.wind || keys.obsGust || keys.obsWind;
-      var limit = keys.gust || keys.obsGust ? "las ráfagas previstas superaban el límite seguro de 40 km/h" : keys.wind || keys.obsWind ? "el viento sostenido superaba el límite seguro de 30 km/h" : "no se cumplían las condiciones mínimas";
+      var limit = keys.gust || keys.obsGust ? "las ráfagas previstas superaban el límite configurado de 40 km/h" : keys.wind || keys.obsWind ? "el viento sostenido superaba el límite configurado de 30 km/h" : "no se cumplían las condiciones mínimas";
       var intro = pleasant && dry && windy
-        ? "Aunque la temperatura era agradable (" + fmt0(Math.min.apply(null, temps)) + "–" + fmt0(Math.max.apply(null, temps)) + " °C, sensación " + fmt0(Math.min.apply(null, feels)) + "–" + fmt0(Math.max.apply(null, feels)) + " °C) y no se esperaba lluvia, " + limit + "."
-        : "No conviene: en " + lines.length + " de " + dur + " horas " + (windy ? limit : "se supera algún límite de seguridad o falta información") + ".";
+        ? "Aunque la temperatura prevista era agradable (" + fmt0(Math.min.apply(null, temps)) + "–" + fmt0(Math.max.apply(null, temps)) + " °C, sensación " + fmt0(Math.min.apply(null, feels)) + "–" + fmt0(Math.max.apply(null, feels)) + " °C) y no se esperaba lluvia, " + limit + "."
+        : "No conviene: en " + lines.length + " de " + dur + " horas " + (windy ? limit : "se supera algún límite configurado o falta información") + ".";
       return { status: "descartada", label: label, text: intro, lines: lines };
     }
     if (!hs.every(function (h) { return h.inSlot; })) return { status: "fuera-franja", label: label, text: "Las condiciones son aceptables, pero el horario queda fuera de tu franja preferida (" + analysis.slot.hint + "). Cambiala en Preferencias para verla recomendada.", lines: [] };
@@ -1304,12 +1304,19 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
     return html`<div className="stats">
       <div className=${"stat " + feelsFlag}><div className="k"><${I.temp} size=${15}/>Temperatura</div><div className="v num">${s.minTemp == null ? "–" : range(s.minTemp, s.maxTemp, " °C")}</div><div className="s num">Sensación ${range(s.minFeels, s.maxFeels, " °C")}</div></div>
       <div className=${"stat " + windFlag}><div className="k"><${I.wind} size=${15}/>Viento máx.</div><div className="v num">${A.fmt0(s.maxWind)} km/h</div><div className="s" style=${{ display: "flex", alignItems: "center", gap: "4px" }}>${s.dir != null && html`<${I.arrow} deg=${s.dir} size=${13}/>`}Desde el ${A.cardinal(s.dir) || "–"}</div></div>
-      <div className=${"stat " + gustFlag}><div className="k"><${I.gust} size=${15}/>Ráfagas máx.</div><div className="v num">${A.fmt0(s.maxGust)} km/h</div><div className="s">Límite seguro: 40</div></div>
+      <div className=${"stat " + gustFlag}><div className="k"><${I.gust} size=${15}/>Ráfagas máx.</div><div className="v num">${A.fmt0(s.maxGust)} km/h</div><div className="s">Límite configurado: 40</div></div>
       <div className=${"stat " + rainFlag}><div className="k"><${I.drop} size=${15}/>Lluvia</div><div className="v num">${A.fmt0(s.maxProb)} %</div><div className="s num">${s.totalPrecip > 0 ? A.fmt1(s.totalPrecip) + " mm previstos" : "0 mm previstos"}</div></div>
     </div>`;
   }
 
   var NONE_TEXT = "No encontramos condiciones recomendables para hacer asado en los próximos 7 días.";
+  // Si no hay recomendaciones porque faltan datos (y no por el clima), se dice eso.
+  function noneText(a) {
+    var futuros = a.days.filter(function (d) { return d.discard && d.discard.kind !== "pasado"; });
+    return futuros.length && futuros.every(function (d) { return d.discard.kind === "sindatos"; })
+      ? "Faltan datos del pronóstico (por ejemplo, las ráfagas) para evaluar los próximos 7 días. Probá actualizar más tarde."
+      : NONE_TEXT;
+  }
 
   function spanText(w) {
     var dur = w.endHour - w.startHour;
@@ -1324,7 +1331,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
     }
     var w = t.top;
     var next = a.overall;
-    var nextTxt = next ? "Próxima oportunidad: " + A.describeWindow(next, prefs, a.today) : NONE_TEXT;
+    var nextTxt = next ? "Próxima oportunidad: " + A.describeWindow(next, prefs, a.today) : noneText(a);
     if (!w) {
       var kind = t.discard ? t.discard.kind : "pasado";
       var s0 = slotStats(t.hours);
@@ -1364,7 +1371,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
     if (!o) {
       return html`<section className="pick" data-none="true">
         <span className="flame"><${I.alert} size=${24}/></span>
-        <div><div className="eyebrow">Próximos 7 días</div><p>${NONE_TEXT}</p></div>
+        <div><div className="eyebrow">Próximos 7 días</div><p>${noneText(a)}</p></div>
       </section>`;
     }
     if (o.date === a.today) return null; // la mejor ya está en el veredicto de hoy
@@ -1400,7 +1407,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
         if (p.key === "luz") why.push("Se prefirió por tener luz de día: " + A.hh(p.from.startHour) + "–" + A.hh(p.from.endHour) + " tenía " + p.from.score + " puntos, apenas " + (p.from.score - w.score) + " más, pero de noche.");
         if (p.key === "slot") why.push("Se prefirió por caer en tu horario de " + a.slot.label.toLowerCase() + ".");
       });
-      why.push("Ninguna hora supera los límites de seguridad: ráfagas de hasta " + A.fmt0(w.stats.maxGust) + " km/h (límite 40) y viento de hasta " + A.fmt0(w.stats.maxWind) + " km/h (límite 30).");
+      why.push("Ninguna hora supera los límites configurados: ráfagas previstas de hasta " + A.fmt0(w.stats.maxGust) + " km/h (límite 40) y viento previsto de hasta " + A.fmt0(w.stats.maxWind) + " km/h (límite 30).");
     }
     return html`<section className="now-card" data-now=${w ? w.level : "none"}>
       <div className="section-h"><h2>¿Da para asado ahora?</h2><span>Próximas 24 h</span></div>
@@ -1422,7 +1429,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
           <//>` : html`<div className="src-s">Sin estimación actual en esta consulta.</div>`}
         </div>
       </div>
-      ${ch && html`<div className="now-hour"><span>Esta hora (${A.hh(ch.hour)}):</span> <${Badge} level=${ch.cls.level}/>${ch.cls.obs ? html` <span className="src-t">según la observación</span>` : null}</div>`}
+      ${ch && html`<div className="now-hour"><span>Esta hora (${A.hh(ch.hour)}):</span> <${Badge} level=${ch.cls.level}/>${ch.cls.obs ? html` <span className="src-t">según la observación</span>` : html` <span className="src-t">según el pronóstico</span>`}</div>`}
       ${ch && ch.cls.level !== "ideal" && html`<${Reasons} reasons=${ch.cls.reasons} prefs=${prefs} max=${3}/>`}
       ${cmp && o && html`<p className="cmp" data-testid="cmp">${cmpText(cmp)}</p>`}
       ${na.pleasantUnsafe && html`<div className="notice warn" style=${{ marginTop: "10px" }}><span style=${{ color: "var(--warn)", flex: "none" }}><${I.alert}/></span><div><h3>Agradable, pero no para brasas</h3><p>${A.cap(na.pleasantUnsafe.spans.map(function (x) { return "de " + x.from.slice(11, 16) + " a " + x.to.slice(11, 16); }).join(" y "))} se esperan hasta ${A.fmt0(na.pleasantUnsafe.maxTemp)} °C (sensación ${A.fmt0(na.pleasantUnsafe.maxFeels)} °C) y sin lluvia, pero con ráfagas de hasta ${A.fmt0(na.pleasantUnsafe.maxGust)} km/h${na.pleasantUnsafe.maxWind > A.HARD.wind ? " y viento de " + A.fmt0(na.pleasantUnsafe.maxWind) + " km/h" : ""}. Por encima de 40 km/h las ráfagas levantan chispas y brasas.</p></div></div>`}
@@ -1511,7 +1518,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
       <div className="opps">
         ${a.recs.length ? a.recs.map(function (w, i) {
           return html`<${OppCard} key=${w.date + "-" + w.startHour} w=${w} index=${i} analysis=${a} selected=${props.selected === w.date} onSelect=${function () { props.onSelect(w.date); }}/>`;
-        }) : html`<div className="opp empty" data-none="true"><strong>Sin oportunidades</strong><p>${NONE_TEXT}</p></div>`}
+        }) : html`<div className="opp empty" data-none="true"><strong>Sin oportunidades</strong><p>${noneText(a)}</p></div>`}
       </div>
     </section>`;
   }
@@ -1655,6 +1662,7 @@ input[type=range] { width: 100%; accent-color: var(--ember); height: 28px; }
         ${h.past ? html`<${Badge} level="pasado" label="Ya pasó"/>` : html`<${Badge} level=${h.cls.level}/>`}
         ${!h.inSlot && !h.past && html`<span style=${{ color: "var(--muted)", fontSize: "12px" }}>Fuera de tu franja</span>`}
       </div>
+      <div className="src-t" style=${{ marginTop: "6px" }}>Valores del pronóstico de Open-Meteo, no mediciones.</div>
       <div className="grid">
         <div><div className="k">Viento</div><div className="v num" style=${{ display: "flex", alignItems: "center", gap: "4px" }}>${h.wind == null ? "–" : A.fmt0(h.wind) + " km/h"} ${h.dir != null && html`<${I.arrow} deg=${h.dir} size=${13}/>`}</div></div>
         <div><div className="k">Ráfagas</div><div className="v num">${h.gust == null ? "–" : A.fmt0(h.gust) + " km/h"}</div></div>

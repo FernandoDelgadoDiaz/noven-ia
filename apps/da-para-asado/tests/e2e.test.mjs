@@ -321,7 +321,7 @@ test("si la observación falla, el resto de la app sigue funcionando", async () 
 test("ráfagas observadas fuertes vuelven roja la hora actual", async () => {
   const { page, ctx } = await open({ metar: "METAR SAWG 141300Z 25025G42KT CAVOK 12/04 Q1016" });
   await page.locator(".now-hour").waitFor();
-  assert.match(await page.locator(".now-hour").innerText(), /Esta hora \(10:00\):\s*No conviene/);
+  assert.match(await page.locator(".now-hour").innerText(), /Esta hora \(10:00\):\s*No conviene\s*según la observación/);
   assert.match(await page.locator(".now-card").innerText(), /Observado en el aeropuerto a las 10:00: ráfagas de 78 km\/h/);
   await ctx.close();
 });
@@ -337,7 +337,7 @@ test("«¿Por qué no me recomendaste este horario?» explica horas y valores", 
   await page.getByRole("button", { name: "¿Por qué no me recomendaste este horario?" }).click();
   const ans = await page.locator(".why-ans").evaluate((e) => e.textContent);
   assert.match(ans, /Ventana 19:00–22:00 \(3 h\)/);
-  assert.match(ans, /Aunque la temperatura era agradable[\s\S]*las ráfagas previstas superaban el límite seguro de 40 km\/h/);
+  assert.match(ans, /Aunque la temperatura prevista era agradable[\s\S]*las ráfagas previstas superaban el límite configurado de 40 km\/h/);
   assert.match(ans, /19:00 — Ráfagas de hasta 45 km\/h/);
   assert.match(ans, /21:00 — /);
   // una hora recomendada no ofrece el botón
@@ -363,4 +363,23 @@ test("cambio de pronóstico entre dos consultas: muestra la nueva oportunidad", 
   assert.match(txt, /Nueva oportunidad: Lunes 16\/11, 09:00–12:00 · ideal para asado \(antes: no conviene\)/);
   assert.match(txt, /No envía alertas automáticas/);
   await ctx.close();
+});
+
+test("textos: «límite configurado», fuentes rotuladas y faltan datos ≠ mal tiempo", async () => {
+  const { page, ctx } = await open();
+  await page.locator(".hero .verdict").waitFor();
+  const body = await page.locator("body").evaluate((e) => e.textContent);
+  assert.doesNotMatch(body, /límite seguro/i);
+  assert.match(body, /Límite configurado: 40/);
+  assert.match(await page.locator(".now-hour").innerText(), /según el pronóstico/);
+  assert.match(await page.locator(".hour-detail").innerText(), /Valores del pronóstico de Open-Meteo, no mediciones/);
+  await ctx.close();
+  const f = buildForecast("2026-11-14");
+  delete f.hourly.wind_gusts_10m;
+  const r = await open({ forecast: f });
+  await r.page.locator(".opps").waitFor();
+  const t = await r.page.locator(".opps").innerText();
+  assert.match(t, /Faltan datos del pronóstico \(por ejemplo, las ráfagas\)/);
+  assert.doesNotMatch(t, /No encontramos condiciones recomendables/);
+  await r.ctx.close();
 });

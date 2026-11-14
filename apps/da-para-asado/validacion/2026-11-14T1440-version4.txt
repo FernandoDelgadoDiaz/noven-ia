@@ -1,0 +1,50 @@
+
+=== A. Respuestas reales, consulta directa
+Actualizado                        Actualizado: sáb 14/11, 14:40 Fuente: Open-Meteo
+Observado (caja)                   Observado · aeropuerto (SAWG) 22 °C · 24 km/h O Sin ráfagas informadas · despejado 14:00 (hace 40 min)
+Modelo (caja)                      Modelo · Open-Meteo (estimación) 24 °C · 24 km/h OSO Sensación 19 °C · ráfagas 46 km/h 14:30 · no es una medición
+Esta hora                          Esta hora (14:00): No conviene
+Comparación                        Viento medio observado a las 14:00: 24 km/h; el modelo daba 21 km/h para las 14:00 (similar). Temperatura: 22 °C observada contra 24 °C prevista. Las ráfagas no se pueden comparar: el METAR solo las informa cuando superan en unos 18 km/h al viento medio, así que su ausencia no prueba que estén por debajo de las 43 km/h previstas.
+Hoy (veredicto)                    Da, con cuidado
+Hoy (horario)                      19:00 – 22:00 Mejor horario de hoy · Condiciones aceptables de 19:00 a la medianoche (5 h seguidas)
+Ahora 2 h: mejor                   Mañana Ideal para asado 10:00 – 12:00 94 de 100
+Ahora 2 h: por qué                 Es la de mejor puntaje entre 11 ventanas aceptables de 2 h en las próximas 24 h. Ninguna hora supera los límites de seguridad: ráfagas de hasta 28 km/h (límite 40) y viento de hasta 12 km/h (límite 30).
+Ahora 2 h: alternativas            ["Hoy 21:00 – 23:00 Ideal para asado 91","Mañana 00:00 – 02:00 Con precauciones 63","Mañana 12:00 – 14:00 Con precauciones 62"]
+Ahora 3 h: mejor                   Mañana Ideal para asado 09:00 – 12:00 93 de 100
+Ahora 3 h: por qué                 Es la de mejor puntaje entre 9 ventanas aceptables de 3 h en las próximas 24 h. Ninguna hora supera los límites de seguridad: ráfagas de hasta 28 km/h (límite 40) y viento de hasta 13 km/h (límite 30).
+Ahora 3 h: alternativas            ["Hoy 22:00 – 01:00 del domingo Con precauciones 60","Mañana 12:00 – 15:00 Con precauciones 59","Hoy 19:00 – 22:00 Con precauciones 58"]
+Ahora 4 h: mejor                   Mañana Ideal para asado 09:00 – 13:00 93 de 100
+Ahora 4 h: por qué                 Es la de mejor puntaje entre 7 ventanas aceptables de 4 h en las próximas 24 h. Ninguna hora supera los límites de seguridad: ráfagas de hasta 29 km/h (límite 40) y viento de hasta 13 km/h (límite 30).
+Ahora 4 h: alternativas            ["Hoy 20:00 – 00:00 (medianoche) Con precauciones 59"]
+Aviso tarde agradable              Agradable, pero no para brasas De 15:00 a 19:00 se esperan hasta 23 °C (sensación 18 °C) y sin lluvia, pero con ráfagas de hasta 51 km/h. Por encima de 40 km/h las ráfagas levantan chispas y brasas.
+Oportunidades                      ["Mañana, domingo 15/11 | Ideal para asado | 19:00 – 22:003 h","Mañana, domingo 15/11 | Ideal para asado | 09:00 – 12:003 h","Lunes 16/11 | Ideal para asado | 21:00 – 00:003 h","Hoy, sábado 14/11 | Con precauciones | 19:00 – 22:003 h","Viernes 20/11 | Con precauciones | 09:00 – 12:003 h","Mañana, domingo 15/11 | Con precauciones | 13:00 – 16:003 h","Miércoles 18/11 | Con precauciones | 10:00 – 13:003 h","Jueves 19/11 | Con precauciones | 17:00 – 20:003 h","Jueves 19/11 | Con precauciones | 09:00 – 12:003 h"]
+Pie de fuentes                     Pronóstico: Open-Meteo, consultado sáb 14/11, 14:40. Observación: METAR de aviationweather.gov, consultada sáb 14/11, 14:40. La observación solo puede volver más estricta la hora actual y la siguiente; nunca las mejora.
+Errores JS                         []
+
+=== B. Mismas respuestas reales vía conector (transporte simulado)
+Actualizado                        Actualizado: sáb 14/11, 14:36 Fuente: Open-Meteo (vía Firecrawl)
+Pie de fuentes                     Pronóstico: Open-Meteo vía Firecrawl, consultado sáb 14/11, 14:36. Observación: METAR de aviationweather.gov vía Firecrawl, consultada sáb 14/11, 14:36. La observación solo puede volver más estricta la hora actual y la siguiente; nunca las mejora.
+Errores JS                         []
+
+=== C1. Falla Open-Meteo, METAR real OK
+Aviso                              Sin conexión No hay conexión con Open-Meteo. Revisá tu conexión y reintentá. No se muestran datos inventados: sin pronóstico real no hay recomendación. Reintentar
+¿Hay veredicto?                    0
+
+=== C2. Falla METAR, Open-Meteo real OK
+Observado (caja)                   Observado · aeropuerto (SAWG) Sin observación disponible: sin conexión con aviationweather.gov
+Ahora 3 h                          Mañana Ideal para asado 09:00 – 12:00 93 de 100
+
+=== C3. METAR ilegible
+Observado (caja)                   Observado · aeropuerto (SAWG) Sin observación disponible: La respuesta no trae observaciones de SAWG.
+
+=== C4. Open-Meteo sin ráfagas (incompleto)
+Hoy                                ¿DA PARA ASADO HOY? Sin datos suficientes Faltan datos del pronóstico para tu franja. No encontramos condiciones recomendables para hacer asado en los próximos 7 días.
+Oportunidades                      Sin oportunidades No encontramos condiciones recomendables para hacer asado en los próximos 7 días.
+Ahora 3 h                          En las próximas 24 horas no hay 3 horas seguidas aceptables para hacer asado (0 ventanas descartadas, 13 sin datos).
+
+=== C5. Open-Meteo sin dato actual
+Modelo (caja)                      Modelo · Open-Meteo (estimación) Sin estimación actual en esta consulta.
+
+=== D. Preferencias estrictas (viento 10, ráfaga 20, sensación 16)
+Oportunidades                      ["Mañana, domingo 15/11 | Con precauciones | 19:00 – 22:003 h","Hoy, sábado 14/11 | Con precauciones | 19:00 – 22:003 h","Lunes 16/11 | Con precauciones | 19:00 – 22:003 h","Jueves 19/11 | Con precauciones | 17:00 – 20:003 h","Miércoles 18/11 | Con precauciones | 10:00 – 13:003 h","Jueves 19/11 | Con precauciones | 09:00 – 12:003 h","Viernes 20/11 | Con precauciones | 12:00 – 15:003 h"]
+Ahora 3 h                          Mañana Con precauciones 09:00 – 12:00 60 de 100
