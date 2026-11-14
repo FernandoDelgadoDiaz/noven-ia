@@ -27,3 +27,18 @@ permiso de notificaciones. Hace falta infraestructura propia:
    orientativa y que rigen las alertas oficiales de incendio.
 
 Ninguna de estas piezas existe todavía; la app no debe sugerir lo contrario.
+
+## Eventos guardados del planificador (versión 3)
+
+Cada evento (`dpa:events:v1`: nombre, rango, duración y firma) guarda una **firma de estado**
+calculada con `Asado.eventSignature(plan, duración)`:
+
+- `pronto`: fuera del horizonte de tendencia (más de 16 días).
+- `tendencia`: dentro de los 16 días de tendencia diaria, sin horarios.
+- `horario|sin-ventanas`: con pronóstico horario, pero sin ventanas que cumplan los límites configurados.
+- `horario|fecha|inicio|fin|categoría`: mejor ventana recomendada.
+
+`Asado.eventChange(firmaGuardada, firmaActual)` devuelve el aviso, por ejemplo «Ya hay pronóstico
+horario para este evento» o «Apareció una ventana recomendable». Hoy el aviso se muestra **solo
+dentro de la app** al abrirla. Un servicio de alertas real reutilizaría estas mismas funciones en la
+tarea programada descrita arriba, con los eventos guardados en el servidor en lugar del dispositivo.

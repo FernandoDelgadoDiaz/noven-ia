@@ -57,6 +57,7 @@ const T = (page, sel) => page.locator(sel).first().innerText().then((t) => t.rep
     log(`Ahora ${d} h: alternativas`, await page.locator(".alt-row").allInnerTexts().then((a) => a.map((s) => s.replace(/\s+/g, " "))));
   }
   log("Aviso tarde agradable", await T(page, ".now-card .notice"));
+  await page.locator("#tab-semana").click().catch(() => {});
   log("Oportunidades", await page.locator(".opps .opp").allInnerTexts().then((a) => a.map((s) => s.split("\n").slice(0, 3).join(" | "))));
   log("Pie de fuentes", await T(page, ".now-card .src-foot"));
   log("Errores JS", errs);
@@ -94,7 +95,7 @@ const T = (page, sel) => page.locator(sel).first().innerText().then((t) => t.rep
 {
   const inc = structuredClone(fc); delete inc.hourly.wind_gusts_10m;
   const { page, ctx } = await run("C4. Open-Meteo sin ráfagas (incompleto)", { forecast: inc });
-  log("Hoy", await T(page, ".hero")); log("Oportunidades", await T(page, ".opps")); log("Ahora 3 h", await T(page, ".now-best"));
+  log("Hoy", await T(page, ".hero")); await page.locator("#tab-semana").click().catch(() => {}); log("Oportunidades", await T(page, ".opps")); await page.locator("#tab-hoy").click().catch(() => {}); log("Ahora 3 h", await T(page, ".now-best"));
   await ctx.close();
 }
 {
@@ -106,6 +107,7 @@ const T = (page, sel) => page.locator(sel).first().innerText().then((t) => t.rep
 // 4) Límites configurados con datos reales
 {
   const { page, ctx } = await run("D. Preferencias estrictas (viento 10, ráfaga 20, sensación 16)", { prefs: { duration: 3, minFeels: 16, maxWind: 10, maxGust: 20, slot: "libre", exposure: "expuesta" } });
+  await page.locator("#tab-semana").click().catch(() => {});
   log("Oportunidades", await page.locator(".opps .opp").allInnerTexts().then((a) => a.map((s) => s.split("\n").slice(0, 3).join(" | "))));
   log("Ahora 3 h", await T(page, ".now-best .now-best-head"));
   await ctx.close();
